@@ -1,0 +1,15 @@
+{
+  "name": "ielts-ai-platform",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:api": "cd apps/api && npm run start:dev",
+    "dev:web": "cd apps/web && npm run dev",
+    "build:api": "cd apps/api && npm run build",
+    "build:web": "cd apps/web && npm run build",
+    "db:generate": "cd apps/api && npm run db:generate",
+    "db:migrate": "cd apps/api && npm run db:migrate",
+    "db:seed": "cd apps/api && npm run db:seed",
+    "db:studio": "cd apps/api && npm run db:studio"
+  }
+}

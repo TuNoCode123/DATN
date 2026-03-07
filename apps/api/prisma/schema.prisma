@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────
+
+enum UserRole {
+  STUDENT
+  ADMIN
+}
+
+enum ExamType {
+  IELTS_ACADEMIC
+  IELTS_GENERAL
+  TOEIC_LR
+  TOEIC_SW
+  HSK_1
+  HSK_2
+  HSK_3
+  HSK_4
+  HSK_5
+  HSK_6
+  TOPIK_I
+  TOPIK_II
+  JLPT_N1
+  JLPT_N2
+  JLPT_N3
+  JLPT_N4
+  JLPT_N5
+  DIGITAL_SAT
+  ACT
+  THPTQG
+}
+
+enum TestFormat {
+  FULL
+  CONDENSED
+}
+
+enum SectionSkill {
+  LISTENING
+  READING
+  WRITING
+  SPEAKING
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  NOTE_FORM_COMPLETION
+  TABLE_COMPLETION
+  SUMMARY_COMPLETION
+  MATCHING
+}
+
+enum AttemptMode {
+  PRACTICE
+  FULL_TEST
+}
+
+enum AttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  ABANDONED
+}
+
+// ─── Models ──────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  displayName  String?
+  avatarUrl    String?
+  role         UserRole @default(STUDENT)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  attempts     UserAttempt[]
+  comments     Comment[]
+  commentLikes CommentLike[]
+
+  @@map("users")
+}
+
+model Test {
+  id            String     @id @default(cuid())
+  title         String
+  examType      ExamType
+  format        TestFormat
+  durationMins  Int
+  isPublished   Boolean    @default(false)
+  description   String?
+  attemptCount  Int        @default(0)
+  commentCount  Int        @default(0)
+  sectionCount  Int        @default(0)
+  questionCount Int        @default(0)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  sections TestSection[]
+  tags     TestTag[]
+  attempts UserAttempt[]
+  comments Comment[]
+
+  @@index([examType, format, isPublished])
+  @@map("tests")
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+  slug String @unique
+
+  tests TestTag[]
+
+  @@map("tags")
+}
+
+model TestTag {
+  testId String
+  tagId  String
+
+  test Test @relation(fields: [testId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([testId, tagId])
+  @@map("test_tags")
+}
+
+model TestSection {
+  id            String       @id @default(cuid())
+  testId        String
+  title         String
+  skill         SectionSkill
+  orderIndex    Int
+  audioUrl      String?
+  durationMins  Int?
+  questionCount Int          @default(0)
+
+  test            Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  questionGroups  QuestionGroup[]
+  attemptSections AttemptSection[]
+
+  @@unique([testId, orderIndex])
+  @@map("test_sections")
+}
+
+model QuestionGroup {
+  id              String       @id @default(cuid())
+  sectionId       String
+  questionType    QuestionType
+  orderIndex      Int
+  contentHtml     String?
+  matchingOptions Json?
+
+  section   TestSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@unique([sectionId, orderIndex])
+  @@map("question_groups")
+}
+
+model Question {
+  id             String  @id @default(cuid())
+  groupId        String
+  questionNumber Int
+  orderIndex     Int
+  stem           String?
+  mcqOptions     Json?
+  correctAnswer  String
+  explanation    String?
+
+  group   QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  answers UserAnswer[]
+
+  @@unique([groupId, orderIndex])
+  @@map("questions")
+}
+
+model UserAttempt {
+  id             String        @id @default(cuid())
+  userId         String
+  testId         String
+  mode           AttemptMode
+  status         AttemptStatus @default(IN_PROGRESS)
+  timeLimitMins  Int?
+  startedAt      DateTime      @default(now())
+  submittedAt    DateTime?
+  totalQuestions Int?
+  correctCount   Int?
+  scorePercent   Float?
+
+  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test     Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  sections AttemptSection[]
+  answers  UserAnswer[]
+
+  @@index([userId, testId])
+  @@index([userId, status])
+  @@map("user_attempts")
+}
+
+model AttemptSection {
+  attemptId String
+  sectionId String
+
+  attempt UserAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  section TestSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@id([attemptId, sectionId])
+  @@map("attempt_sections")
+}
+
+model UserAnswer {
+  id         String   @id @default(cuid())
+  attemptId  String
+  questionId String
+  answerText String?
+  isCorrect  Boolean?
+
+  attempt  UserAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@map("user_answers")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  testId    String
+  userId    String
+  parentId  String?
+  body      String
+  likeCount Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  test    Test          @relation(fields: [testId], references: [id], onDelete: Cascade)
+  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?      @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[]     @relation("CommentReplies")
+  likes   CommentLike[]
+
+  @@index([testId, parentId, createdAt])
+  @@map("comments")
+}
+
+model CommentLike {
+  userId    String
+  commentId String
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@id([userId, commentId])
+  @@map("comment_likes")
+}

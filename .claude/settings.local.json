@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir:*)",
+      "Bash(npm install:*)",
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(mkdir:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npx nest:*)",
+      "Bash(npx next:*)",
+      "Bash(npx tsc:*)",
+      "Bash(curl:*)",
+      "Bash(echo === Tests ===:*)",
+      "Bash(ls G:\\\\ĐATN\\\\apps\\\\web\\\\src\\\\app\\\\\\(learner\\):*)",
+      "Bash(ls:*)",
+      "Bash(python3:*)",
+      "Bash(cmd:*)",
+      "Bash(powershell:*)",
+      "Bash(python3 $SCRIPT:*)"
+    ]
+  }
+}
