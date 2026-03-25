@@ -22,7 +22,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <ConfigProvider
         theme={{
           token: {
-            colorPrimary: '#1677ff',
+            colorPrimary: '#22C55E',
           },
         }}
       >

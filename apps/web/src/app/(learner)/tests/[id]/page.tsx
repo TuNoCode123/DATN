@@ -3,8 +3,14 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Checkbox, Tag, Select, Spin, message } from 'antd';
-import { ClockCircleOutlined, UserOutlined } from '@ant-design/icons';
+import { Checkbox, Select, message } from 'antd';
+import {
+  Clock,
+  Users,
+  Lightbulb,
+  ArrowRight,
+  Loader2,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 
 interface QuestionFromAPI {
@@ -12,14 +18,14 @@ interface QuestionFromAPI {
   questionNumber: number;
   orderIndex: number;
   stem: string | null;
-  mcqOptions: any;
+  options: any;
 }
 
 interface QuestionGroupFromAPI {
   id: string;
   questionType: string;
   orderIndex: number;
-  contentHtml: string | null;
+  instructions: string | null;
   matchingOptions: any;
   questions: QuestionFromAPI[];
 }
@@ -49,14 +55,14 @@ interface TestFromAPI {
 }
 
 const TIME_OPTIONS = [
-  { value: 0, label: '-- Chọn thời gian --' },
-  { value: 5, label: '5 phút' },
-  { value: 10, label: '10 phút' },
-  { value: 15, label: '15 phút' },
-  { value: 20, label: '20 phút' },
-  { value: 30, label: '30 phút' },
-  { value: 40, label: '40 phút' },
-  { value: 60, label: '60 phút' },
+  { value: 0, label: 'No time limit' },
+  { value: 5, label: '5 minutes' },
+  { value: 10, label: '10 minutes' },
+  { value: 15, label: '15 minutes' },
+  { value: 20, label: '20 minutes' },
+  { value: 30, label: '30 minutes' },
+  { value: 40, label: '40 minutes' },
+  { value: 60, label: '60 minutes' },
 ];
 
 function getQuestionTypeBadge(type: string): string {
@@ -99,7 +105,7 @@ export default function TestDetailPage() {
 
     const token = localStorage.getItem('accessToken');
     if (!token) {
-      message.warning('Vui lòng đăng nhập để làm bài');
+      message.warning('Please sign in to take a test');
       router.push('/login');
       return;
     }
@@ -115,7 +121,7 @@ export default function TestDetailPage() {
       });
       router.push(`/tests/${testId}/attempt?attemptId=${attempt.id}`);
     } catch (err: any) {
-      const msg = err.response?.data?.message || 'Không thể bắt đầu bài thi';
+      const msg = err.response?.data?.message || 'Could not start the test';
       message.error(msg);
     } finally {
       setStarting(false);
@@ -125,99 +131,74 @@ export default function TestDetailPage() {
   if (isLoading || !test) {
     return (
       <div className="flex justify-center py-16">
-        <Spin size="large" />
+        <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  // Collect unique question types per section for tag badges
   const sectionTypeTags = (section: SectionFromAPI): string[] => {
     const types = new Set(section.questionGroups.map((g) => g.questionType));
     return Array.from(types).map(
-      (t) => `#[${section.skill === 'LISTENING' ? 'Listening' : 'Reading'}] ${getQuestionTypeBadge(t)}`
+      (t) => `[${section.skill === 'LISTENING' ? 'Listening' : 'Reading'}] ${getQuestionTypeBadge(t)}`
     );
   };
 
   return (
     <div className="max-w-3xl">
-      {/* Top tags */}
-      <div className="flex gap-2 mb-3">
+      {/* Tags */}
+      <div className="flex flex-wrap gap-2 mb-3">
         {test.tags.map((t) => (
-          <Tag
+          <span
             key={t.tag.id}
-            style={{
-              borderColor: '#1d6fa4',
-              color: '#1d6fa4',
-              background: 'transparent',
-              borderRadius: 4,
-              fontSize: 13,
-              padding: '1px 8px',
-            }}
+            className="text-xs px-3 py-1 rounded-full bg-secondary text-secondary-foreground border border-teal-200 font-semibold"
           >
             #{t.tag.name}
-          </Tag>
+          </span>
         ))}
       </div>
 
-      <h1 className="text-2xl font-bold mb-4 text-gray-900">{test.title}</h1>
+      <h1 className="text-2xl font-extrabold text-foreground mb-5">{test.title}</h1>
 
-      <div className="mb-4">
-        <span
-          style={{
-            display: 'inline-block',
-            backgroundColor: '#e8f4fd',
-            color: '#1d6fa4',
-            border: '1px solid #b8d9f0',
-            borderRadius: 20,
-            padding: '4px 16px',
-            fontSize: 14,
-            fontWeight: 500,
-          }}
-        >
-          Thông tin đề thi
-        </span>
+      {/* Info card */}
+      <div className="brutal-card p-5 mb-6">
+        <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
+          <span className="flex items-center gap-1.5">
+            <Clock className="w-4 h-4 text-slate-400" />
+            {test.durationMins} min
+          </span>
+          <span className="text-slate-300">|</span>
+          <span>{test.sectionCount} sections</span>
+          <span className="text-slate-300">|</span>
+          <span>{test.questionCount} questions</span>
+          <span className="text-slate-300">|</span>
+          <span>{test.commentCount} comments</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-sm text-slate-500 mt-2">
+          <Users className="w-4 h-4 text-slate-400" />
+          <span>{test.attemptCount.toLocaleString()} learners practiced this test</span>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2 text-sm text-gray-700 mb-1">
-        <ClockCircleOutlined style={{ color: '#555' }} />
-        <span>
-          Thời gian làm bài: {test.durationMins} phút | {test.sectionCount} phần thi |{' '}
-          {test.questionCount} câu hỏi | {test.commentCount} bình luận
-        </span>
-      </div>
-      <div className="flex items-center gap-2 text-sm text-gray-700 mb-4">
-        <UserOutlined style={{ color: '#555' }} />
-        <span>{test.attemptCount.toLocaleString()} người đã luyện tập đề thi này</span>
-      </div>
-
-      <p className="text-sm mb-6" style={{ color: '#c0392b', fontStyle: 'italic' }}>
-        Chú ý: để được quy đổi sang scaled score (ví dụ trên thang điểm 990 cho TOEIC hoặc 9.0 cho IELTS),
-        vui lòng chọn chế độ làm FULL TEST.
+      <p className="text-sm text-red-500 italic mb-6">
+        Note: To get scaled scores (e.g. 990 for TOEIC or 9.0 for IELTS),
+        please select FULL TEST mode.
       </p>
 
       {/* Mode tabs */}
-      <div className="flex gap-6 mb-5" style={{ borderBottom: '1px solid #e5e7eb' }}>
+      <div className="flex gap-1 mb-6 bg-slate-100 rounded-xl p-1">
         {[
-          { key: 'practice' as const, label: 'Luyện tập' },
-          { key: 'full' as const, label: 'Làm full test' },
-          { key: 'discussion' as const, label: 'Thảo luận' },
+          { key: 'practice' as const, label: 'Practice' },
+          { key: 'full' as const, label: 'Full Test' },
+          { key: 'discussion' as const, label: 'Discussion' },
         ].map((tab) => (
           <button
             key={tab.key}
             onClick={() => setMode(tab.key)}
-            style={{
-              paddingBottom: 10,
-              fontSize: 15,
-              fontWeight: mode === tab.key ? 600 : 400,
-              color: mode === tab.key ? '#1d6fa4' : '#6b7280',
-              background: 'none',
-              border: 'none',
-              borderBottomWidth: 2,
-              borderBottomStyle: 'solid',
-              borderBottomColor: mode === tab.key ? '#1d6fa4' : 'transparent',
-              cursor: 'pointer',
-              marginBottom: -1,
-            }}
+            className={`flex-1 py-2.5 text-sm font-semibold rounded-lg transition-colors cursor-pointer ${
+              mode === tab.key
+                ? 'bg-white text-foreground shadow-sm border border-slate-200'
+                : 'text-slate-500 hover:text-foreground'
+            }`}
           >
             {tab.label}
           </button>
@@ -227,51 +208,35 @@ export default function TestDetailPage() {
       {/* Practice mode */}
       {mode === 'practice' && (
         <div>
-          <div
-            style={{
-              backgroundColor: '#f0faf0',
-              border: '1px solid #b7ddb7',
-              borderRadius: 6,
-              padding: '12px 16px',
-              marginBottom: 24,
-              fontSize: 14,
-              color: '#2d6a2d',
-              lineHeight: 1.6,
-            }}
-          >
-            <span style={{ marginRight: 8 }}>&#128161;</span>
-            <strong>Pro tips:</strong> Hình thức luyện tập từng phần và chọn mức thời gian phù hợp sẽ giúp bạn tập trung vào giải
-            đúng các câu hỏi thay vì phải chịu áp lực hoàn thành bài thi.
+          <div className="bg-emerald-50 border-2 border-emerald-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+            <Lightbulb className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+            <p className="text-sm text-emerald-700 leading-relaxed">
+              <strong>Pro tip:</strong> Practice individual sections with a custom time limit to
+              focus on accuracy without the pressure of completing the full test.
+            </p>
           </div>
 
-          <p className="text-sm font-semibold mb-3 text-gray-800">Chọn phần thi bạn muốn làm</p>
+          <p className="text-sm font-bold text-foreground mb-3">Select sections to practice</p>
 
-          <div className="mb-6" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="mb-6 flex flex-col gap-3">
             {test.sections.map((section) => (
-              <div key={section.id}>
+              <div key={section.id} className="brutal-card p-4">
                 <Checkbox
                   checked={selectedSections.includes(section.id)}
                   onChange={() => toggleSection(section.id)}
                 >
-                  <span style={{ fontSize: 14, color: '#111' }}>
-                    {section.title} ({section.questionCount} câu hỏi)
+                  <span className="text-sm font-semibold text-foreground">
+                    {section.title} ({section.questionCount} questions)
                   </span>
                 </Checkbox>
-                <div style={{ marginLeft: 24, marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                <div className="ml-6 mt-2 flex flex-wrap gap-1.5">
                   {sectionTypeTags(section).map((tag) => (
-                    <Tag
+                    <span
                       key={tag}
-                      style={{
-                        backgroundColor: '#eaf1fb',
-                        borderColor: '#b3cef0',
-                        color: '#2c5f9e',
-                        fontSize: 12,
-                        borderRadius: 4,
-                        padding: '0 6px',
-                      }}
+                      className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 font-medium"
                     >
                       {tag}
-                    </Tag>
+                    </span>
                   ))}
                 </div>
               </div>
@@ -279,8 +244,8 @@ export default function TestDetailPage() {
           </div>
 
           <div className="mb-6">
-            <p className="text-sm font-semibold mb-2 text-gray-800">
-              Giới hạn thời gian (Để trống để làm bài không giới hạn)
+            <p className="text-sm font-bold text-foreground mb-2">
+              Time limit (leave empty for unlimited)
             </p>
             <Select
               style={{ width: '100%' }}
@@ -291,63 +256,51 @@ export default function TestDetailPage() {
             />
           </div>
 
-          <Button
-            type="primary"
-            size="large"
-            disabled={selectedSections.length === 0}
-            loading={starting}
+          <button
+            disabled={selectedSections.length === 0 || starting}
             onClick={handleStart}
-            style={{
-              backgroundColor: '#1a2f6e',
-              borderColor: '#1a2f6e',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: 15,
-              letterSpacing: 1,
-              height: 44,
-              paddingLeft: 32,
-              paddingRight: 32,
-              borderRadius: 6,
-            }}
+            className="brutal-btn bg-primary text-white px-8 py-3.5 text-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
           >
-            LUYỆN TẬP
-          </Button>
+            {starting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                START PRACTICE
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
         </div>
       )}
 
       {/* Full test mode */}
       {mode === 'full' && (
         <div>
-          <p className="text-sm text-gray-600 mb-4">
-            Làm full test với {test.questionCount} câu hỏi trong {test.durationMins} phút.
-            Kết quả sẽ được quy đổi sang thang điểm IELTS.
+          <p className="text-sm text-slate-600 mb-6">
+            Take the full test with {test.questionCount} questions in {test.durationMins} minutes.
+            Results will be converted to the IELTS scale.
           </p>
-          <Button
-            type="primary"
-            size="large"
-            loading={starting}
+          <button
             onClick={handleStart}
-            style={{
-              backgroundColor: '#1a2f6e',
-              borderColor: '#1a2f6e',
-              fontWeight: 700,
-              fontSize: 15,
-              letterSpacing: 1,
-              height: 44,
-              paddingLeft: 32,
-              paddingRight: 32,
-              borderRadius: 6,
-            }}
+            disabled={starting}
+            className="brutal-btn bg-primary text-white px-8 py-3.5 text-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
           >
-            BẮT ĐẦU LÀM BÀI
-          </Button>
+            {starting ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <>
+                START FULL TEST
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
         </div>
       )}
 
       {/* Discussion */}
       {mode === 'discussion' && (
-        <div className="text-gray-500 text-sm">
-          Phần thảo luận sẽ được cập nhật sau.
+        <div className="brutal-card p-8 text-center">
+          <p className="text-slate-500 text-sm">Discussion section coming soon.</p>
         </div>
       )}
     </div>

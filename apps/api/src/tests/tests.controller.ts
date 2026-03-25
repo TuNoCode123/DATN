@@ -1,6 +1,6 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { TestsService } from './tests.service';
-import { ExamType, TestFormat } from '@prisma/client';
+import { ExamType } from '@prisma/client';
 
 @Controller('tests')
 export class TestsController {
@@ -9,7 +9,6 @@ export class TestsController {
   @Get()
   findAll(
     @Query('examType') examType?: ExamType,
-    @Query('format') format?: TestFormat,
     @Query('tags') tags?: string,
     @Query('search') search?: string,
     @Query('page') page?: string,
@@ -17,7 +16,6 @@ export class TestsController {
   ) {
     return this.testsService.findAll({
       examType,
-      format,
       tagSlugs: tags ? tags.split(',') : undefined,
       search,
       page: page ? parseInt(page, 10) : undefined,

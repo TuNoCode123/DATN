@@ -7,6 +7,8 @@ import { TestsModule } from './tests/tests.module';
 import { AttemptsModule } from './attempts/attempts.module';
 import { TagsModule } from './tags/tags.module';
 import { CommentsModule } from './comments/comments.module';
+import { AdminModule } from './admin/admin.module';
+import { UploadModule } from './upload/upload.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { CommentsModule } from './comments/comments.module';
     AttemptsModule,
     TagsModule,
     CommentsModule,
+    AdminModule,
+    UploadModule,
   ],
 })
 export class AppModule {}

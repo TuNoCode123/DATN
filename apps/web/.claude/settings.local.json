@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(ts|tsx|js|json|css\\)$\")",
+      "Bash(ls:*)",
+      "Bash(ls \"G:/ĐATN/apps/web/src/app/\\(admin\\)/admin-tests/\")",
+      "Bash(ls \"G:/ĐATN/apps/web/src/app/\\(admin\\)/admin-users/\")",
+      "Bash(ls \"G:/ĐATN/apps/web/src/app/\\(admin\\)/admin-import/\")",
+      "Bash(find:*)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest init -y --style new-york --base-color zinc --css-variables)",
+      "Bash(npx shadcn@latest init 2)",
+      "Bash(1:*)",
+      "Bash(npx shadcn@latest add button card input label select dialog dropdown-menu sheet separator avatar badge table tabs tooltip popover checkbox switch textarea scroll-area skeleton --yes)",
+      "Bash(npm run:*)",
+      "Bash(python3:*)",
+      "Read(//c/Users/LENOVO/.claude/plugins/cache/ui-ux-pro-max-skill/ui-ux-pro-max/2.0.1/.claude/skills/ui-ux-pro-max/**)",
+      "Bash(python scripts/search.py \"education learning platform courses playful modern\" --design-system -p \"IELTS AI Platform\" -f markdown)",
+      "Bash(python:*)",
+      "Bash(npx next:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

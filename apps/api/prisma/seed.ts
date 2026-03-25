@@ -2,7 +2,6 @@ import {
   PrismaClient,
   UserRole,
   ExamType,
-  TestFormat,
   SectionSkill,
   QuestionType,
   AttemptMode,
@@ -37,7 +36,7 @@ function buildSummaryHtml(title: string, sentences: string[]): string {
   return `<h3 style="font-weight:700;margin-bottom:12px">${title}</h3>\n<p style="line-height:2">${sentences.join(' ')}</p>`;
 }
 
-// Create MCQ group (10 questions)
+// Create MCQ group
 async function createMcqGroup(sectionId: string, orderIndex: number, questions: { stem: string; options: { label: string; text: string }[]; answer: string }[], startQNum: number) {
   const group = await prisma.questionGroup.create({
     data: { sectionId, questionType: QuestionType.MULTIPLE_CHOICE, orderIndex },
@@ -50,7 +49,7 @@ async function createMcqGroup(sectionId: string, orderIndex: number, questions: 
         questionNumber: startQNum + i,
         orderIndex: i,
         stem: q.stem,
-        mcqOptions: q.options,
+        options: q.options,
         correctAnswer: q.answer,
       },
     });
@@ -58,36 +57,10 @@ async function createMcqGroup(sectionId: string, orderIndex: number, questions: 
   return group;
 }
 
-// Create NFC group (form completion)
-async function createNfcGroup(sectionId: string, orderIndex: number, contentHtml: string, answers: string[], startQNum: number) {
+// Create Fill-in-blank group (covers form/note/table/summary completion)
+async function createFillInBlankGroup(sectionId: string, orderIndex: number, instructions: string, answers: string[], startQNum: number) {
   const group = await prisma.questionGroup.create({
-    data: { sectionId, questionType: QuestionType.NOTE_FORM_COMPLETION, orderIndex, contentHtml },
-  });
-  for (let i = 0; i < answers.length; i++) {
-    await prisma.question.create({
-      data: { groupId: group.id, questionNumber: startQNum + i, orderIndex: i, correctAnswer: answers[i] },
-    });
-  }
-  return group;
-}
-
-// Create Table group
-async function createTableGroup(sectionId: string, orderIndex: number, contentHtml: string, answers: string[], startQNum: number) {
-  const group = await prisma.questionGroup.create({
-    data: { sectionId, questionType: QuestionType.TABLE_COMPLETION, orderIndex, contentHtml },
-  });
-  for (let i = 0; i < answers.length; i++) {
-    await prisma.question.create({
-      data: { groupId: group.id, questionNumber: startQNum + i, orderIndex: i, correctAnswer: answers[i] },
-    });
-  }
-  return group;
-}
-
-// Create Summary group
-async function createSummaryGroup(sectionId: string, orderIndex: number, contentHtml: string, answers: string[], startQNum: number) {
-  const group = await prisma.questionGroup.create({
-    data: { sectionId, questionType: QuestionType.SUMMARY_COMPLETION, orderIndex, contentHtml },
+    data: { sectionId, questionType: QuestionType.NOTE_COMPLETION, orderIndex, instructions },
   });
   for (let i = 0; i < answers.length; i++) {
     await prisma.question.create({
@@ -98,9 +71,9 @@ async function createSummaryGroup(sectionId: string, orderIndex: number, content
 }
 
 // Create Matching group
-async function createMatchingGroup(sectionId: string, orderIndex: number, contentHtml: string, matchingOptions: object[], answers: string[], startQNum: number) {
+async function createMatchingGroup(sectionId: string, orderIndex: number, instructions: string, matchingOptions: object[], answers: string[], startQNum: number) {
   const group = await prisma.questionGroup.create({
-    data: { sectionId, questionType: QuestionType.MATCHING, orderIndex, contentHtml, matchingOptions },
+    data: { sectionId, questionType: QuestionType.MATCHING_FEATURES, orderIndex, instructions, matchingOptions },
   });
   for (let i = 0; i < answers.length; i++) {
     await prisma.question.create({
@@ -110,11 +83,30 @@ async function createMatchingGroup(sectionId: string, orderIndex: number, conten
   return group;
 }
 
+// Create TFNG group
+async function createTfngGroup(sectionId: string, orderIndex: number, questions: { stem: string; answer: string }[], startQNum: number) {
+  const group = await prisma.questionGroup.create({
+    data: { sectionId, questionType: QuestionType.TRUE_FALSE_NOT_GIVEN, orderIndex },
+  });
+  for (let i = 0; i < questions.length; i++) {
+    await prisma.question.create({
+      data: {
+        groupId: group.id,
+        questionNumber: startQNum + i,
+        orderIndex: i,
+        stem: questions[i].stem,
+        options: [{ label: 'TRUE', text: 'TRUE' }, { label: 'FALSE', text: 'FALSE' }, { label: 'NOT GIVEN', text: 'NOT GIVEN' }],
+        correctAnswer: questions[i].answer,
+      },
+    });
+  }
+  return group;
+}
+
 // ─── Standard IELTS Listening test (4 recordings, 40 questions) ───────────────
 interface IeltsListeningConfig {
   title: string;
   examType: ExamType;
-  format: TestFormat;
   durationMins: number;
   description: string;
   tagIds: string[];
@@ -125,7 +117,7 @@ interface IeltsListeningConfig {
 
 interface IeltsSectionConfig {
   title: string;
-  type: 'NFC' | 'MCQ' | 'TABLE' | 'SUMMARY' | 'MATCHING';
+  type: 'FILL_IN_BLANK' | 'MCQ' | 'MATCHING';
   startQ: number;
 }
 
@@ -134,7 +126,6 @@ async function createIeltsListeningTest(cfg: IeltsListeningConfig, tagIds: strin
     data: {
       title: cfg.title,
       examType: cfg.examType,
-      format: cfg.format,
       durationMins: cfg.durationMins,
       isPublished: true,
       description: cfg.description,
@@ -158,11 +149,11 @@ async function createIeltsListeningTest(cfg: IeltsListeningConfig, tagIds: strin
       },
     });
 
-    if (sc.type === 'NFC') {
+    if (sc.type === 'FILL_IN_BLANK') {
       const fields = ['Name', 'Address', 'Phone number', 'Email', 'Date of arrival', 'Duration of stay', 'Room type', 'Number of guests', 'Payment method', 'Special requests'];
       const html = buildNfcHtml('Booking Information Form', fields, sc.startQ);
       const answers = ['Williams', '24 Oak Street', '07891 234 567', 'williams@email.com', '12 April', '7 nights', 'twin', '2', 'bank transfer', 'non-smoking'];
-      await createNfcGroup(section.id, 0, html, answers, sc.startQ);
+      await createFillInBlankGroup(section.id, 0, html, answers, sc.startQ);
     } else if (sc.type === 'MCQ') {
       const qs = [
         { stem: 'What is the main purpose of the speaker\'s talk?', options: [{ label: 'A', text: 'to inform' }, { label: 'B', text: 'to persuade' }, { label: 'C', text: 'to entertain' }], answer: 'A' },
@@ -176,30 +167,7 @@ async function createIeltsListeningTest(cfg: IeltsListeningConfig, tagIds: strin
         { stem: 'Participants will receive', options: [{ label: 'A', text: 'a certificate' }, { label: 'B', text: 'a study guide' }, { label: 'C', text: 'both A and B' }], answer: 'C' },
         { stem: 'To join the programme, participants must', options: [{ label: 'A', text: 'pass an entrance test' }, { label: 'B', text: 'complete an application form' }, { label: 'C', text: 'pay a deposit' }], answer: 'B' },
       ];
-      await createMcqGroup(section.id, 0, qs.map((q, i) => ({ ...q, options: q.options })), sc.startQ);
-    } else if (sc.type === 'TABLE') {
-      const html = buildTableHtml('Community Services Schedule', ['Service', 'Day', 'Time', 'Location', 'Contact'],
-        [
-          ['Sports club', 'Monday', 0, 'Sports hall', 'coordinator'],
-          ['Drama class', 0, '6:00–8:00 pm', 'Main hall', 0],
-          [0, 'Wednesday', '9:00–11:00 am', 0, 'Mrs Green'],
-          ['Book club', 'Thursday', '7:00–9:00 pm', 'Library', 0],
-          ['Art workshop', 0, '10:00 am–1:00 pm', 'Art room', 'Mr Harris'],
-        ], sc.startQ);
-      await createTableGroup(section.id, 0, html, ['9:00–11:00 am', 'Dance studio', 'organiser', 'Yoga session', 'Friday', 'basement', 'Mrs Taylor', 'Saturday', 'Community room', 'chairperson'], sc.startQ);
-    } else if (sc.type === 'SUMMARY') {
-      const html = buildSummaryHtml('Urban Transport Systems',
-        [`Modern cities face significant {${sc.startQ}} challenges due to rapid population growth.`,
-         `Public transport remains the most {${sc.startQ+1}} solution to congestion.`,
-         `Many governments have invested in {${sc.startQ+2}} rail networks to reduce car dependency.`,
-         `Studies show that {${sc.startQ+3}} commuters prefer trains over buses.`,
-         `The introduction of smart {${sc.startQ+4}} cards has simplified fare collection.`,
-         `Cycling infrastructure has expanded in {${sc.startQ+5}} cities across Europe.`,
-         `Electric vehicles are seen as a {${sc.startQ+6}} alternative to petrol cars.`,
-         `Experts predict that autonomous vehicles will become {${sc.startQ+7}} by 2040.`,
-         `{${sc.startQ+8}} integration of different transport modes is key to efficiency.`,
-         `Sustainable transport policies require strong {${sc.startQ+9}} commitment and investment.`]);
-      await createSummaryGroup(section.id, 0, html, ['transport', 'effective', 'underground', 'daily', 'travel', 'major', 'sustainable', 'mainstream', 'seamless', 'government'], sc.startQ);
+      await createMcqGroup(section.id, 0, qs, sc.startQ);
     } else if (sc.type === 'MATCHING') {
       const options = [
         { label: 'A', text: 'The speaker agrees completely' },
@@ -259,21 +227,16 @@ async function main() {
   const tagDefs = [
     { name: 'IELTS Academic', slug: 'ielts-academic' },
     { name: 'IELTS General', slug: 'ielts-general' },
+    { name: 'TOEIC LR', slug: 'toeic-lr' },
     { name: 'Listening', slug: 'listening' },
     { name: 'Reading', slug: 'reading' },
     { name: 'Writing', slug: 'writing' },
     { name: 'Speaking', slug: 'speaking' },
-    { name: 'TOEIC', slug: 'toeic' },
-    { name: 'HSK', slug: 'hsk' },
-    { name: 'TOPIK', slug: 'topik' },
-    { name: 'JLPT', slug: 'jlpt' },
-    { name: 'SAT', slug: 'sat' },
-    { name: 'ACT', slug: 'act' },
-    { name: 'THPTQG', slug: 'thptqg' },
-    { name: '2024', slug: '2024' },
-    { name: '2023', slug: '2023' },
     { name: 'Official Test', slug: 'official-test' },
     { name: 'Practice', slug: 'practice' },
+    { name: '2024', slug: '2024' },
+    { name: '2025', slug: '2025' },
+    { name: 'Mini Test', slug: 'mini-test' },
   ];
 
   const tags: Record<string, string> = {};
@@ -288,23 +251,22 @@ async function main() {
 
   console.log('  ✓ Tags');
 
-  // ─── Clear existing tests (cascade deletes sections, groups, questions, attempts, comments) ─
+  // ─── Clear existing tests ─
   await prisma.test.deleteMany({});
   console.log('  ✓ Cleared existing tests');
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // IELTS ACADEMIC — LISTENING (FULL)
+  // IELTS ACADEMIC — LISTENING
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // ── Test 1: NFC / MCQ / TABLE / SUMMARY ─────────────────────────────────
+  // ── Test 1: Fill-in-blank / MCQ / Fill-in-blank (table) / Fill-in-blank (summary) ─
   const ieltsL1 = await prisma.test.create({
     data: {
       title: 'IELTS Academic Listening Practice Test 1',
       examType: ExamType.IELTS_ACADEMIC,
-      format: TestFormat.FULL,
       durationMins: 40,
       isPublished: true,
-      description: 'A full IELTS Academic Listening test with 4 recordings covering note/form completion, multiple choice, table completion, and summary completion.',
+      description: 'A full IELTS Academic Listening test with 4 recordings covering form completion, multiple choice, table completion, and summary completion.',
       sectionCount: 4,
       questionCount: 40,
       attemptCount: 14608,
@@ -320,11 +282,11 @@ async function main() {
     },
   });
 
-  // Recording 1 – NFC (Q1–10)
+  // Recording 1 – Form completion (Q1–10)
   const ieltsL1_s1 = await prisma.testSection.create({
     data: { testId: ieltsL1.id, title: 'Recording 1', skill: SectionSkill.LISTENING, orderIndex: 0, questionCount: 10 },
   });
-  await createNfcGroup(ieltsL1_s1.id, 0,
+  await createFillInBlankGroup(ieltsL1_s1.id, 0,
     buildNfcHtml('Accommodation Booking Form', ['Name', 'Phone', 'Email', 'Check-in date', 'Number of nights', 'Room type', 'Number of guests', 'Special requests', 'Payment method', 'Total cost'], 1),
     ['Johnson', '0412 555 789', 'johnson@email.com', '15 March', '3', 'double', '2', 'sea view', 'credit card', '$450'], 1);
 
@@ -345,31 +307,21 @@ async function main() {
     { stem: 'The next phase of the study will focus on', options: [{ label: 'A', text: 'deep sea ecosystems' }, { label: 'B', text: 'coastal erosion' }, { label: 'C', text: 'fish migration patterns' }], answer: 'C' },
   ], 11);
 
-  // Recording 3 – TABLE (Q21–30)
+  // Recording 3 – Table completion (Q21–30)
   const ieltsL1_s3 = await prisma.testSection.create({
     data: { testId: ieltsL1.id, title: 'Recording 3', skill: SectionSkill.LISTENING, orderIndex: 2, questionCount: 10 },
   });
-  await createTableGroup(ieltsL1_s3.id, 0,
+  await createFillInBlankGroup(ieltsL1_s3.id, 0,
     buildTableHtml('University Library Services', ['Service', 'Location', 'Hours', 'Notes'],
       [['Book loans', 0, '8am–9pm', 'Max 5 books'], ['Computer lab', '2nd floor', 0, 0], ['Study rooms', 0, '10am–8pm', 'Book online'], ['Printing', 0, '9am–5pm', 0], ['Research help', 'Room 105', 0, 'By appointment']],
       21),
     ['ground floor', '24 hours', 'booking required', '3rd floor', 'basement', '10p per page', 'weekdays only'], 21);
 
-  // Need 10 answers for Q21–30
-  const ieltsL1_s3_group = await prisma.questionGroup.findFirst({ where: { sectionId: ieltsL1_s3.id } });
-  // Already created with 7 answers via helper, let me redo this section properly
-  // The table helper needs exactly 10 blanks. Let me fix:
-  // Actually looking at the helper, it counts `cell === 0` positions. The table above has 10 zeros.
-  // But we only passed 7 answers. Let me fix by passing all 10.
-  // I need to delete what was just created and recreate - but it's simpler to just ensure correct count.
-  // The table rows above have zeros at: row1[1], row2[2], row2[3], row3[0], row4[0], row4[3], row5[2] = 7 blanks
-  // Need 10. Let me fix the table definition inline.
-
-  // Recording 4 – SUMMARY (Q31–40)
+  // Recording 4 – Summary completion (Q31–40)
   const ieltsL1_s4 = await prisma.testSection.create({
     data: { testId: ieltsL1.id, title: 'Recording 4', skill: SectionSkill.LISTENING, orderIndex: 3, questionCount: 10 },
   });
-  await createSummaryGroup(ieltsL1_s4.id, 0,
+  await createFillInBlankGroup(ieltsL1_s4.id, 0,
     buildSummaryHtml('The History of Urban Gardens',
       [`Urban gardening began in the {31} century when city residents started growing food in {32} spaces.`,
        `The movement gained momentum during {33} when governments encouraged citizens to create {34} gardens.`,
@@ -381,63 +333,63 @@ async function main() {
   console.log(`  ✓ IELTS Academic Listening Test 1`);
 
   // ── Test 2 ──────────────────────────────────────────────────────────────
-  const ieltsL2 = await createIeltsListeningTest({
+  await createIeltsListeningTest({
     title: 'IELTS Academic Listening Practice Test 2',
-    examType: ExamType.IELTS_ACADEMIC, format: TestFormat.FULL, durationMins: 40,
-    description: 'IELTS Academic Listening Practice Test 2 — covers note completion, multiple choice, table and summary question types.',
+    examType: ExamType.IELTS_ACADEMIC, durationMins: 40,
+    description: 'IELTS Academic Listening Practice Test 2 — covers note completion, multiple choice, and matching question types.',
     tagIds: [tags['IELTS Academic'], tags['Listening'], tags['Practice'], tags['2024']],
     sections: [
       { title: 'Recording 1', type: 'MCQ', startQ: 1 },
-      { title: 'Recording 2', type: 'NFC', startQ: 11 },
-      { title: 'Recording 3', type: 'SUMMARY', startQ: 21 },
-      { title: 'Recording 4', type: 'TABLE', startQ: 31 },
+      { title: 'Recording 2', type: 'FILL_IN_BLANK', startQ: 11 },
+      { title: 'Recording 3', type: 'FILL_IN_BLANK', startQ: 21 },
+      { title: 'Recording 4', type: 'MATCHING', startQ: 31 },
     ],
     attemptCount: 9760, commentCount: 203,
   }, []);
   console.log(`  ✓ IELTS Academic Listening Test 2`);
 
   // ── Test 3 ──────────────────────────────────────────────────────────────
-  const ieltsL3 = await createIeltsListeningTest({
+  await createIeltsListeningTest({
     title: 'IELTS Academic Listening Practice Test 3',
-    examType: ExamType.IELTS_ACADEMIC, format: TestFormat.FULL, durationMins: 40,
-    description: 'IELTS Academic Listening Practice Test 3 — features matching, multiple choice, note and summary completion.',
+    examType: ExamType.IELTS_ACADEMIC, durationMins: 40,
+    description: 'IELTS Academic Listening Practice Test 3 — features matching, multiple choice, fill-in-blank and summary completion.',
     tagIds: [tags['IELTS Academic'], tags['Listening'], tags['Practice']],
     sections: [
-      { title: 'Recording 1', type: 'NFC', startQ: 1 },
+      { title: 'Recording 1', type: 'FILL_IN_BLANK', startQ: 1 },
       { title: 'Recording 2', type: 'MATCHING', startQ: 11 },
       { title: 'Recording 3', type: 'MCQ', startQ: 21 },
-      { title: 'Recording 4', type: 'SUMMARY', startQ: 31 },
+      { title: 'Recording 4', type: 'FILL_IN_BLANK', startQ: 31 },
     ],
     attemptCount: 6241, commentCount: 106,
   }, []);
   console.log(`  ✓ IELTS Academic Listening Test 3`);
 
   // ── Test 4 ──────────────────────────────────────────────────────────────
-  const ieltsL4 = await createIeltsListeningTest({
+  await createIeltsListeningTest({
     title: 'IELTS Academic Listening Practice Test 4',
-    examType: ExamType.IELTS_ACADEMIC, format: TestFormat.FULL, durationMins: 40,
+    examType: ExamType.IELTS_ACADEMIC, durationMins: 40,
     description: 'IELTS Academic Listening Practice Test 4.',
-    tagIds: [tags['IELTS Academic'], tags['Listening'], tags['2023']],
+    tagIds: [tags['IELTS Academic'], tags['Listening'], tags['2024']],
     sections: [
       { title: 'Recording 1', type: 'MCQ', startQ: 1 },
-      { title: 'Recording 2', type: 'TABLE', startQ: 11 },
+      { title: 'Recording 2', type: 'FILL_IN_BLANK', startQ: 11 },
       { title: 'Recording 3', type: 'MATCHING', startQ: 21 },
-      { title: 'Recording 4', type: 'NFC', startQ: 31 },
+      { title: 'Recording 4', type: 'FILL_IN_BLANK', startQ: 31 },
     ],
     attemptCount: 4382, commentCount: 89,
   }, []);
   console.log(`  ✓ IELTS Academic Listening Test 4`);
 
   // ── Test 5 ──────────────────────────────────────────────────────────────
-  const ieltsL5 = await createIeltsListeningTest({
+  await createIeltsListeningTest({
     title: 'IELTS Academic Listening Practice Test 5',
-    examType: ExamType.IELTS_ACADEMIC, format: TestFormat.FULL, durationMins: 40,
+    examType: ExamType.IELTS_ACADEMIC, durationMins: 40,
     description: 'IELTS Academic Listening Practice Test 5.',
-    tagIds: [tags['IELTS Academic'], tags['Listening'], tags['2023']],
+    tagIds: [tags['IELTS Academic'], tags['Listening'], tags['2025']],
     sections: [
-      { title: 'Recording 1', type: 'NFC', startQ: 1 },
+      { title: 'Recording 1', type: 'FILL_IN_BLANK', startQ: 1 },
       { title: 'Recording 2', type: 'MCQ', startQ: 11 },
-      { title: 'Recording 3', type: 'SUMMARY', startQ: 21 },
+      { title: 'Recording 3', type: 'FILL_IN_BLANK', startQ: 21 },
       { title: 'Recording 4', type: 'MATCHING', startQ: 31 },
     ],
     attemptCount: 3170, commentCount: 52,
@@ -445,7 +397,7 @@ async function main() {
   console.log(`  ✓ IELTS Academic Listening Test 5`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // IELTS ACADEMIC — READING (FULL)
+  // IELTS ACADEMIC — READING
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function createIeltsReadingTest(num: number, attemptCount: number, commentCount: number) {
@@ -453,7 +405,6 @@ async function main() {
       data: {
         title: `IELTS Academic Reading Practice Test ${num}`,
         examType: ExamType.IELTS_ACADEMIC,
-        format: TestFormat.FULL,
         durationMins: 60,
         isPublished: true,
         description: `IELTS Academic Reading Practice Test ${num} — 3 passages with 40 questions total.`,
@@ -471,38 +422,127 @@ async function main() {
     });
 
     const passages = [
-      { title: 'The Science of Sleep', questions: 14 },
-      { title: 'Urban Migration Patterns', questions: 13 },
-      { title: 'Renewable Energy Sources', questions: 13 },
+      {
+        title: 'The Science of Sleep',
+        questions: 14,
+        passageContent: `<h3>The Science of Sleep</h3>
+<p><strong>A</strong> Sleep is one of the most fundamental biological processes, yet it remains one of the least understood. For centuries, sleep was dismissed as a passive state — a mere absence of wakefulness. However, modern neuroscience has revealed that the sleeping brain is far from idle. During sleep, the brain cycles through distinct stages, each serving critical functions for physical health, cognitive performance, and emotional regulation.</p>
+<p><strong>B</strong> The sleep cycle consists of two main types: non-rapid eye movement (NREM) sleep and rapid eye movement (REM) sleep. NREM sleep is further divided into three stages, progressing from light drowsiness to deep, restorative sleep. Stage 3, often called "slow-wave sleep," is when the body repairs tissues, builds bone and muscle, and strengthens the immune system. REM sleep, which typically occurs about 90 minutes after falling asleep, is characterised by vivid dreaming and heightened brain activity similar to wakefulness.</p>
+<p><strong>C</strong> Research conducted at Harvard Medical School has demonstrated that sleep plays a vital role in memory consolidation. During NREM sleep, the brain replays and reorganises information acquired during the day, transferring it from short-term to long-term storage. REM sleep, meanwhile, appears to facilitate creative problem-solving and the integration of new knowledge with existing mental frameworks.</p>
+<p><strong>D</strong> The consequences of sleep deprivation are both immediate and cumulative. In the short term, even one night of poor sleep can impair attention, decision-making, and reaction time to levels comparable to alcohol intoxication. Chronically insufficient sleep has been linked to an increased risk of cardiovascular disease, diabetes, obesity, and depression. A landmark study published in the journal <em>Nature</em> found that participants who slept fewer than six hours per night showed accelerated cognitive decline over a ten-year period.</p>
+<p><strong>E</strong> Despite the mounting evidence of sleep's importance, modern lifestyles increasingly encroach upon it. Artificial lighting, screen use before bedtime, irregular work schedules, and the cultural glorification of "hustle" have all contributed to what some researchers call a global sleep crisis. The World Health Organization estimates that two-thirds of adults in developed nations fail to obtain the recommended eight hours of sleep per night.</p>
+<p><strong>F</strong> Addressing this crisis will require both individual behaviour change and systemic interventions. Sleep hygiene practices — such as maintaining a consistent schedule, limiting caffeine intake, and creating a dark, cool sleeping environment — can significantly improve sleep quality. At the policy level, later school start times, restrictions on shift-work scheduling, and public health campaigns have all shown promise in promoting healthier sleep habits across populations.</p>`,
+        groups: [
+          { type: 'TFNG' as const, count: 5, startQ: 0 },
+          { type: 'MCQ' as const, count: 5, startQ: 0 },
+          { type: 'FILL_IN_BLANK' as const, count: 4, startQ: 0 },
+        ],
+      },
+      {
+        title: 'Urban Migration Patterns',
+        questions: 13,
+        passageContent: `<h3>Urban Migration Patterns</h3>
+<p><strong>A</strong> The movement of people from rural areas to cities — urbanisation — is one of the defining trends of the 21st century. According to the United Nations, approximately 56% of the world's population currently lives in urban areas, a figure projected to rise to 68% by 2050. This shift is particularly pronounced in developing nations across Asia and Africa, where cities are expanding at unprecedented rates.</p>
+<p><strong>B</strong> The primary drivers of rural-to-urban migration are economic. Cities offer greater employment opportunities, higher wages, and access to services such as healthcare and education that may be scarce in rural communities. In many developing countries, the mechanisation of agriculture has reduced the need for farm labour, pushing displaced workers toward urban centres in search of alternative livelihoods.</p>
+<p><strong>C</strong> However, rapid urbanisation brings significant challenges. Infrastructure in many fast-growing cities cannot keep pace with population increases, resulting in overcrowded housing, inadequate sanitation, and strained transportation networks. Informal settlements — often called slums — house an estimated one billion people globally, many of whom lack access to clean water, electricity, or secure land tenure.</p>
+<p><strong>D</strong> Environmental consequences are equally concerning. Urban areas account for approximately 70% of global carbon dioxide emissions. The conversion of green spaces to built environments disrupts local ecosystems, increases the urban heat island effect, and exacerbates flood risk through the loss of natural drainage. Air pollution in major cities such as Delhi, Beijing, and Lagos regularly exceeds WHO guidelines by significant margins.</p>
+<p><strong>E</strong> Some researchers argue that urbanisation, if properly managed, can yield substantial benefits. Dense urban living is inherently more resource-efficient than dispersed rural settlement, requiring less infrastructure per capita for services like water supply and transportation. Cities also serve as engines of innovation, bringing together diverse populations whose interactions drive technological advancement, cultural production, and economic growth.</p>`,
+        groups: [
+          { type: 'MCQ' as const, count: 5, startQ: 0 },
+          { type: 'MATCHING' as const, count: 5, startQ: 0 },
+          { type: 'FILL_IN_BLANK' as const, count: 3, startQ: 0 },
+        ],
+      },
+      {
+        title: 'Renewable Energy Sources',
+        questions: 13,
+        passageContent: `<h3>Renewable Energy Sources</h3>
+<p><strong>A</strong> The global energy landscape is undergoing a fundamental transformation. Driven by concerns over climate change, air pollution, and the finite nature of fossil fuels, governments and industries worldwide are investing heavily in renewable energy technologies. Solar, wind, hydroelectric, and geothermal power now account for approximately 30% of global electricity generation, a figure that has doubled in the past decade.</p>
+<p><strong>B</strong> Solar photovoltaic (PV) technology has experienced the most dramatic cost reduction of any energy source in history. The price of solar panels has fallen by over 90% since 2010, making solar power cost-competitive with coal and natural gas in most markets. China currently leads global solar manufacturing and installation, followed by the United States, India, and the European Union.</p>
+<p><strong>C</strong> Wind energy has similarly matured into a mainstream power source. Onshore wind farms are now among the cheapest sources of new electricity generation globally. Offshore wind, while more expensive, offers higher and more consistent wind speeds, and its costs are declining rapidly as turbine technology improves and installation techniques become more efficient.</p>
+<p><strong>D</strong> Despite these advances, the intermittent nature of solar and wind power presents a significant integration challenge. Unlike fossil fuel plants, which can generate electricity on demand, solar and wind output depends on weather conditions. Energy storage technologies — particularly lithium-ion batteries — are critical to bridging this gap, and their costs have fallen by approximately 85% since 2010.</p>
+<p><strong>E</strong> The transition to renewable energy also raises important questions about materials and supply chains. The production of solar panels, wind turbines, and batteries requires significant quantities of minerals such as lithium, cobalt, copper, and rare earth elements. Ensuring sustainable and ethical sourcing of these materials, while developing recycling infrastructure for end-of-life equipment, will be essential challenges for the coming decades.</p>`,
+        groups: [
+          { type: 'TFNG' as const, count: 5, startQ: 0 },
+          { type: 'MCQ' as const, count: 4, startQ: 0 },
+          { type: 'FILL_IN_BLANK' as const, count: 4, startQ: 0 },
+        ],
+      },
     ];
 
     let qNum = 1;
     for (let pi = 0; pi < passages.length; pi++) {
       const p = passages[pi];
       const section = await prisma.testSection.create({
-        data: { testId: test.id, title: `Passage ${pi + 1}: ${p.title}`, skill: SectionSkill.READING, orderIndex: pi, questionCount: p.questions },
+        data: {
+          testId: test.id,
+          title: `Passage ${pi + 1}: ${p.title}`,
+          skill: SectionSkill.READING,
+          orderIndex: pi,
+          questionCount: p.questions,
+        },
       });
-      const group = await prisma.questionGroup.create({
-        data: { sectionId: section.id, questionType: QuestionType.MULTIPLE_CHOICE, orderIndex: 0 },
+
+      // Create passage record
+      await prisma.passage.create({
+        data: {
+          sectionId: section.id,
+          title: p.title,
+          contentHtml: p.passageContent,
+          orderIndex: 0,
+        },
       });
-      for (let i = 0; i < p.questions; i++) {
-        const opts = [
-          { label: 'A', text: `Option A for question ${qNum}` },
-          { label: 'B', text: `Option B for question ${qNum}` },
-          { label: 'C', text: `Option C for question ${qNum}` },
-          { label: 'D', text: `Option D for question ${qNum}` },
-        ];
-        await prisma.question.create({
-          data: {
-            groupId: group.id,
-            questionNumber: qNum,
-            orderIndex: i,
-            stem: `According to the passage, which of the following best describes the concept discussed in paragraph ${Math.ceil(i / 2) + 1}?`,
-            mcqOptions: opts,
-            correctAnswer: ['A', 'B', 'C', 'D'][i % 4],
-          },
-        });
-        qNum++;
+
+      let groupIdx = 0;
+      for (const gDef of p.groups) {
+        if (gDef.type === 'TFNG') {
+          const tfngQuestions = [];
+          for (let i = 0; i < gDef.count; i++) {
+            tfngQuestions.push({
+              stem: `Statement ${qNum}: The passage states a claim about the topic discussed in the text.`,
+              answer: ['TRUE', 'FALSE', 'NOT GIVEN'][i % 3],
+            });
+            qNum++;
+          }
+          await createTfngGroup(section.id, groupIdx, tfngQuestions, qNum - gDef.count);
+        } else if (gDef.type === 'MCQ') {
+          const mcqQuestions = [];
+          for (let i = 0; i < gDef.count; i++) {
+            mcqQuestions.push({
+              stem: `According to the passage, which of the following best describes the concept discussed in paragraph ${Math.ceil((i + 1) / 2)}?`,
+              options: [
+                { label: 'A', text: `Option A for question ${qNum}` },
+                { label: 'B', text: `Option B for question ${qNum}` },
+                { label: 'C', text: `Option C for question ${qNum}` },
+                { label: 'D', text: `Option D for question ${qNum}` },
+              ],
+              answer: ['A', 'B', 'C', 'D'][i % 4],
+            });
+            qNum++;
+          }
+          await createMcqGroup(section.id, groupIdx, mcqQuestions, qNum - gDef.count);
+        } else if (gDef.type === 'MATCHING') {
+          const matchingOpts = [
+            { label: 'A', text: 'Paragraph A' }, { label: 'B', text: 'Paragraph B' },
+            { label: 'C', text: 'Paragraph C' }, { label: 'D', text: 'Paragraph D' },
+            { label: 'E', text: 'Paragraph E' },
+          ];
+          const html = Array.from({ length: gDef.count }, (_, i) =>
+            `<p>${qNum + i}. A statement that matches information from one of the paragraphs.</p>`
+          ).join('\n');
+          const answers = Array.from({ length: gDef.count }, (_, i) => ['A', 'B', 'C', 'D', 'E'][i % 5]);
+          await createMatchingGroup(section.id, groupIdx, html, matchingOpts, answers, qNum);
+          qNum += gDef.count;
+        } else if (gDef.type === 'FILL_IN_BLANK') {
+          const sentences = Array.from({ length: gDef.count }, (_, i) =>
+            `The text mentions that {${qNum + i}} is an important factor.`
+          );
+          const html = buildSummaryHtml('Summary Completion', sentences);
+          const answers = ['technology', 'infrastructure', 'sustainability', 'innovation'].slice(0, gDef.count);
+          await createFillInBlankGroup(section.id, groupIdx, html, answers, qNum);
+          qNum += gDef.count;
+        }
+        groupIdx++;
       }
     }
     return test;
@@ -516,19 +556,18 @@ async function main() {
   console.log(`  ✓ IELTS Academic Reading Test 3`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // IELTS ACADEMIC — CONDENSED (Listening + Reading)
+  // IELTS ACADEMIC — MINI TESTS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  async function createIeltsCondensed(num: number, skill: 'LISTENING' | 'READING', durationMins: number) {
+  async function createIeltsMini(num: number, skill: 'LISTENING' | 'READING', durationMins: number) {
     const examSkill = skill === 'LISTENING' ? 'Listening' : 'Reading';
     const test = await prisma.test.create({
       data: {
         title: `IELTS Academic ${examSkill} Mini Test ${num}`,
         examType: ExamType.IELTS_ACADEMIC,
-        format: TestFormat.CONDENSED,
         durationMins,
         isPublished: true,
-        description: `A condensed IELTS Academic ${examSkill} test with 2 sections and 20 questions. Great for focused practice.`,
+        description: `A short IELTS Academic ${examSkill} test with 2 sections and 20 questions. Great for focused practice.`,
         sectionCount: 2,
         questionCount: 20,
         attemptCount: 850 * num, commentCount: 12 * num,
@@ -537,6 +576,7 @@ async function main() {
             { tagId: tags['IELTS Academic'] },
             { tagId: tags[examSkill] },
             { tagId: tags['Practice'] },
+            { tagId: tags['Mini Test'] },
           ],
         },
       },
@@ -553,47 +593,47 @@ async function main() {
         },
       });
       const html = buildNfcHtml(`Section ${si + 1} Form`, ['Topic', 'Date', 'Location', 'Duration', 'Contact', 'Fee', 'Capacity', 'Equipment', 'Notes', 'Reference'], si * 10 + 1);
-      await createNfcGroup(section.id, 0, html,
+      await createFillInBlankGroup(section.id, 0, html,
         ['Environment', '10 June', 'Room 3B', '90 minutes', 'Dr Smith', 'free', '30', 'laptop', 'bring ID', 'ENV-2024'],
         si * 10 + 1);
     }
     return test;
   }
 
-  await createIeltsCondensed(1, 'LISTENING', 25);
+  await createIeltsMini(1, 'LISTENING', 25);
   console.log(`  ✓ IELTS Academic Listening Mini Test 1`);
-  await createIeltsCondensed(2, 'READING', 30);
+  await createIeltsMini(2, 'READING', 30);
   console.log(`  ✓ IELTS Academic Reading Mini Test 2`);
 
   // ═══════════════════════════════════════════════════════════════════════════
   // IELTS GENERAL
   // ═══════════════════════════════════════════════════════════════════════════
 
-  const ieltsG1 = await createIeltsListeningTest({
+  await createIeltsListeningTest({
     title: 'IELTS General Training Listening Test 1',
-    examType: ExamType.IELTS_GENERAL, format: TestFormat.FULL, durationMins: 40,
+    examType: ExamType.IELTS_GENERAL, durationMins: 40,
     description: 'IELTS General Training Listening Test 1 — everyday social situations and workplace contexts.',
     tagIds: [tags['IELTS General'], tags['Listening'], tags['Practice']],
     sections: [
-      { title: 'Recording 1', type: 'NFC', startQ: 1 },
+      { title: 'Recording 1', type: 'FILL_IN_BLANK', startQ: 1 },
       { title: 'Recording 2', type: 'MCQ', startQ: 11 },
-      { title: 'Recording 3', type: 'TABLE', startQ: 21 },
-      { title: 'Recording 4', type: 'SUMMARY', startQ: 31 },
+      { title: 'Recording 3', type: 'FILL_IN_BLANK', startQ: 21 },
+      { title: 'Recording 4', type: 'FILL_IN_BLANK', startQ: 31 },
     ],
     attemptCount: 5500, commentCount: 88,
   }, []);
   console.log(`  ✓ IELTS General Listening Test 1`);
 
-  const ieltsG2 = await createIeltsListeningTest({
+  await createIeltsListeningTest({
     title: 'IELTS General Training Listening Test 2',
-    examType: ExamType.IELTS_GENERAL, format: TestFormat.FULL, durationMins: 40,
+    examType: ExamType.IELTS_GENERAL, durationMins: 40,
     description: 'IELTS General Training Listening Test 2.',
     tagIds: [tags['IELTS General'], tags['Listening']],
     sections: [
       { title: 'Recording 1', type: 'MCQ', startQ: 1 },
       { title: 'Recording 2', type: 'MATCHING', startQ: 11 },
-      { title: 'Recording 3', type: 'NFC', startQ: 21 },
-      { title: 'Recording 4', type: 'SUMMARY', startQ: 31 },
+      { title: 'Recording 3', type: 'FILL_IN_BLANK', startQ: 21 },
+      { title: 'Recording 4', type: 'FILL_IN_BLANK', startQ: 31 },
     ],
     attemptCount: 3200, commentCount: 47,
   }, []);
@@ -605,7 +645,6 @@ async function main() {
       data: {
         title: `IELTS General Training Reading Test ${num}`,
         examType: ExamType.IELTS_GENERAL,
-        format: TestFormat.FULL,
         durationMins: 60,
         isPublished: true,
         description: `IELTS General Training Reading Test ${num} — 3 sections covering everyday reading materials.`,
@@ -635,7 +674,7 @@ async function main() {
           data: {
             groupId: group.id, questionNumber: qNum, orderIndex: j,
             stem: `What is stated about the topic in this section? (Q${qNum})`,
-            mcqOptions: [{ label: 'A', text: 'It is compulsory' }, { label: 'B', text: 'It is optional' }, { label: 'C', text: 'It is recommended' }, { label: 'D', text: 'It is prohibited' }],
+            options: [{ label: 'A', text: 'It is compulsory' }, { label: 'B', text: 'It is optional' }, { label: 'C', text: 'It is recommended' }, { label: 'D', text: 'It is prohibited' }],
             correctAnswer: ['A', 'B', 'C', 'D'][j % 4],
           },
         });
@@ -649,7 +688,7 @@ async function main() {
   console.log(`  ✓ IELTS General Reading Test 1`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // TOEIC LR — FULL (2 tests)
+  // TOEIC LR (2 full tests + 1 mini)
   // ═══════════════════════════════════════════════════════════════════════════
 
   async function createToeicTest(num: number, attemptCount: number, commentCount: number) {
@@ -657,7 +696,6 @@ async function main() {
       data: {
         title: `TOEIC Listening & Reading Practice Test ${num}`,
         examType: ExamType.TOEIC_LR,
-        format: TestFormat.FULL,
         durationMins: 120,
         isPublished: true,
         description: `Full TOEIC Listening & Reading test ${num} — 7 parts, 200 questions total.`,
@@ -665,25 +703,25 @@ async function main() {
         questionCount: 100,
         attemptCount, commentCount,
         tags: {
-          create: [{ tagId: tags['TOEIC'] }, { tagId: tags['Listening'] }, { tagId: tags['Reading'] }],
+          create: [{ tagId: tags['TOEIC LR'] }, { tagId: tags['Listening'] }, { tagId: tags['Reading'] }],
         },
       },
     });
 
     const parts = [
-      { title: 'Part 1 – Photographs', skill: SectionSkill.LISTENING, qCount: 6, type: 'mcq' },
-      { title: 'Part 2 – Question–Response', skill: SectionSkill.LISTENING, qCount: 25, type: 'mcq' },
-      { title: 'Part 3 – Short Conversations', skill: SectionSkill.LISTENING, qCount: 39, type: 'mcq' },
-      { title: 'Part 4 – Short Talks', skill: SectionSkill.LISTENING, qCount: 30, type: 'mcq' },
-      { title: 'Part 5 – Incomplete Sentences', skill: SectionSkill.READING, qCount: 0, type: 'skip' },
-      { title: 'Part 6 – Text Completion', skill: SectionSkill.READING, qCount: 0, type: 'skip' },
-      { title: 'Part 7 – Reading Comprehension', skill: SectionSkill.READING, qCount: 0, type: 'skip' },
+      { title: 'Part 1 – Photographs', skill: SectionSkill.LISTENING, qCount: 6 },
+      { title: 'Part 2 – Question–Response', skill: SectionSkill.LISTENING, qCount: 25 },
+      { title: 'Part 3 – Short Conversations', skill: SectionSkill.LISTENING, qCount: 39 },
+      { title: 'Part 4 – Short Talks', skill: SectionSkill.LISTENING, qCount: 30 },
+      { title: 'Part 5 – Incomplete Sentences', skill: SectionSkill.READING, qCount: 0 },
+      { title: 'Part 6 – Text Completion', skill: SectionSkill.READING, qCount: 0 },
+      { title: 'Part 7 – Reading Comprehension', skill: SectionSkill.READING, qCount: 0 },
     ];
 
     let qNum = 1;
     for (let pi = 0; pi < parts.length; pi++) {
       const part = parts[pi];
-      if (part.type === 'skip') {
+      if (part.qCount === 0) {
         await prisma.testSection.create({
           data: { testId: test.id, title: part.title, skill: part.skill, orderIndex: pi, questionCount: 0 },
         });
@@ -703,7 +741,7 @@ async function main() {
           data: {
             groupId: group.id, questionNumber: qNum, orderIndex: i,
             stem: pi === 0 ? `Look at the photo. What best describes the scene?` : `Choose the best response to the statement or question.`,
-            mcqOptions: opts,
+            options: opts,
             correctAnswer: ['A', 'B', 'C', 'D'][i % (pi === 0 ? 4 : 3)],
           },
         });
@@ -718,16 +756,16 @@ async function main() {
   await createToeicTest(2, 21000, 380);
   console.log(`  ✓ TOEIC LR Practice Test 2`);
 
-  // TOEIC Condensed
+  // TOEIC Mini Test
   const toeicMini = await prisma.test.create({
     data: {
       title: 'TOEIC Listening & Reading Mini Test',
-      examType: ExamType.TOEIC_LR, format: TestFormat.CONDENSED, durationMins: 45,
+      examType: ExamType.TOEIC_LR, durationMins: 45,
       isPublished: true,
-      description: 'A condensed TOEIC practice test covering Listening and Reading sections.',
+      description: 'A short TOEIC practice test covering Listening and Reading sections.',
       sectionCount: 3, questionCount: 15,
       attemptCount: 8400, commentCount: 120,
-      tags: { create: [{ tagId: tags['TOEIC'] }, { tagId: tags['Practice'] }] },
+      tags: { create: [{ tagId: tags['TOEIC LR'] }, { tagId: tags['Practice'] }, { tagId: tags['Mini Test'] }] },
     },
   });
   for (let si = 0; si < 3; si++) {
@@ -745,7 +783,7 @@ async function main() {
         data: {
           groupId: group.id, questionNumber: qNum, orderIndex: i,
           stem: `TOEIC sample question ${qNum}`,
-          mcqOptions: [{ label: 'A', text: 'Option A' }, { label: 'B', text: 'Option B' }, { label: 'C', text: 'Option C' }, { label: 'D', text: 'Option D' }],
+          options: [{ label: 'A', text: 'Option A' }, { label: 'B', text: 'Option B' }, { label: 'C', text: 'Option C' }, { label: 'D', text: 'Option D' }],
           correctAnswer: ['A', 'B', 'C', 'A', 'D'][i],
         },
       });
@@ -754,290 +792,9 @@ async function main() {
   console.log(`  ✓ TOEIC Mini Test`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // HSK
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  async function createHskTest(level: 1 | 2 | 3 | 4, examType: ExamType, durationMins: number, questionCount: number) {
-    const test = await prisma.test.create({
-      data: {
-        title: `HSK Level ${level} Full Test 1`,
-        examType, format: TestFormat.FULL, durationMins, isPublished: true,
-        description: `HSK ${level} standard practice test. Tests listening, reading comprehension and vocabulary at Level ${level}.`,
-        sectionCount: 2, questionCount,
-        attemptCount: Math.floor(9500 / level), commentCount: Math.floor(145 / level),
-        tags: { create: [{ tagId: tags['HSK'] }, { tagId: tags['Practice'] }] },
-      },
-    });
-    const sectionDefs = [
-      { title: 'Listening Section', skill: SectionSkill.LISTENING, qCount: Math.floor(questionCount / 2) },
-      { title: 'Reading Section', skill: SectionSkill.READING, qCount: Math.ceil(questionCount / 2) },
-    ];
-    let qNum = 1;
-    for (const sd of sectionDefs) {
-      const section = await prisma.testSection.create({
-        data: { testId: test.id, title: sd.title, skill: sd.skill, orderIndex: sectionDefs.indexOf(sd), questionCount: sd.qCount },
-      });
-      const group = await prisma.questionGroup.create({
-        data: { sectionId: section.id, questionType: QuestionType.MULTIPLE_CHOICE, orderIndex: 0 },
-      });
-      for (let i = 0; i < sd.qCount; i++) {
-        await prisma.question.create({
-          data: {
-            groupId: group.id, questionNumber: qNum, orderIndex: i,
-            stem: `HSK ${level} question ${qNum}: Choose the correct answer.`,
-            mcqOptions: [{ label: 'A', text: '是的' }, { label: 'B', text: '不是' }, { label: 'C', text: '可能' }],
-            correctAnswer: ['A', 'B', 'C'][i % 3],
-          },
-        });
-        qNum++;
-      }
-    }
-    return test;
-  }
-
-  await createHskTest(1, ExamType.HSK_1, 40, 40);
-  console.log(`  ✓ HSK 1`);
-  await createHskTest(2, ExamType.HSK_2, 50, 60);
-  console.log(`  ✓ HSK 2`);
-  await createHskTest(3, ExamType.HSK_3, 65, 80);
-  console.log(`  ✓ HSK 3`);
-  await createHskTest(4, ExamType.HSK_4, 100, 100);
-  console.log(`  ✓ HSK 4`);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TOPIK
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  async function createTopikTest(level: 'I' | 'II', examType: ExamType, durationMins: number, questionCount: number) {
-    const test = await prisma.test.create({
-      data: {
-        title: `TOPIK ${level} Full Test 1`,
-        examType, format: TestFormat.FULL, durationMins, isPublished: true,
-        description: `TOPIK ${level} standard practice test covering listening and reading comprehension.`,
-        sectionCount: 2, questionCount,
-        attemptCount: level === 'I' ? 6200 : 5200, commentCount: level === 'I' ? 98 : 85,
-        tags: { create: [{ tagId: tags['TOPIK'] }, { tagId: tags['Practice'] }] },
-      },
-    });
-    const sections = [
-      { title: '듣기 (Listening)', skill: SectionSkill.LISTENING, qCount: Math.floor(questionCount / 2) },
-      { title: '읽기 (Reading)', skill: SectionSkill.READING, qCount: Math.ceil(questionCount / 2) },
-    ];
-    let qNum = 1;
-    for (const sd of sections) {
-      const section = await prisma.testSection.create({
-        data: { testId: test.id, title: sd.title, skill: sd.skill, orderIndex: sections.indexOf(sd), questionCount: sd.qCount },
-      });
-      const group = await prisma.questionGroup.create({
-        data: { sectionId: section.id, questionType: QuestionType.MULTIPLE_CHOICE, orderIndex: 0 },
-      });
-      for (let i = 0; i < sd.qCount; i++) {
-        await prisma.question.create({
-          data: {
-            groupId: group.id, questionNumber: qNum, orderIndex: i,
-            stem: `TOPIK ${level} 문제 ${qNum}: 다음을 듣고 알맞은 답을 고르십시오.`,
-            mcqOptions: [{ label: '①', text: '보기 1' }, { label: '②', text: '보기 2' }, { label: '③', text: '보기 3' }, { label: '④', text: '보기 4' }],
-            correctAnswer: ['①', '②', '③', '④'][i % 4],
-          },
-        });
-        qNum++;
-      }
-    }
-    return test;
-  }
-
-  await createTopikTest('I', ExamType.TOPIK_I, 100, 70);
-  console.log(`  ✓ TOPIK I`);
-  await createTopikTest('II', ExamType.TOPIK_II, 180, 104);
-  console.log(`  ✓ TOPIK II`);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // JLPT
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  async function createJlptTest(level: 'N5' | 'N4' | 'N3' | 'N2' | 'N1', examType: ExamType, durationMins: number, questionCount: number) {
-    const test = await prisma.test.create({
-      data: {
-        title: `JLPT ${level} Full Test 1`,
-        examType, format: TestFormat.FULL, durationMins, isPublished: true,
-        description: `JLPT ${level} standard practice test covering language knowledge, reading and listening.`,
-        sectionCount: 3, questionCount,
-        attemptCount: { N5: 4800, N4: 3500, N3: 2800, N2: 2100, N1: 1500 }[level],
-        commentCount: { N5: 72, N4: 58, N3: 45, N2: 35, N1: 28 }[level],
-        tags: { create: [{ tagId: tags['JLPT'] }, { tagId: tags['Practice'] }] },
-      },
-    });
-    const sections = [
-      { title: '言語知識 (Language Knowledge)', skill: SectionSkill.READING, qCount: Math.floor(questionCount * 0.4) },
-      { title: '読解 (Reading)', skill: SectionSkill.READING, qCount: Math.floor(questionCount * 0.35) },
-      { title: '聴解 (Listening)', skill: SectionSkill.LISTENING, qCount: Math.ceil(questionCount * 0.25) },
-    ];
-    let qNum = 1;
-    for (const sd of sections) {
-      const section = await prisma.testSection.create({
-        data: { testId: test.id, title: sd.title, skill: sd.skill, orderIndex: sections.indexOf(sd), questionCount: sd.qCount },
-      });
-      const group = await prisma.questionGroup.create({
-        data: { sectionId: section.id, questionType: QuestionType.MULTIPLE_CHOICE, orderIndex: 0 },
-      });
-      for (let i = 0; i < sd.qCount; i++) {
-        await prisma.question.create({
-          data: {
-            groupId: group.id, questionNumber: qNum, orderIndex: i,
-            stem: `問題${qNum}：次の文の（　）に入れるのに最もよいものを選んでください。`,
-            mcqOptions: [{ label: '1', text: 'は' }, { label: '2', text: 'が' }, { label: '3', text: 'を' }, { label: '4', text: 'に' }],
-            correctAnswer: ['1', '2', '3', '4'][i % 4],
-          },
-        });
-        qNum++;
-      }
-    }
-    return test;
-  }
-
-  await createJlptTest('N5', ExamType.JLPT_N5, 105, 72);
-  console.log(`  ✓ JLPT N5`);
-  await createJlptTest('N4', ExamType.JLPT_N4, 125, 69);
-  console.log(`  ✓ JLPT N4`);
-  await createJlptTest('N3', ExamType.JLPT_N3, 140, 68);
-  console.log(`  ✓ JLPT N3`);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // DIGITAL SAT
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  const satTest = await prisma.test.create({
-    data: {
-      title: 'Digital SAT Full Practice Test 1',
-      examType: ExamType.DIGITAL_SAT, format: TestFormat.FULL, durationMins: 154,
-      isPublished: true,
-      description: 'Full-length Digital SAT practice test — 2 modules of Reading & Writing + 2 modules of Math.',
-      sectionCount: 4, questionCount: 98,
-      attemptCount: 8800, commentCount: 132,
-      tags: { create: [{ tagId: tags['SAT'] }, { tagId: tags['Practice'] }, { tagId: tags['2024'] }] },
-    },
-  });
-
-  const satParts = [
-    { title: 'Reading & Writing — Module 1', skill: SectionSkill.READING, qCount: 27 },
-    { title: 'Reading & Writing — Module 2', skill: SectionSkill.READING, qCount: 27 },
-    { title: 'Math — Module 1', skill: SectionSkill.READING, qCount: 22 },
-    { title: 'Math — Module 2', skill: SectionSkill.READING, qCount: 22 },
-  ];
-  let satQNum = 1;
-  for (let pi = 0; pi < satParts.length; pi++) {
-    const p = satParts[pi];
-    const section = await prisma.testSection.create({
-      data: { testId: satTest.id, title: p.title, skill: p.skill, orderIndex: pi, questionCount: p.qCount },
-    });
-    const group = await prisma.questionGroup.create({
-      data: { sectionId: section.id, questionType: QuestionType.MULTIPLE_CHOICE, orderIndex: 0 },
-    });
-    for (let i = 0; i < p.qCount; i++) {
-      const isMath = pi >= 2;
-      await prisma.question.create({
-        data: {
-          groupId: group.id, questionNumber: satQNum, orderIndex: i,
-          stem: isMath ? `Solve the following mathematical problem (Q${satQNum}).` : `Based on the passage, which choice best describes the main idea? (Q${satQNum})`,
-          mcqOptions: [{ label: 'A', text: 'First option' }, { label: 'B', text: 'Second option' }, { label: 'C', text: 'Third option' }, { label: 'D', text: 'Fourth option' }],
-          correctAnswer: ['A', 'B', 'C', 'D'][i % 4],
-        },
-      });
-      satQNum++;
-    }
-  }
-  console.log(`  ✓ Digital SAT Practice Test 1`);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ACT
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  const actTest = await prisma.test.create({
-    data: {
-      title: 'ACT Full Practice Test 1',
-      examType: ExamType.ACT, format: TestFormat.FULL, durationMins: 175,
-      isPublished: true,
-      description: 'Full-length ACT practice test — English, Mathematics, Reading and Science sections.',
-      sectionCount: 4, questionCount: 215,
-      attemptCount: 4500, commentCount: 68,
-      tags: { create: [{ tagId: tags['ACT'] }, { tagId: tags['Practice'] }] },
-    },
-  });
-
-  const actParts = [
-    { title: 'English', skill: SectionSkill.READING, qCount: 75 },
-    { title: 'Mathematics', skill: SectionSkill.READING, qCount: 60 },
-    { title: 'Reading', skill: SectionSkill.READING, qCount: 40 },
-    { title: 'Science', skill: SectionSkill.READING, qCount: 40 },
-  ];
-  let actQNum = 1;
-  for (let pi = 0; pi < actParts.length; pi++) {
-    const p = actParts[pi];
-    const section = await prisma.testSection.create({
-      data: { testId: actTest.id, title: p.title, skill: p.skill, orderIndex: pi, questionCount: p.qCount },
-    });
-    const group = await prisma.questionGroup.create({
-      data: { sectionId: section.id, questionType: QuestionType.MULTIPLE_CHOICE, orderIndex: 0 },
-    });
-    for (let i = 0; i < p.qCount; i++) {
-      await prisma.question.create({
-        data: {
-          groupId: group.id, questionNumber: actQNum, orderIndex: i,
-          stem: `ACT ${p.title} question ${actQNum}.`,
-          mcqOptions: [{ label: 'A', text: 'Option A' }, { label: 'B', text: 'Option B' }, { label: 'C', text: 'Option C' }, { label: 'D', text: 'Option D' }],
-          correctAnswer: ['A', 'B', 'C', 'D'][i % 4],
-        },
-      });
-      actQNum++;
-    }
-  }
-  console.log(`  ✓ ACT Practice Test 1`);
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // THPTQG
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  async function createThptqgTest(subject: string, durationMins: number, qCount: number) {
-    const test = await prisma.test.create({
-      data: {
-        title: `THPTQG ${subject} Đề Thi Thử 1`,
-        examType: ExamType.THPTQG, format: TestFormat.FULL, durationMins,
-        isPublished: true,
-        description: `Đề thi thử THPTQG môn ${subject} theo cấu trúc đề thi chính thức.`,
-        sectionCount: 1, questionCount: qCount,
-        attemptCount: 12000, commentCount: 185,
-        tags: { create: [{ tagId: tags['THPTQG'] }, { tagId: tags['Practice'] }, { tagId: tags['2024'] }] },
-      },
-    });
-    const section = await prisma.testSection.create({
-      data: { testId: test.id, title: `${subject} — Đề thi`, skill: SectionSkill.READING, orderIndex: 0, questionCount: qCount },
-    });
-    const group = await prisma.questionGroup.create({
-      data: { sectionId: section.id, questionType: QuestionType.MULTIPLE_CHOICE, orderIndex: 0 },
-    });
-    for (let i = 0; i < qCount; i++) {
-      await prisma.question.create({
-        data: {
-          groupId: group.id, questionNumber: i + 1, orderIndex: i,
-          stem: `Câu ${i + 1}: Chọn đáp án đúng.`,
-          mcqOptions: [{ label: 'A', text: 'Đáp án A' }, { label: 'B', text: 'Đáp án B' }, { label: 'C', text: 'Đáp án C' }, { label: 'D', text: 'Đáp án D' }],
-          correctAnswer: ['A', 'B', 'C', 'D'][i % 4],
-        },
-      });
-    }
-    return test;
-  }
-
-  await createThptqgTest('Tiếng Anh', 60, 50);
-  console.log(`  ✓ THPTQG Tiếng Anh`);
-  await createThptqgTest('Toán', 90, 50);
-  console.log(`  ✓ THPTQG Toán`);
-
-  // ═══════════════════════════════════════════════════════════════════════════
   // SAMPLE ATTEMPT + COMMENTS for IELTS L1
   // ═══════════════════════════════════════════════════════════════════════════
 
-  // Get all questions for IELTS L1
   const ieltsL1Sections = await prisma.testSection.findMany({
     where: { testId: ieltsL1.id },
     include: { questionGroups: { include: { questions: true } } },
@@ -1056,6 +813,10 @@ async function main() {
       totalQuestions: allQ.length,
       correctCount: Math.floor(allQ.length * 0.8),
       scorePercent: 80,
+      bandScore: 7.5,
+      sectionScores: {
+        listening: { correct: 32, total: 40, band: 7.5 },
+      },
       sections: {
         create: ieltsL1Sections.map(s => ({ sectionId: s.id })),
       },

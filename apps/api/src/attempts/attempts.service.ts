@@ -5,11 +5,15 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { AttemptMode, AttemptStatus } from '@prisma/client';
+import { ScoringService, SectionResult, Skill } from '../scoring/scoring.service';
+import { AttemptMode, AttemptStatus, Prisma } from '@prisma/client';
 
 @Injectable()
 export class AttemptsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private scoringService: ScoringService,
+  ) {}
 
   async startAttempt(
     userId: string,
@@ -73,6 +77,7 @@ export class AttemptsService {
           include: {
             section: {
               include: {
+                passages: { orderBy: { orderIndex: 'asc' } },
                 questionGroups: {
                   orderBy: { orderIndex: 'asc' },
                   include: {
@@ -84,7 +89,9 @@ export class AttemptsService {
                         questionNumber: true,
                         orderIndex: true,
                         stem: true,
-                        mcqOptions: true,
+                        options: true,
+                        imageUrl: true,
+                        audioUrl: true,
                         correctAnswer: false,
                         explanation: false,
                       },
@@ -111,6 +118,12 @@ export class AttemptsService {
   }
 
   async saveAnswer(attemptId: string, questionId: string, answerText: string) {
+    const attempt = await this.prisma.userAttempt.findUnique({ where: { id: attemptId } });
+    if (!attempt) throw new NotFoundException('Attempt not found');
+    if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+      throw new BadRequestException('Attempt already submitted');
+    }
+
     return this.prisma.userAnswer.upsert({
       where: {
         attemptId_questionId: { attemptId, questionId },
@@ -124,6 +137,12 @@ export class AttemptsService {
     attemptId: string,
     answers: { questionId: string; answerText: string }[],
   ) {
+    const attempt = await this.prisma.userAttempt.findUnique({ where: { id: attemptId } });
+    if (!attempt) throw new NotFoundException('Attempt not found');
+    if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+      throw new BadRequestException('Attempt already submitted');
+    }
+
     const operations = answers.map((a) =>
       this.prisma.userAnswer.upsert({
         where: {
@@ -141,7 +160,17 @@ export class AttemptsService {
     const attempt = await this.prisma.userAttempt.findUnique({
       where: { id: attemptId },
       include: {
-        answers: { include: { question: true } },
+        answers: {
+          include: {
+            question: {
+              include: {
+                group: {
+                  include: { section: { select: { skill: true } } },
+                },
+              },
+            },
+          },
+        },
         sections: true,
       },
     });
@@ -151,12 +180,23 @@ export class AttemptsService {
       throw new BadRequestException('Attempt already submitted');
     }
 
+    // Grade each answer
     let correctCount = 0;
+    const correctBySkill = new Map<string, number>();
+    const totalBySkill = new Map<string, number>();
+
     for (const answer of attempt.answers) {
+      const skill = answer.question.group.section.skill;
       const isCorrect =
         answer.answerText?.trim().toLowerCase() ===
         answer.question.correctAnswer.trim().toLowerCase();
-      if (isCorrect) correctCount++;
+      if (isCorrect) {
+        correctCount++;
+        correctBySkill.set(skill, (correctBySkill.get(skill) || 0) + 1);
+      }
+      // Track total answered per skill
+      totalBySkill.set(skill, (totalBySkill.get(skill) || 0) + 1);
+
       await this.prisma.userAnswer.update({
         where: { id: answer.id },
         data: { isCorrect },
@@ -174,6 +214,53 @@ export class AttemptsService {
     const scorePercent =
       totalQuestions > 0 ? (correctCount / totalQuestions) * 100 : 0;
 
+    // Get the test to determine exam type and section structure
+    const test = await this.prisma.test.findUnique({
+      where: { id: attempt.testId },
+      include: {
+        sections: {
+          where: { id: { in: sectionIds } },
+          include: {
+            questionGroups: {
+              include: { questions: { select: { id: true } } },
+            },
+          },
+        },
+      },
+    });
+
+    // Build per-section results for scoring
+    const sectionResults: SectionResult[] = [];
+    if (test?.sections) {
+      const questionCountBySkill = new Map<string, number>();
+      for (const section of test.sections) {
+        const qCount = section.questionGroups.reduce(
+          (sum, g) => sum + g.questions.length,
+          0,
+        );
+        questionCountBySkill.set(
+          section.skill,
+          (questionCountBySkill.get(section.skill) || 0) + qCount,
+        );
+      }
+
+      for (const [skill, total] of questionCountBySkill) {
+        sectionResults.push({
+          skill: skill as Skill,
+          correct: correctBySkill.get(skill) || 0,
+          total,
+        });
+      }
+    }
+
+    // Calculate exam-specific scores
+    const examScores = test
+      ? this.scoringService.calculateAttemptScores(
+          test.examType,
+          sectionResults,
+        )
+      : { bandScore: null, scaledScore: null, sectionScores: null };
+
     const updated = await this.prisma.userAttempt.update({
       where: { id: attemptId },
       data: {
@@ -182,6 +269,11 @@ export class AttemptsService {
         totalQuestions,
         correctCount,
         scorePercent,
+        bandScore: examScores.bandScore,
+        scaledScore: examScores.scaledScore,
+        sectionScores: examScores.sectionScores
+          ? (examScores.sectionScores as unknown as Prisma.InputJsonValue)
+          : undefined,
       },
     });
 
@@ -202,9 +294,11 @@ export class AttemptsService {
           include: {
             section: {
               include: {
+                passages: { orderBy: { orderIndex: 'asc' } },
                 questionGroups: {
                   orderBy: { orderIndex: 'asc' },
                   include: {
+                    passage: true,
                     questions: {
                       orderBy: { orderIndex: 'asc' },
                     },

@@ -1,0 +1,31 @@
+"use client";
+
+import { QuestionGroupRenderer } from "@/components/question-renderers";
+import type { LayoutProps } from "./types";
+
+export function QuestionsOnlyLayout({
+  section,
+  answers,
+  onAnswer,
+}: LayoutProps) {
+  const sortedGroups = [...section.questionGroups].sort(
+    (a, b) => a.orderIndex - b.orderIndex
+  );
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="max-w-3xl">
+        {sortedGroups.map((group, gi) => (
+          <div key={group.id}>
+            {gi > 0 && <hr className="border-slate-200" />}
+            <QuestionGroupRenderer
+              group={group}
+              answers={answers}
+              onAnswer={onAnswer}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}

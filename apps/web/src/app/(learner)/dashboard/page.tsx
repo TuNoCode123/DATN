@@ -1,15 +1,14 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { Spin, Tag, Progress } from 'antd';
 import {
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  TrophyOutlined,
-  FireOutlined,
-  BarChartOutlined,
-  RightOutlined,
-} from '@ant-design/icons';
+  CheckCircle2,
+  Clock,
+  BarChart3,
+  Trophy,
+  Flame,
+  ChevronRight,
+} from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
@@ -48,14 +47,20 @@ const EXAM_TYPE_LABELS: Record<string, string> = {
 };
 
 function scoreColor(score: number): string {
-  if (score >= 80) return '#52c41a';
-  if (score >= 60) return '#faad14';
-  return '#ff4d4f';
+  if (score >= 80) return 'text-emerald-600';
+  if (score >= 60) return 'text-amber-500';
+  return 'text-red-500';
+}
+
+function scoreBg(score: number): string {
+  if (score >= 80) return 'bg-emerald-500';
+  if (score >= 60) return 'bg-amber-400';
+  return 'bg-red-400';
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('vi-VN', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
+  return new Date(iso).toLocaleDateString('en-US', {
+    day: '2-digit', month: 'short', year: 'numeric',
   });
 }
 
@@ -83,7 +88,6 @@ export default function DashboardPage() {
       ? Math.max(...submitted.map((a) => a.scorePercent ?? 0))
       : 0;
 
-  // Group submitted attempts by examType for the breakdown chart
   const byType: Record<string, { count: number; totalScore: number }> = {};
   for (const a of submitted) {
     const type = a.test.examType;
@@ -108,69 +112,72 @@ export default function DashboardPage() {
     <div className="max-w-5xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Xin chào, {user?.displayName || user?.email || 'bạn'} 👋
+        <h1 className="text-3xl font-extrabold text-foreground">
+          Hello, {user?.displayName || user?.email || 'there'}!
         </h1>
-        <p className="text-gray-500 mt-1 text-sm">Theo dõi tiến trình luyện thi của bạn</p>
+        <p className="text-slate-500 mt-1">Track your learning progress</p>
       </div>
 
       {isLoading ? (
         <div className="flex justify-center py-20">
-          <Spin size="large" />
+          <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
         <>
           {/* Stats row */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             <StatCard
-              icon={<CheckCircleOutlined style={{ fontSize: 22, color: '#52c41a' }} />}
-              label="Đề đã hoàn thành"
+              icon={<CheckCircle2 className="w-6 h-6 text-emerald-500" />}
+              label="Completed"
               value={submitted.length}
-              bg="bg-green-50"
+              bg="bg-emerald-50"
+              border="border-emerald-200"
             />
             <StatCard
-              icon={<ClockCircleOutlined style={{ fontSize: 22, color: '#faad14' }} />}
-              label="Đang làm"
+              icon={<Clock className="w-6 h-6 text-amber-500" />}
+              label="In Progress"
               value={inProgress.length}
-              bg="bg-yellow-50"
+              bg="bg-amber-50"
+              border="border-amber-200"
             />
             <StatCard
-              icon={<BarChartOutlined style={{ fontSize: 22, color: '#1677ff' }} />}
-              label="Điểm trung bình"
-              value={submitted.length > 0 ? `${avgScore.toFixed(1)}%` : '—'}
+              icon={<BarChart3 className="w-6 h-6 text-blue-500" />}
+              label="Average Score"
+              value={submitted.length > 0 ? `${avgScore.toFixed(1)}%` : '--'}
               bg="bg-blue-50"
+              border="border-blue-200"
             />
             <StatCard
-              icon={<TrophyOutlined style={{ fontSize: 22, color: '#f5a623' }} />}
-              label="Điểm cao nhất"
-              value={submitted.length > 0 ? `${bestScore.toFixed(1)}%` : '—'}
-              bg="bg-orange-50"
+              icon={<Trophy className="w-6 h-6 text-amber-500" />}
+              label="Best Score"
+              value={submitted.length > 0 ? `${bestScore.toFixed(1)}%` : '--'}
+              bg="bg-amber-50"
+              border="border-amber-200"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {/* Score breakdown by exam type */}
-            <div className="md:col-span-1 bg-white border border-gray-200 rounded-xl p-5">
-              <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <FireOutlined style={{ color: '#ff4d4f' }} /> Theo loại đề
+            <div className="md:col-span-1 brutal-card p-5">
+              <h2 className="font-bold text-foreground mb-4 flex items-center gap-2 text-sm">
+                <Flame className="w-5 h-5 text-red-500" /> By Exam Type
               </h2>
               {typeBreakdown.length === 0 ? (
-                <p className="text-sm text-gray-400">Chưa có dữ liệu</p>
+                <p className="text-sm text-slate-400">No data yet</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {typeBreakdown.map(({ type, label, count, avgScore: avg }) => (
                     <div key={type}>
-                      <div className="flex justify-between text-xs text-gray-600 mb-1">
-                        <span className="font-medium">{label}</span>
-                        <span>{count} bài · {avg.toFixed(0)}%</span>
+                      <div className="flex justify-between text-xs text-slate-600 mb-1.5">
+                        <span className="font-semibold">{label}</span>
+                        <span>{count} tests &middot; {avg.toFixed(0)}%</span>
                       </div>
-                      <Progress
-                        percent={Math.round(avg)}
-                        strokeColor={scoreColor(avg)}
-                        trailColor="#f0f0f0"
-                        showInfo={false}
-                        size="small"
-                      />
+                      <div className="w-full bg-slate-100 rounded-full h-2.5">
+                        <div
+                          className={`${scoreBg(avg)} rounded-full h-2.5 transition-all`}
+                          style={{ width: `${Math.round(avg)}%` }}
+                        />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -178,15 +185,15 @@ export default function DashboardPage() {
             </div>
 
             {/* In-progress attempts */}
-            <div className="md:col-span-2 bg-white border border-gray-200 rounded-xl p-5">
-              <h2 className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <ClockCircleOutlined style={{ color: '#faad14' }} /> Đang làm dở
+            <div className="md:col-span-2 brutal-card p-5">
+              <h2 className="font-bold text-foreground mb-4 flex items-center gap-2 text-sm">
+                <Clock className="w-5 h-5 text-amber-500" /> In Progress
               </h2>
               {inProgress.length === 0 ? (
-                <div className="text-sm text-gray-400 py-4 text-center">
-                  Không có bài thi nào đang làm dở.{' '}
-                  <Link href="/tests" className="text-blue-600 hover:underline">
-                    Làm bài mới
+                <div className="text-sm text-slate-400 py-4 text-center">
+                  No tests in progress.{' '}
+                  <Link href="/tests" className="text-primary font-semibold hover:underline cursor-pointer">
+                    Start a new one
                   </Link>
                 </div>
               ) : (
@@ -195,15 +202,15 @@ export default function DashboardPage() {
                     <Link
                       key={a.id}
                       href={`/tests/${a.test.id}/attempt?attemptId=${a.id}`}
-                      className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-yellow-200 bg-yellow-50 hover:bg-yellow-100 transition-colors"
+                      className="flex items-center justify-between px-4 py-3 rounded-xl border-2 border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer"
                     >
                       <div>
-                        <p className="text-sm font-medium text-gray-800 leading-tight">{a.test.title}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          Bắt đầu {formatDate(a.startedAt)} · {a.mode === 'FULL_TEST' ? 'Đề đầy đủ' : 'Luyện tập'}
+                        <p className="text-sm font-semibold text-foreground leading-tight">{a.test.title}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Started {formatDate(a.startedAt)} &middot; {a.mode === 'FULL_TEST' ? 'Full Test' : 'Practice'}
                         </p>
                       </div>
-                      <RightOutlined style={{ fontSize: 12, color: '#faad14' }} />
+                      <ChevronRight className="w-4 h-4 text-amber-500" />
                     </Link>
                   ))}
                 </div>
@@ -212,79 +219,76 @@ export default function DashboardPage() {
           </div>
 
           {/* Recent completed attempts */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <div className="brutal-card p-5">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-gray-800 flex items-center gap-2">
-                <CheckCircleOutlined style={{ color: '#52c41a' }} /> Kết quả gần đây
+              <h2 className="font-bold text-foreground flex items-center gap-2 text-sm">
+                <CheckCircle2 className="w-5 h-5 text-emerald-500" /> Recent Results
               </h2>
-              <Link href="/tests" className="text-xs text-blue-600 hover:underline">
-                Xem thêm đề thi
+              <Link href="/tests" className="text-xs text-primary font-semibold hover:underline cursor-pointer">
+                Browse more tests
               </Link>
             </div>
             {recent.length === 0 ? (
-              <div className="text-sm text-gray-400 py-8 text-center">
-                Bạn chưa hoàn thành bài thi nào.{' '}
-                <Link href="/tests" className="text-blue-600 hover:underline">
-                  Làm bài ngay
+              <div className="text-sm text-slate-400 py-8 text-center">
+                No completed tests yet.{' '}
+                <Link href="/tests" className="text-primary font-semibold hover:underline cursor-pointer">
+                  Take your first test
                 </Link>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-xs text-gray-500 border-b border-gray-100">
-                      <th className="text-left py-2 pr-4 font-medium">Đề thi</th>
-                      <th className="text-left py-2 pr-4 font-medium">Loại</th>
-                      <th className="text-left py-2 pr-4 font-medium">Chế độ</th>
-                      <th className="text-right py-2 pr-4 font-medium">Kết quả</th>
-                      <th className="text-right py-2 pr-4 font-medium">Ngày nộp</th>
-                      <th className="py-2" />
+                    <tr className="text-xs text-slate-500 border-b-2 border-slate-100">
+                      <th className="text-left py-3 pr-4 font-semibold">Test</th>
+                      <th className="text-left py-3 pr-4 font-semibold">Type</th>
+                      <th className="text-left py-3 pr-4 font-semibold">Mode</th>
+                      <th className="text-right py-3 pr-4 font-semibold">Score</th>
+                      <th className="text-right py-3 pr-4 font-semibold">Date</th>
+                      <th className="py-3" />
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-slate-50">
                     {recent.map((a) => {
                       const score = a.scorePercent ?? 0;
                       return (
-                        <tr key={a.id} className="hover:bg-gray-50 transition-colors">
+                        <tr key={a.id} className="hover:bg-slate-50/50 transition-colors">
                           <td className="py-3 pr-4">
-                            <span className="font-medium text-gray-800 line-clamp-1">{a.test.title}</span>
+                            <span className="font-semibold text-foreground line-clamp-1">{a.test.title}</span>
                           </td>
                           <td className="py-3 pr-4">
-                            <Tag color="geekblue" className="text-xs">
+                            <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 font-semibold border border-blue-200">
                               {EXAM_TYPE_LABELS[a.test.examType] || a.test.examType}
-                            </Tag>
+                            </span>
                           </td>
                           <td className="py-3 pr-4">
-                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
                               a.mode === 'FULL_TEST'
-                                ? 'bg-blue-100 text-blue-700'
-                                : 'bg-gray-100 text-gray-600'
+                                ? 'bg-primary/10 text-primary border border-primary/20'
+                                : 'bg-slate-100 text-slate-600 border border-slate-200'
                             }`}>
-                              {a.mode === 'FULL_TEST' ? 'Đầy đủ' : 'Luyện tập'}
+                              {a.mode === 'FULL_TEST' ? 'Full Test' : 'Practice'}
                             </span>
                           </td>
                           <td className="py-3 pr-4 text-right">
                             <div className="flex flex-col items-end">
-                              <span
-                                className="font-semibold text-base"
-                                style={{ color: scoreColor(score) }}
-                              >
+                              <span className={`font-bold text-base ${scoreColor(score)}`}>
                                 {score.toFixed(1)}%
                               </span>
-                              <span className="text-xs text-gray-400">
-                                {a.correctCount}/{a.totalQuestions} câu
+                              <span className="text-xs text-slate-400">
+                                {a.correctCount}/{a.totalQuestions}
                               </span>
                             </div>
                           </td>
-                          <td className="py-3 pr-4 text-right text-gray-500 text-xs whitespace-nowrap">
-                            {a.submittedAt ? formatDate(a.submittedAt) : '—'}
+                          <td className="py-3 pr-4 text-right text-slate-500 text-xs whitespace-nowrap">
+                            {a.submittedAt ? formatDate(a.submittedAt) : '--'}
                           </td>
                           <td className="py-3">
                             <Link
                               href={`/tests/${a.test.id}/result?attemptId=${a.id}`}
-                              className="text-xs text-blue-600 hover:underline whitespace-nowrap"
+                              className="text-xs text-primary font-semibold hover:underline whitespace-nowrap cursor-pointer"
                             >
-                              Xem chi tiết
+                              Details
                             </Link>
                           </td>
                         </tr>
@@ -306,17 +310,19 @@ function StatCard({
   label,
   value,
   bg,
+  border,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
   bg: string;
+  border: string;
 }) {
   return (
-    <div className={`${bg} rounded-xl p-4 border border-gray-100`}>
-      <div className="mb-2">{icon}</div>
-      <div className="text-2xl font-bold text-gray-900">{value}</div>
-      <div className="text-xs text-gray-500 mt-0.5">{label}</div>
+    <div className={`${bg} rounded-2xl p-5 border-2 ${border}`}>
+      <div className="mb-3">{icon}</div>
+      <div className="text-2xl font-extrabold text-foreground">{value}</div>
+      <div className="text-xs text-slate-500 mt-0.5 font-medium">{label}</div>
     </div>
   );
 }

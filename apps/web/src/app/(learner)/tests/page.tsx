@@ -2,24 +2,13 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Input, Button, Spin } from "antd";
-import {
-  SearchOutlined,
-  ClockCircleOutlined,
-  TeamOutlined,
-  MessageOutlined,
-  LeftOutlined,
-  RightOutlined,
-  BarChartOutlined,
-  InfoCircleOutlined,
-  UserOutlined,
-} from "@ant-design/icons";
+import { Search, Clock, Users, MessageSquare, ChevronLeft, ChevronRight, BarChart3, Info, User } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
 
 const EXAM_CATEGORIES = [
-  { key: "all", label: "Tất cả" },
+  { key: "all", label: "All" },
   { key: "IELTS_ACADEMIC", label: "IELTS Academic" },
   { key: "IELTS_GENERAL", label: "IELTS General" },
   { key: "TOEIC_LR", label: "TOEIC" },
@@ -43,40 +32,40 @@ const EXAM_CATEGORIES = [
 ];
 
 const FORMAT_TABS = [
-  { key: "all", label: "Tất cả" },
-  { key: "CONDENSED", label: "Đề rút gọn" },
+  { key: "all", label: "All Tests" },
+  { key: "CONDENSED", label: "Condensed" },
 ];
 
 const PAGE_SIZE = 12;
 
 function formatNumber(n: number): string {
-  return n.toLocaleString("vi-VN");
+  return n.toLocaleString("en-US");
 }
 
 function UserSidebar() {
   const user = useAuthStore((s) => s.user);
 
   return (
-    <div className="w-64 flex-shrink-0">
-      <div className="bg-white border border-gray-200 rounded-xl p-5 flex flex-col items-center gap-3">
-        <div className="w-16 h-16 rounded-full bg-gray-800 flex items-center justify-center">
-          <UserOutlined style={{ fontSize: 32, color: "#fff" }} />
+    <div className="w-64 flex-shrink-0 hidden lg:block">
+      <div className="brutal-card p-5 flex flex-col items-center gap-3">
+        <div className="w-16 h-16 rounded-full bg-foreground flex items-center justify-center border-2 border-border-strong">
+          <User className="w-8 h-8 text-white" />
         </div>
-        <p className="font-semibold text-base text-gray-800">
-          {user?.displayName || user?.email || "Khách"}
+        <p className="font-bold text-base text-foreground">
+          {user?.displayName || user?.email || "Guest"}
         </p>
-        <div className="flex items-start gap-1.5 text-xs text-gray-500 text-center leading-snug">
-          <InfoCircleOutlined className="mt-0.5 flex-shrink-0 text-gray-400" />
+        <div className="flex items-start gap-1.5 text-xs text-slate-500 text-center leading-snug">
+          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-400" />
           <span>
-            Bạn chưa tạo mục tiêu cho quá trình luyện thi của mình.{" "}
-            <a href="#" className="text-blue-600 hover:underline">
-              Tạo ngay.
+            You haven&apos;t set a learning goal yet.{" "}
+            <a href="#" className="text-primary font-semibold hover:underline cursor-pointer">
+              Set one now.
             </a>
           </span>
         </div>
-        <button className="w-full flex items-center justify-center gap-2 border border-gray-300 rounded-md py-2 text-sm text-gray-700 hover:border-blue-400 hover:text-blue-600 transition-colors">
-          <BarChartOutlined />
-          Thống kê kết quả
+        <button className="w-full flex items-center justify-center gap-2 brutal-btn bg-white text-foreground py-2.5 text-sm cursor-pointer">
+          <BarChart3 className="w-4 h-4" />
+          View Statistics
         </button>
       </div>
     </div>
@@ -141,18 +130,18 @@ export default function TestsPage() {
   return (
     <div className="flex gap-6 items-start">
       <div className="flex-1 min-w-0">
-        <h1 className="text-3xl font-bold mb-5">Thư viện đề thi</h1>
+        <h1 className="text-3xl font-extrabold text-foreground mb-6">Test Library</h1>
 
         {/* Category filter */}
-        <div className="flex flex-wrap gap-x-3 gap-y-2 mb-5">
+        <div className="flex flex-wrap gap-2 mb-5">
           {EXAM_CATEGORIES.map((cat) => (
             <button
               key={cat.key}
               onClick={() => handleCategoryChange(cat.key)}
-              className={`text-sm transition-colors ${
+              className={`text-sm px-3 py-1 rounded-full transition-colors cursor-pointer ${
                 activeCategory === cat.key
-                  ? "bg-blue-600 text-white px-3 py-0.5 rounded"
-                  : "text-gray-700 hover:text-blue-600"
+                  ? "bg-primary text-white font-semibold"
+                  : "text-slate-600 hover:text-foreground bg-white border border-slate-200 hover:border-primary"
               }`}
             >
               {cat.label}
@@ -161,48 +150,41 @@ export default function TestsPage() {
         </div>
 
         {/* Search bar */}
-        <div className="flex gap-0 mb-4">
-          <Input
-            size="large"
-            placeholder="Nhập từ khoá bạn muốn tìm kiếm: tên sách, dạng câu hỏi ..."
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onPressEnter={handleSearch}
-            suffix={
-              <SearchOutlined
-                className="text-gray-400 cursor-pointer"
-                onClick={handleSearch}
-              />
-            }
-            className="rounded-r-none"
-          />
-        </div>
-        <div className="mb-6">
-          <Button
-            type="primary"
-            size="large"
+        <div className="flex gap-3 mb-6">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search tests by name, question type..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-xl text-sm text-foreground placeholder:text-slate-400 focus:border-primary focus:ring-0 outline-none bg-white transition-colors"
+            />
+          </div>
+          <button
             onClick={handleSearch}
-            style={{ backgroundColor: "#1a237e", borderColor: "#1a237e" }}
+            className="brutal-btn bg-foreground text-white px-6 py-3 text-sm cursor-pointer"
           >
-            Tìm kiếm
-          </Button>
+            Search
+          </button>
         </div>
 
         {/* Format tabs */}
-        <div className="flex gap-8 mb-6 border-b border-gray-200">
+        <div className="flex gap-6 mb-6 border-b-2 border-slate-200">
           {FORMAT_TABS.map((tab) => (
             <button
               key={tab.key}
               onClick={() => handleFormatChange(tab.key)}
-              className={`pb-2 text-sm font-medium transition-colors relative ${
+              className={`pb-3 text-sm font-semibold transition-colors relative cursor-pointer ${
                 activeFormat === tab.key
-                  ? "text-blue-600"
-                  : "text-gray-500 hover:text-gray-700"
+                  ? "text-primary"
+                  : "text-slate-500 hover:text-foreground"
               }`}
             >
               {tab.label}
               {activeFormat === tab.key && (
-                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-600" />
+                <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-full" />
               )}
             </button>
           ))}
@@ -211,32 +193,38 @@ export default function TestsPage() {
         {/* Test grid */}
         {isLoading ? (
           <div className="flex justify-center py-16">
-            <Spin size="large" />
+            <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         ) : tests.length > 0 ? (
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 mb-8">
             {tests.map((test) => (
               <div
                 key={test.id}
-                className="group border border-gray-200 rounded-xl p-5 bg-white hover:shadow-lg transition-shadow flex flex-col min-h-[300px]"
+                className="brutal-card p-5 flex flex-col min-h-[260px] cursor-pointer"
               >
-                <h3 className="font-bold text-[14px] leading-snug mb-4">
+                <h3 className="font-bold text-sm leading-snug text-foreground mb-4">
                   {test.title}
                 </h3>
 
-                <div className="text-xs text-gray-500 space-y-1 mb-4">
-                  <div className="flex flex-wrap items-center gap-x-1">
-                    <ClockCircleOutlined className="text-gray-400" />
-                    <span>{test.durationMins} phút</span>
-                    <span className="text-gray-300">|</span>
-                    <TeamOutlined className="text-gray-400" />
-                    <span>{formatNumber(test.attemptCount)}</span>
-                    <span className="text-gray-300">|</span>
-                    <MessageOutlined className="text-gray-400" />
-                    <span>{formatNumber(test.commentCount)}</span>
+                <div className="text-xs text-slate-500 space-y-1.5 mb-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      {test.durationMins} min
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="flex items-center gap-1">
+                      <Users className="w-3.5 h-3.5" />
+                      {formatNumber(test.attemptCount)}
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="flex items-center gap-1">
+                      <MessageSquare className="w-3.5 h-3.5" />
+                      {formatNumber(test.commentCount)}
+                    </span>
                   </div>
                   <div>
-                    {test.sectionCount} phần thi | {test.questionCount} câu hỏi
+                    {test.sectionCount} sections | {test.questionCount} questions
                   </div>
                 </div>
 
@@ -244,12 +232,7 @@ export default function TestsPage() {
                   {test.tags.map((t) => (
                     <span
                       key={t.tag.id}
-                      className="text-xs px-2 py-0.5 rounded border"
-                      style={{
-                        color: "#35509a",
-                        backgroundColor: "#eef1fa",
-                        borderColor: "#c5cee8",
-                      }}
+                      className="text-xs px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground border border-teal-200 font-medium"
                     >
                       #{t.tag.name}
                     </span>
@@ -258,23 +241,8 @@ export default function TestsPage() {
 
                 <div className="mt-auto">
                   <Link href={`/tests/${test.id}`} className="block">
-                    <button
-                      className="w-full rounded-md py-2 text-sm font-medium transition-colors border"
-                      style={{
-                        color: "#35509a",
-                        borderColor: "#35509a",
-                        backgroundColor: "transparent",
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.backgroundColor = "#35509a";
-                        (e.currentTarget as HTMLButtonElement).style.color = "#fff";
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.backgroundColor = "transparent";
-                        (e.currentTarget as HTMLButtonElement).style.color = "#35509a";
-                      }}
-                    >
-                      Chi tiết
+                    <button className="w-full brutal-btn bg-white text-foreground py-2.5 text-sm hover:bg-primary hover:text-white cursor-pointer">
+                      View Details
                     </button>
                   </Link>
                 </div>
@@ -282,30 +250,31 @@ export default function TestsPage() {
             ))}
           </div>
         ) : (
-          <div className="text-center text-gray-400 py-16">
-            Không tìm thấy đề thi nào phù hợp.
+          <div className="text-center text-slate-400 py-16 brutal-card">
+            <p className="text-lg font-semibold text-foreground mb-2">No tests found</p>
+            <p className="text-sm">Try adjusting your filters or search query.</p>
           </div>
         )}
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
-              className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="w-9 h-9 flex items-center justify-center rounded-lg border-2 border-slate-200 text-slate-500 hover:border-primary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
-              <LeftOutlined style={{ fontSize: 11 }} />
+              <ChevronLeft className="w-4 h-4" />
             </button>
 
             {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
               <button
                 key={page}
                 onClick={() => setCurrentPage(page)}
-                className={`w-8 h-8 flex items-center justify-center rounded border text-sm transition-colors ${
+                className={`w-9 h-9 flex items-center justify-center rounded-lg border-2 text-sm font-semibold transition-colors cursor-pointer ${
                   currentPage === page
-                    ? "bg-blue-600 border-blue-600 text-white"
-                    : "border-gray-300 text-gray-700 hover:border-blue-400 hover:text-blue-600"
+                    ? "bg-primary border-primary text-white"
+                    : "border-slate-200 text-slate-600 hover:border-primary hover:text-primary"
                 }`}
               >
                 {page}
@@ -315,9 +284,9 @@ export default function TestsPage() {
             <button
               onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage === totalPages}
-              className="w-8 h-8 flex items-center justify-center rounded border border-gray-300 text-gray-500 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              className="w-9 h-9 flex items-center justify-center rounded-lg border-2 border-slate-200 text-slate-500 hover:border-primary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
             >
-              <RightOutlined style={{ fontSize: 11 }} />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         )}

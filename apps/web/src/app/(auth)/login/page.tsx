@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Input, Button, message } from 'antd';
-import { MailOutlined, LockOutlined } from '@ant-design/icons';
+import { message } from 'antd';
+import { Mail, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
@@ -17,7 +17,7 @@ export default function LoginPage() {
 
   const handleLogin = async () => {
     if (!email || !password) {
-      message.warning('Vui lòng nhập email và mật khẩu');
+      message.warning('Please enter email and password');
       return;
     }
     setLoading(true);
@@ -28,10 +28,10 @@ export default function LoginPage() {
 
       const { data: user } = await api.get('/users/me');
       setUser(user);
-      message.success('Đăng nhập thành công!');
+      message.success('Login successful!');
       router.push('/tests');
     } catch {
-      message.error('Email hoặc mật khẩu không đúng');
+      message.error('Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -39,37 +39,72 @@ export default function LoginPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-center mb-6">Đăng nhập</h1>
+      <h1 className="text-2xl font-extrabold text-center text-foreground mb-2">
+        Welcome Back
+      </h1>
+      <p className="text-sm text-slate-500 text-center mb-8">
+        Sign in to continue your learning journey
+      </p>
+
       <div className="flex flex-col gap-4">
-        <Input
-          size="large"
-          placeholder="Email"
-          prefix={<MailOutlined className="text-gray-400" />}
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onPressEnter={handleLogin}
-        />
-        <Input.Password
-          size="large"
-          placeholder="Mật khẩu"
-          prefix={<LockOutlined className="text-gray-400" />}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          onPressEnter={handleLogin}
-        />
-        <Button
-          type="primary"
-          size="large"
-          block
-          loading={loading}
+        {/* Email */}
+        <div>
+          <label htmlFor="email" className="block text-sm font-medium text-foreground mb-1.5">
+            Email
+          </label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              id="email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-xl text-sm text-foreground placeholder:text-slate-400 focus:border-primary focus:ring-0 outline-none bg-white transition-colors"
+            />
+          </div>
+        </div>
+
+        {/* Password */}
+        <div>
+          <label htmlFor="password" className="block text-sm font-medium text-foreground mb-1.5">
+            Password
+          </label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              id="password"
+              type="password"
+              placeholder="Enter your password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
+              className="w-full pl-10 pr-4 py-3 border-2 border-slate-200 rounded-xl text-sm text-foreground placeholder:text-slate-400 focus:border-primary focus:ring-0 outline-none bg-white transition-colors"
+            />
+          </div>
+        </div>
+
+        {/* Submit */}
+        <button
           onClick={handleLogin}
+          disabled={loading}
+          className="brutal-btn bg-primary text-white py-3 text-sm flex items-center justify-center gap-2 mt-2 disabled:opacity-60"
         >
-          Đăng nhập
-        </Button>
-        <p className="text-center text-sm text-gray-500">
-          Chưa có tài khoản?{' '}
-          <Link href="/register" className="text-blue-600 hover:underline">
-            Đăng ký ngay
+          {loading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <>
+              Sign In
+              <ArrowRight className="w-4 h-4" />
+            </>
+          )}
+        </button>
+
+        <p className="text-center text-sm text-slate-500 mt-2">
+          Don&apos;t have an account?{' '}
+          <Link href="/register" className="text-primary font-semibold hover:underline cursor-pointer">
+            Sign up
           </Link>
         </p>
       </div>

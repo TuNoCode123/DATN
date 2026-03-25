@@ -19,27 +19,6 @@ enum ExamType {
   IELTS_GENERAL
   TOEIC_LR
   TOEIC_SW
-  HSK_1
-  HSK_2
-  HSK_3
-  HSK_4
-  HSK_5
-  HSK_6
-  TOPIK_I
-  TOPIK_II
-  JLPT_N1
-  JLPT_N2
-  JLPT_N3
-  JLPT_N4
-  JLPT_N5
-  DIGITAL_SAT
-  ACT
-  THPTQG
-}
-
-enum TestFormat {
-  FULL
-  CONDENSED
 }
 
 enum SectionSkill {
@@ -50,11 +29,31 @@ enum SectionSkill {
 }
 
 enum QuestionType {
+  // Shared
   MULTIPLE_CHOICE
-  NOTE_FORM_COMPLETION
-  TABLE_COMPLETION
+
+  // IELTS-specific
+  TRUE_FALSE_NOT_GIVEN
+  YES_NO_NOT_GIVEN
+  MATCHING_HEADINGS
+  MATCHING_INFORMATION
+  MATCHING_FEATURES
+  MATCHING_SENTENCE_ENDINGS
+  SENTENCE_COMPLETION
   SUMMARY_COMPLETION
-  MATCHING
+  NOTE_COMPLETION
+  SHORT_ANSWER
+  LABELLING
+
+  // TOEIC SW-specific
+  READ_ALOUD
+  DESCRIBE_PICTURE
+  RESPOND_TO_QUESTIONS
+  PROPOSE_SOLUTION
+  EXPRESS_OPINION
+  WRITE_SENTENCES
+  RESPOND_WRITTEN_REQUEST
+  WRITE_OPINION_ESSAY
 }
 
 enum AttemptMode {
@@ -77,6 +76,7 @@ model User {
   displayName  String?
   avatarUrl    String?
   role         UserRole @default(STUDENT)
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -88,26 +88,25 @@ model User {
 }
 
 model Test {
-  id            String     @id @default(cuid())
+  id            String   @id @default(cuid())
   title         String
   examType      ExamType
-  format        TestFormat
   durationMins  Int
-  isPublished   Boolean    @default(false)
+  isPublished   Boolean  @default(false)
   description   String?
-  attemptCount  Int        @default(0)
-  commentCount  Int        @default(0)
-  sectionCount  Int        @default(0)
-  questionCount Int        @default(0)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  attemptCount  Int      @default(0)
+  commentCount  Int      @default(0)
+  sectionCount  Int      @default(0)
+  questionCount Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   sections TestSection[]
   tags     TestTag[]
   attempts UserAttempt[]
   comments Comment[]
 
-  @@index([examType, format, isPublished])
+  @@index([examType, isPublished])
   @@map("tests")
 }
 
@@ -138,11 +137,13 @@ model TestSection {
   title         String
   skill         SectionSkill
   orderIndex    Int
+  instructions  String?
   audioUrl      String?
   durationMins  Int?
   questionCount Int          @default(0)
 
   test            Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  passages        Passage[]
   questionGroups  QuestionGroup[]
   attemptSections AttemptSection[]
 
@@ -150,15 +151,33 @@ model TestSection {
   @@map("test_sections")
 }
 
+model Passage {
+  id          String @id @default(cuid())
+  sectionId   String
+  title       String?
+  contentHtml String
+  orderIndex  Int
+
+  section        TestSection     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  questionGroups QuestionGroup[]
+
+  @@unique([sectionId, orderIndex])
+  @@map("passages")
+}
+
 model QuestionGroup {
   id              String       @id @default(cuid())
   sectionId       String
+  passageId       String?
   questionType    QuestionType
   orderIndex      Int
-  contentHtml     String?
+  instructions    String?
   matchingOptions Json?
+  audioUrl        String?
+  imageUrl        String?
 
   section   TestSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  passage   Passage?    @relation(fields: [passageId], references: [id], onDelete: SetNull)
   questions Question[]
 
   @@unique([sectionId, orderIndex])
@@ -171,9 +190,11 @@ model Question {
   questionNumber Int
   orderIndex     Int
   stem           String?
-  mcqOptions     Json?
+  options        Json?
   correctAnswer  String
   explanation    String?
+  imageUrl       String?
+  audioUrl       String?
 
   group   QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   answers UserAnswer[]
@@ -194,6 +215,9 @@ model UserAttempt {
   totalQuestions Int?
   correctCount   Int?
   scorePercent   Float?
+  bandScore      Float?
+  scaledScore    Int?
+  sectionScores  Json?
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   test     Test             @relation(fields: [testId], references: [id], onDelete: Cascade)

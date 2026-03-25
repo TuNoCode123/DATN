@@ -1,10 +1,29 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { Spin } from "antd";
+import {
+  CheckCircle2,
+  XCircle,
+  MinusCircle,
+  ArrowLeft,
+  Clock,
+  Target,
+  Check,
+  X as XIcon,
+  Minus,
+  ChevronDown,
+  ChevronUp,
+  Volume2,
+} from "lucide-react";
 import { api } from "@/lib/api";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // ─── Types ───────────────────────────────────────────────
 interface QuestionFromAPI {
@@ -14,19 +33,32 @@ interface QuestionFromAPI {
   stem: string | null;
   correctAnswer: string;
   explanation: string | null;
-  mcqOptions: any;
+  options: any;
+  imageUrl: string | null;
+  audioUrl: string | null;
 }
 interface QuestionGroupFromAPI {
   id: string;
   questionType: string;
   orderIndex: number;
+  instructions: string | null;
+  audioUrl: string | null;
+  imageUrl: string | null;
+  passage: PassageFromAPI | null;
   questions: QuestionFromAPI[];
+}
+interface PassageFromAPI {
+  id: string;
+  title: string | null;
+  contentHtml: string;
+  orderIndex: number;
 }
 interface SectionFromAPI {
   id: string;
   title: string;
   skill: string;
   orderIndex: number;
+  passages: PassageFromAPI[];
   questionGroups: QuestionGroupFromAPI[];
 }
 interface AnswerFromAPI {
@@ -78,17 +110,216 @@ function QuestionNumberBadge({
   num: number;
   status: "correct" | "wrong" | "skipped";
 }) {
-  const base =
-    "inline-flex items-center justify-center rounded-full font-semibold text-xs shrink-0";
-  const style: Record<string, string> = {
-    correct: "border-2 border-green-500 text-green-600 bg-green-50",
-    wrong: "border-2 border-red-400 text-red-500 bg-red-50",
-    skipped: "border-2 border-gray-300 text-gray-500 bg-white",
+  const styles: Record<string, string> = {
+    correct: "border-2 border-emerald-400 text-emerald-600 bg-emerald-50",
+    wrong: "border-2 border-red-300 text-red-500 bg-red-50",
+    skipped: "border-2 border-slate-200 text-slate-400 bg-white",
   };
   return (
-    <span className={`${base} ${style[status]}`} style={{ width: 24, height: 24 }}>
+    <span
+      className={`inline-flex items-center justify-center rounded-lg font-bold text-xs shrink-0 ${styles[status]}`}
+      style={{ width: 26, height: 26 }}
+    >
       {num}
     </span>
+  );
+}
+
+// ─── Question Detail Modal ──────────────────────────────
+interface QuestionDetailProps {
+  open: boolean;
+  onClose: () => void;
+  question: QuestionFromAPI;
+  group: QuestionGroupFromAPI;
+  section: SectionFromAPI;
+  testTitle: string;
+  userAnswer: string | null;
+  status: "correct" | "wrong" | "skipped";
+}
+
+function QuestionDetailModal({
+  open,
+  onClose,
+  question,
+  group,
+  section,
+  testTitle,
+  userAnswer,
+  status,
+}: QuestionDetailProps) {
+  const [showExplanation, setShowExplanation] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
+
+  // Resolve audio/image: question-level first, then group-level
+  const audioUrl = question.audioUrl || group.audioUrl;
+  const imageUrl = question.imageUrl || group.imageUrl;
+  const passage = group.passage;
+
+  // Parse options (could be array of strings or array of {label, text})
+  const options: { label: string; text: string }[] = (() => {
+    if (!question.options) return [];
+    const opts = question.options;
+    if (Array.isArray(opts)) {
+      return opts.map((o: any, i: number) => {
+        if (typeof o === "string") {
+          return { label: String.fromCharCode(65 + i), text: o };
+        }
+        return { label: o.label || String.fromCharCode(65 + i), text: o.text || String(o) };
+      });
+    }
+    return [];
+  })();
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="text-lg font-bold">
+            Chi tiết câu #{question.questionNumber}
+          </DialogTitle>
+          <p className="text-sm text-primary font-medium">{testTitle}</p>
+          <span className="inline-block w-fit text-xs bg-slate-100 border border-slate-200 rounded px-2 py-0.5 text-slate-600 font-medium">
+            #{section.title}
+          </span>
+        </DialogHeader>
+
+        {/* Audio Player */}
+        {audioUrl && (
+          <div className="flex items-center gap-2">
+            <Volume2 className="w-4 h-4 text-slate-500 shrink-0" />
+            <audio controls className="w-full h-10" preload="metadata">
+              <source src={audioUrl} />
+            </audio>
+          </div>
+        )}
+
+        {/* Passage (prioritized) or Image */}
+        {passage ? (
+          <div className="text-sm text-slate-700 leading-relaxed max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-4">
+            {passage.title && (
+              <p className="font-semibold text-slate-900 mb-2">{passage.title}</p>
+            )}
+            <div className="rich-content" dangerouslySetInnerHTML={{ __html: passage.contentHtml }} />
+          </div>
+        ) : imageUrl ? (
+          <div className="rounded-lg overflow-hidden border border-slate-200">
+            <img
+              src={imageUrl}
+              alt={`Question ${question.questionNumber}`}
+              className="w-full object-contain max-h-80"
+            />
+          </div>
+        ) : null}
+
+        {/* Question number + stem + options */}
+        <div>
+          <div className="flex items-start gap-3">
+            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white font-bold text-xs shrink-0 mt-0.5">
+              {question.questionNumber}
+            </span>
+            {question.stem && (
+              <div
+                className="text-sm text-slate-700 leading-relaxed rich-content"
+                dangerouslySetInnerHTML={{ __html: question.stem }}
+              />
+            )}
+          </div>
+
+        {/* Options */}
+        {options.length > 0 && (
+          <div className="space-y-0.5 pl-10 mt-1">
+            {options.map((opt) => {
+              const isUserChoice = userAnswer?.toUpperCase() === opt.label.toUpperCase();
+              const isCorrectOption = question.correctAnswer.toUpperCase() === opt.label.toUpperCase();
+
+              return (
+                <label
+                  key={opt.label}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    isCorrectOption
+                      ? "bg-emerald-50 border border-emerald-300"
+                      : isUserChoice
+                        ? "bg-red-50 border border-red-300"
+                        : "hover:bg-slate-50"
+                  }`}
+                >
+                  <span
+                    className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 text-xs font-bold shrink-0 ${
+                      isCorrectOption
+                        ? "border-emerald-500 bg-emerald-500 text-white"
+                        : isUserChoice
+                          ? "border-red-400 bg-red-400 text-white"
+                          : "border-slate-300 text-slate-500"
+                    }`}
+                  >
+                    {isUserChoice || isCorrectOption ? (
+                      isCorrectOption ? (
+                        <Check className="w-3 h-3" />
+                      ) : (
+                        <XIcon className="w-3 h-3" />
+                      )
+                    ) : null}
+                  </span>
+                  <span className={`${isCorrectOption ? "font-semibold text-emerald-700" : isUserChoice ? "text-red-600 line-through" : "text-slate-700"}`}>
+                    {opt.label}. {opt.text}
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        )}
+        </div>
+
+        {/* Correct answer display */}
+        <div className="text-sm pl-10">
+          <span className="text-slate-500">Đáp án đúng:</span>
+          <span className="font-bold text-primary ml-1">{question.correctAnswer}</span>
+          {userAnswer && status !== "correct" && (
+            <>
+              <span className="text-slate-400 mx-2">|</span>
+              <span className="text-slate-500">Bạn chọn: </span>
+              <span className="font-bold text-red-500">{userAnswer}</span>
+            </>
+          )}
+          {status === "correct" && (
+            <>
+              <span className="text-slate-400 mx-2">|</span>
+              <CheckCircle2 className="w-4 h-4 text-emerald-500 inline" />
+              <span className="text-emerald-600 ml-1 font-medium">Chính xác!</span>
+            </>
+          )}
+          {status === "skipped" && (
+            <>
+              <span className="text-slate-400 mx-2">|</span>
+              <span className="text-slate-400 italic">Chưa trả lời</span>
+            </>
+          )}
+        </div>
+
+        {/* Explanation toggle */}
+        {question.explanation && (
+          <div>
+            <button
+              onClick={() => setShowExplanation(!showExplanation)}
+              className="flex items-center gap-1 text-sm text-primary font-medium hover:underline cursor-pointer"
+            >
+              Giải thích chi tiết đáp án
+              {showExplanation ? (
+                <ChevronUp className="w-4 h-4" />
+              ) : (
+                <ChevronDown className="w-4 h-4" />
+              )}
+            </button>
+            {showExplanation && (
+              <div
+                className="mt-2 text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-3 border border-slate-200 rich-content"
+                dangerouslySetInnerHTML={{ __html: question.explanation }}
+              />
+            )}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -99,6 +330,12 @@ function ResultContent() {
   const searchParams = useSearchParams();
   const testId = params.id as string;
   const attemptId = searchParams.get("attemptId");
+
+  const [selectedQuestion, setSelectedQuestion] = useState<{
+    question: QuestionFromAPI;
+    group: QuestionGroupFromAPI;
+    section: SectionFromAPI;
+  } | null>(null);
 
   const { data: attempt, isLoading } = useQuery({
     queryKey: ["result", attemptId],
@@ -113,12 +350,11 @@ function ResultContent() {
   if (isLoading || !attempt) {
     return (
       <div className="flex justify-center py-16">
-        <Spin size="large" />
+        <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  // Build lookup maps
   const answerMap: Record<string, AnswerFromAPI> = {};
   attempt.answers.forEach((a) => {
     answerMap[a.questionId] = a;
@@ -128,11 +364,6 @@ function ResultContent() {
     .map((as) => as.section)
     .sort((a, b) => a.orderIndex - b.orderIndex);
 
-  const allQuestions = sections.flatMap((s) =>
-    s.questionGroups.flatMap((g) => g.questions),
-  );
-
-  // Stats
   const total = attempt.totalQuestions;
   const correct = attempt.correctCount;
   const answered = attempt.answers.filter((a) => a.answerText?.trim()).length;
@@ -148,7 +379,6 @@ function ResultContent() {
   const accuracyPct =
     answered > 0 ? ((correct / answered) * 100).toFixed(1) + "%" : "0.0%";
 
-  // Group analysis data
   interface AnalysisRow {
     sectionTitle: string;
     type: string;
@@ -172,109 +402,90 @@ function ResultContent() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto py-6 px-4">
+    <div className="max-w-5xl mx-auto">
       {/* Title */}
-      <div className="flex items-center gap-3 mb-3 flex-wrap">
-        <h1 className="text-xl font-bold text-gray-900">
-          Kết quả luyện tập: {attempt.test.title}
-        </h1>
-      </div>
+      <h1 className="text-2xl font-extrabold text-foreground mb-2">
+        Results: {attempt.test.title}
+      </h1>
 
-      {/* Action buttons */}
-      <div className="flex gap-2 mb-5">
-        <button
-          onClick={() => router.push(`/tests/${testId}`)}
-          className="px-4 py-1.5 rounded font-medium text-gray-700 border border-gray-400 bg-white hover:bg-gray-50 text-sm"
-        >
-          Quay về trang đề thi
-        </button>
-      </div>
+      {/* Back button */}
+      <button
+        onClick={() => router.push(`/tests/${testId}`)}
+        className="brutal-btn bg-white text-foreground px-5 py-2 text-sm flex items-center gap-2 mb-6 cursor-pointer"
+      >
+        <ArrowLeft className="w-4 h-4" />
+        Back to Test
+      </button>
 
       {/* Summary cards */}
-      <div className="flex gap-3 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {/* Score info */}
-        <div className="rounded border border-gray-200 bg-white px-5 py-4 flex flex-col gap-3" style={{ minWidth: 210 }}>
-          <div className="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-            <span className="text-gray-600 text-sm">Kết quả làm bài</span>
-            <span className="font-bold text-gray-900 ml-auto">
+        <div className="brutal-card p-5 flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-500 flex items-center gap-1.5">
+              <Check className="w-4 h-4" />
+              Result
+            </span>
+            <span className="font-extrabold text-foreground text-lg">
               {correct}/{total}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            <span className="text-gray-600 text-sm leading-tight">
-              Độ chính xác
-              <br />
-              <span className="text-xs text-gray-400">(#đúng/#tổng)</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-500 flex items-center gap-1.5">
+              <Target className="w-4 h-4" />
+              Accuracy
             </span>
-            <span className="font-bold text-gray-900 ml-auto">{accuracyPct}</span>
+            <span className="font-extrabold text-foreground text-lg">{accuracyPct}</span>
           </div>
-          <div className="flex items-center gap-2">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#555" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            <span className="text-gray-600 text-sm">Thời gian hoàn thành</span>
-            <span className="font-bold text-gray-900 ml-auto">{formatTime(timeSpent)}</span>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-slate-500 flex items-center gap-1.5">
+              <Clock className="w-4 h-4" />
+              Time
+            </span>
+            <span className="font-extrabold text-foreground text-lg">{formatTime(timeSpent)}</span>
           </div>
         </div>
 
         {/* Correct */}
-        <div className="flex-1 rounded border border-gray-200 bg-white flex flex-col items-center justify-center py-5 gap-1">
-          <div className="w-10 h-10 rounded-full border-2 border-green-500 flex items-center justify-center mb-1">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
+        <div className="brutal-card p-5 flex flex-col items-center justify-center text-center">
+          <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mb-2 border-2 border-emerald-300">
+            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
           </div>
-          <span className="text-green-600 font-medium text-sm">Trả lời đúng</span>
-          <span className="text-3xl font-bold text-gray-900">{correct}</span>
-          <span className="text-gray-400 text-xs">câu hỏi</span>
+          <span className="text-emerald-600 font-semibold text-sm">Correct</span>
+          <span className="text-3xl font-extrabold text-foreground">{correct}</span>
         </div>
 
         {/* Wrong */}
-        <div className="flex-1 rounded border border-gray-200 bg-white flex flex-col items-center justify-center py-5 gap-1">
-          <div className="w-10 h-10 rounded-full border-2 border-red-500 flex items-center justify-center mb-1">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ef4444" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+        <div className="brutal-card p-5 flex flex-col items-center justify-center text-center">
+          <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mb-2 border-2 border-red-300">
+            <XCircle className="w-6 h-6 text-red-500" />
           </div>
-          <span className="text-red-500 font-medium text-sm">Trả lời sai</span>
-          <span className="text-3xl font-bold text-gray-900">{wrong}</span>
-          <span className="text-gray-400 text-xs">câu hỏi</span>
+          <span className="text-red-500 font-semibold text-sm">Wrong</span>
+          <span className="text-3xl font-extrabold text-foreground">{wrong}</span>
         </div>
 
         {/* Skipped */}
-        <div className="flex-1 rounded border border-gray-200 bg-white flex flex-col items-center justify-center py-5 gap-1">
-          <div className="w-10 h-10 rounded-full border-2 border-gray-400 flex items-center justify-center mb-1">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2.5" strokeLinecap="round">
-              <line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
+        <div className="brutal-card p-5 flex flex-col items-center justify-center text-center">
+          <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center mb-2 border-2 border-slate-300">
+            <MinusCircle className="w-6 h-6 text-slate-400" />
           </div>
-          <span className="text-gray-500 font-medium text-sm">Bỏ qua</span>
-          <span className="text-3xl font-bold text-gray-900">{skipped}</span>
-          <span className="text-gray-400 text-xs">câu hỏi</span>
+          <span className="text-slate-500 font-semibold text-sm">Skipped</span>
+          <span className="text-3xl font-extrabold text-foreground">{skipped}</span>
         </div>
       </div>
 
       {/* Analysis table */}
-      <h2 className="text-lg font-bold text-gray-900 mb-3">Phân tích chi tiết</h2>
-      <div className="border border-gray-200 rounded overflow-hidden mb-8">
+      <h2 className="text-lg font-extrabold text-foreground mb-3">Detailed Analysis</h2>
+      <div className="brutal-card overflow-hidden mb-8">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-white border-b border-gray-200">
-              <th className="text-left px-4 py-3 font-medium text-gray-700 w-48">Phân loại câu hỏi</th>
-              <th className="text-center px-3 py-3 font-medium text-gray-700 w-24">Số câu đúng</th>
-              <th className="text-center px-3 py-3 font-medium text-gray-700 w-20">Số câu sai</th>
-              <th className="text-center px-3 py-3 font-medium text-gray-700 w-24">Số câu bỏ qua</th>
-              <th className="text-center px-3 py-3 font-medium text-gray-700 w-28">Độ chính xác</th>
-              <th className="text-left px-3 py-3 font-medium text-gray-700">Danh sách câu hỏi</th>
+            <tr className="bg-slate-50 border-b-2 border-slate-200">
+              <th className="text-left px-4 py-3 font-bold text-foreground w-48">Question Type</th>
+              <th className="text-center px-3 py-3 font-bold text-foreground w-24">Correct</th>
+              <th className="text-center px-3 py-3 font-bold text-foreground w-20">Wrong</th>
+              <th className="text-center px-3 py-3 font-bold text-foreground w-24">Skipped</th>
+              <th className="text-center px-3 py-3 font-bold text-foreground w-28">Accuracy</th>
+              <th className="text-left px-3 py-3 font-bold text-foreground">Questions</th>
             </tr>
           </thead>
           <tbody>
@@ -284,15 +495,15 @@ function ResultContent() {
                 stats[getStatus(q)]++;
               });
               const rowAnswered = stats.correct + stats.wrong;
-              const acc = rowAnswered > 0 ? ((stats.correct / rowAnswered) * 100).toFixed(2) + "%" : "0.00%";
+              const acc = rowAnswered > 0 ? ((stats.correct / rowAnswered) * 100).toFixed(1) + "%" : "0.0%";
 
               return (
-                <tr key={idx} className="border-b border-gray-100">
-                  <td className="px-4 py-3 text-gray-800 text-sm">{row.type}</td>
-                  <td className="text-center px-3 py-3 text-gray-700">{stats.correct}</td>
-                  <td className="text-center px-3 py-3 text-gray-700">{stats.wrong}</td>
-                  <td className="text-center px-3 py-3 text-gray-700">{stats.skipped}</td>
-                  <td className="text-center px-3 py-3 text-gray-700">{acc}</td>
+                <tr key={idx} className="border-b border-slate-100">
+                  <td className="px-4 py-3 text-foreground text-sm font-medium">{row.type}</td>
+                  <td className="text-center px-3 py-3 text-emerald-600 font-semibold">{stats.correct}</td>
+                  <td className="text-center px-3 py-3 text-red-500 font-semibold">{stats.wrong}</td>
+                  <td className="text-center px-3 py-3 text-slate-400 font-semibold">{stats.skipped}</td>
+                  <td className="text-center px-3 py-3 text-foreground font-semibold">{acc}</td>
                   <td className="px-3 py-3">
                     <div className="flex flex-wrap gap-1">
                       {row.questions.map((q) => (
@@ -304,12 +515,12 @@ function ResultContent() {
               );
             })}
             {/* Total row */}
-            <tr className="bg-gray-50 font-medium">
-              <td className="px-4 py-3 text-gray-800">Total</td>
-              <td className="text-center px-3 py-3 text-gray-700">{correct}</td>
-              <td className="text-center px-3 py-3 text-gray-700">{wrong}</td>
-              <td className="text-center px-3 py-3 text-gray-700">{skipped}</td>
-              <td className="text-center px-3 py-3 text-gray-700">{accuracyPct}</td>
+            <tr className="bg-slate-50 font-bold">
+              <td className="px-4 py-3 text-foreground">Total</td>
+              <td className="text-center px-3 py-3 text-emerald-600">{correct}</td>
+              <td className="text-center px-3 py-3 text-red-500">{wrong}</td>
+              <td className="text-center px-3 py-3 text-slate-400">{skipped}</td>
+              <td className="text-center px-3 py-3 text-foreground">{accuracyPct}</td>
               <td></td>
             </tr>
           </tbody>
@@ -317,72 +528,83 @@ function ResultContent() {
       </div>
 
       {/* Answer Review */}
-      <div className="mb-4">
-        <div className="flex items-center gap-3 flex-wrap mb-4">
-          <span className="font-bold text-gray-900" style={{ fontSize: 15 }}>
-            Đáp án
-          </span>
-        </div>
+      <h2 className="text-lg font-extrabold text-foreground mb-4">Answer Key</h2>
 
-        {sections.map((section) => (
-          <div key={section.id} className="mb-6">
-            <h4 className="font-bold text-gray-900 mb-3" style={{ fontSize: 15 }}>
-              {section.title}
-            </h4>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-              {section.questionGroups
-                .sort((a, b) => a.orderIndex - b.orderIndex)
-                .flatMap((g) => g.questions.sort((a, b) => a.orderIndex - b.orderIndex))
-                .map((q) => {
-                  const ans = answerMap[q.id];
-                  const status = getStatus(q);
-                  const userAnswer = ans?.answerText || "";
+      {sections.map((section) => (
+        <div key={section.id} className="mb-6">
+          <h4 className="font-bold text-foreground mb-3 text-sm">{section.title}</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+            {section.questionGroups
+              .sort((a, b) => a.orderIndex - b.orderIndex)
+              .flatMap((g) =>
+                g.questions
+                  .sort((a, b) => a.orderIndex - b.orderIndex)
+                  .map((q) => ({ question: q, group: g })),
+              )
+              .map(({ question: q, group: g }) => {
+                const ans = answerMap[q.id];
+                const status = getStatus(q);
+                const userAnswer = ans?.answerText || "";
 
-                  return (
-                    <div key={q.id} className="flex items-start gap-2 text-sm">
-                      <span
-                        className="inline-flex items-center justify-center rounded-full bg-blue-600 text-white font-bold shrink-0"
-                        style={{ width: 22, height: 22, fontSize: 11 }}
-                      >
-                        {q.questionNumber}
+                return (
+                  <div key={q.id} className="flex items-center gap-2 text-sm">
+                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-primary text-white font-bold text-xs shrink-0">
+                      {q.questionNumber}
+                    </span>
+                    <span className="flex items-center gap-1.5 flex-wrap min-w-0">
+                      <span className="font-bold text-foreground">
+                        {q.correctAnswer}:
                       </span>
-                      <span className="flex items-center gap-1 flex-wrap min-w-0">
-                        <span className="font-medium text-gray-900 mr-0.5">
-                          {q.correctAnswer}:
-                        </span>
-                        {status === "skipped" ? (
-                          <span className="text-gray-500">chưa trả lời</span>
-                        ) : status === "correct" ? (
-                          <>
-                            <span className="text-green-700">{userAnswer}</span>
-                            <svg className="text-green-500 shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
-                            </svg>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-red-500 line-through">{userAnswer}</span>
-                            <svg className="text-red-500 shrink-0" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                              <line x1="18" y1="6" x2="6" y2="18" />
-                              <line x1="6" y1="6" x2="18" y2="18" />
-                            </svg>
-                          </>
-                        )}
-                      </span>
-                    </div>
-                  );
-                })}
-            </div>
+                      {status === "skipped" ? (
+                        <span className="text-slate-400 italic">chưa trả lời</span>
+                      ) : status === "correct" ? (
+                        <>
+                          <span className="text-emerald-600 font-medium">{userAnswer}</span>
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-red-500 line-through">{userAnswer}</span>
+                          <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                        </>
+                      )}
+                    </span>
+                    {status === "skipped" ? (
+                      <Minus className="w-4 h-4 text-slate-300 shrink-0" />
+                    ) : null}
+                    <button
+                      onClick={() => setSelectedQuestion({ question: q, group: g, section })}
+                      className="text-primary hover:underline text-xs font-medium ml-auto cursor-pointer whitespace-nowrap"
+                    >
+                      [Chi tiết]
+                    </button>
+                  </div>
+                );
+              })}
           </div>
-        ))}
-      </div>
+        </div>
+      ))}
+
+      {/* Question Detail Modal */}
+      {selectedQuestion && (
+        <QuestionDetailModal
+          open={!!selectedQuestion}
+          onClose={() => setSelectedQuestion(null)}
+          question={selectedQuestion.question}
+          group={selectedQuestion.group}
+          section={selectedQuestion.section}
+          testTitle={attempt.test.title}
+          userAnswer={answerMap[selectedQuestion.question.id]?.answerText || null}
+          status={getStatus(selectedQuestion.question)}
+        />
+      )}
     </div>
   );
 }
 
 export default function ResultPage() {
   return (
-    <Suspense fallback={<div className="p-8 text-center">Đang tải...</div>}>
+    <Suspense fallback={<div className="p-8 text-center text-slate-500">Loading...</div>}>
       <ResultContent />
     </Suspense>
   );

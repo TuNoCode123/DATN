@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ExamType, TestFormat, Prisma } from '@prisma/client';
+import { ExamType, Prisma } from '@prisma/client';
 
 @Injectable()
 export class TestsService {
@@ -8,7 +8,6 @@ export class TestsService {
 
   async findAll(filters: {
     examType?: ExamType;
-    format?: TestFormat;
     tagSlugs?: string[];
     search?: string;
     page?: number;
@@ -23,7 +22,6 @@ export class TestsService {
     };
 
     if (filters.examType) where.examType = filters.examType;
-    if (filters.format) where.format = filters.format;
     if (filters.search) {
       where.title = { contains: filters.search, mode: 'insensitive' };
     }
@@ -56,6 +54,7 @@ export class TestsService {
         sections: {
           orderBy: { orderIndex: 'asc' },
           include: {
+            passages: { orderBy: { orderIndex: 'asc' } },
             questionGroups: {
               orderBy: { orderIndex: 'asc' },
               include: {
@@ -67,7 +66,7 @@ export class TestsService {
                     questionNumber: true,
                     orderIndex: true,
                     stem: true,
-                    mcqOptions: true,
+                    options: true,
                     explanation: false,
                     correctAnswer: false,
                   },
@@ -90,6 +89,7 @@ export class TestsService {
         sections: {
           orderBy: { orderIndex: 'asc' },
           include: {
+            passages: { orderBy: { orderIndex: 'asc' } },
             questionGroups: {
               orderBy: { orderIndex: 'asc' },
               include: {
