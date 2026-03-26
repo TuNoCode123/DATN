@@ -64,7 +64,6 @@ enum AttemptMode {
 enum AttemptStatus {
   IN_PROGRESS
   SUBMITTED
-  ABANDONED
 }
 
 // ─── Models ──────────────────────────────────────────────
@@ -217,7 +216,8 @@ model UserAttempt {
   scorePercent   Float?
   bandScore      Float?
   scaledScore    Int?
-  sectionScores  Json?
+  sectionScores    Json?
+  lastHeartbeatAt  DateTime?
 
   user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   test     Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
@@ -255,14 +255,17 @@ model UserAnswer {
 }
 
 model Comment {
-  id        String   @id @default(cuid())
-  testId    String
-  userId    String
-  parentId  String?
-  body      String
-  likeCount Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String    @id @default(cuid())
+  testId     String
+  userId     String
+  parentId   String?
+  body       String
+  likeCount  Int       @default(0)
+  replyCount Int       @default(0)
+  depth      Int       @default(0)
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   test    Test          @relation(fields: [testId], references: [id], onDelete: Cascade)
   user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)

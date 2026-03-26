@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -12,22 +13,29 @@ import {
 } from '@nestjs/common';
 import { CommentsService } from './comments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { CreateCommentDto } from './create-comment.dto';
+import { UpdateCommentDto } from './update-comment.dto';
+import { QueryCommentsDto } from './query-comments.dto';
 
 @Controller()
 export class CommentsController {
   constructor(private commentsService: CommentsService) {}
 
   @Get('tests/:testId/comments')
+  @UseGuards(OptionalJwtAuthGuard)
   findByTest(
     @Param('testId') testId: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query() query: QueryCommentsDto,
+    @CurrentUser('id') userId?: string,
   ) {
     return this.commentsService.findByTest(
       testId,
-      page ? parseInt(page, 10) : 1,
-      limit ? parseInt(limit, 10) : 20,
+      query.page ? parseInt(query.page, 10) : 1,
+      query.limit ? parseInt(query.limit, 10) : 20,
+      query.sort || 'newest',
+      userId,
     );
   }
 
@@ -36,9 +44,35 @@ export class CommentsController {
   create(
     @CurrentUser('id') userId: string,
     @Param('testId') testId: string,
-    @Body() body: { body: string; parentId?: string },
+    @Body() dto: CreateCommentDto,
   ) {
-    return this.commentsService.create(userId, testId, body.body, body.parentId);
+    return this.commentsService.create(userId, testId, dto.body, dto.parentId);
+  }
+
+  @Get('comments/:id/replies')
+  @UseGuards(OptionalJwtAuthGuard)
+  findReplies(
+    @Param('id') commentId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @CurrentUser('id') userId?: string,
+  ) {
+    return this.commentsService.findReplies(
+      commentId,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 10,
+      userId,
+    );
+  }
+
+  @Patch('comments/:id')
+  @UseGuards(JwtAuthGuard)
+  update(
+    @Param('id') commentId: string,
+    @CurrentUser('id') userId: string,
+    @Body() dto: UpdateCommentDto,
+  ) {
+    return this.commentsService.update(commentId, userId, dto.body);
   }
 
   @Delete('comments/:id')
