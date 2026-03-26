@@ -32,7 +32,7 @@ export type QuestionType =
   | 'RESPOND_WRITTEN_REQUEST'
   | 'WRITE_OPINION_ESSAY';
 
-export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED' | 'ABANDONED';
+export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED';
 
 export type AttemptMode = 'PRACTICE' | 'FULL_TEST';
 

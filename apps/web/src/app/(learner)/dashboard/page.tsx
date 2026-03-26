@@ -7,7 +7,6 @@ import {
   BarChart3,
   Trophy,
   Flame,
-  ChevronRight,
 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -15,7 +14,7 @@ import { useAuthStore } from '@/lib/auth-store';
 
 interface AttemptFromAPI {
   id: string;
-  status: 'IN_PROGRESS' | 'SUBMITTED' | 'ABANDONED';
+  status: 'IN_PROGRESS' | 'SUBMITTED';
   mode: 'FULL_TEST' | 'PRACTICE';
   scorePercent: number | null;
   correctCount: number | null;
@@ -76,7 +75,6 @@ export default function DashboardPage() {
   });
 
   const submitted = (attempts || []).filter((a) => a.status === 'SUBMITTED');
-  const inProgress = (attempts || []).filter((a) => a.status === 'IN_PROGRESS');
 
   const avgScore =
     submitted.length > 0
@@ -135,8 +133,8 @@ export default function DashboardPage() {
             />
             <StatCard
               icon={<Clock className="w-6 h-6 text-amber-500" />}
-              label="In Progress"
-              value={inProgress.length}
+              label="Total Attempts"
+              value={(attempts || []).length}
               bg="bg-amber-50"
               border="border-amber-200"
             />
@@ -184,37 +182,17 @@ export default function DashboardPage() {
               )}
             </div>
 
-            {/* In-progress attempts */}
+            {/* Quick action */}
             <div className="md:col-span-2 brutal-card p-5">
               <h2 className="font-bold text-foreground mb-4 flex items-center gap-2 text-sm">
-                <Clock className="w-5 h-5 text-amber-500" /> In Progress
+                <Clock className="w-5 h-5 text-amber-500" /> Quick Start
               </h2>
-              {inProgress.length === 0 ? (
-                <div className="text-sm text-slate-400 py-4 text-center">
-                  No tests in progress.{' '}
-                  <Link href="/tests" className="text-primary font-semibold hover:underline cursor-pointer">
-                    Start a new one
-                  </Link>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {inProgress.slice(0, 5).map((a) => (
-                    <Link
-                      key={a.id}
-                      href={`/tests/${a.test.id}/attempt?attemptId=${a.id}`}
-                      className="flex items-center justify-between px-4 py-3 rounded-xl border-2 border-amber-200 bg-amber-50 hover:bg-amber-100 transition-colors cursor-pointer"
-                    >
-                      <div>
-                        <p className="text-sm font-semibold text-foreground leading-tight">{a.test.title}</p>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          Started {formatDate(a.startedAt)} &middot; {a.mode === 'FULL_TEST' ? 'Full Test' : 'Practice'}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-amber-500" />
-                    </Link>
-                  ))}
-                </div>
-              )}
+              <div className="text-sm text-slate-400 py-4 text-center">
+                Ready for a new challenge?{' '}
+                <Link href="/tests" className="text-primary font-semibold hover:underline cursor-pointer">
+                  Browse tests
+                </Link>
+              </div>
             </div>
           </div>
 

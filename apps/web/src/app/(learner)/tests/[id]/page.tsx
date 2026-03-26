@@ -12,6 +12,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { CommentSection } from '@/components/comments/comment-section';
 
 interface QuestionFromAPI {
   id: string;
@@ -299,8 +300,8 @@ export default function TestDetailPage() {
 
       {/* Discussion */}
       {mode === 'discussion' && (
-        <div className="brutal-card p-8 text-center">
-          <p className="text-slate-500 text-sm">Discussion section coming soon.</p>
+        <div className="brutal-card p-5">
+          <CommentSection testId={testId} />
         </div>
       )}
     </div>

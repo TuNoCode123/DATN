@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { message } from "antd";
+import { message, Modal } from "antd";
 import { X, Info, ChevronRight, ChevronLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import { LayoutRouter } from "@/components/attempt-layouts/layout-router";
@@ -37,6 +37,15 @@ function AttemptContent() {
   const [submitting, setSubmitting] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedRef = useRef<string>("");
+  const submittedRef = useRef(false);
+  const answersRef = useRef<Record<string, string>>({});
+
+  // Keep answersRef in sync for use in event handlers
+  useEffect(() => {
+    answersRef.current = answers;
+  }, [answers]);
+
+  const resultUrl = `/tests/${testId}/result?attemptId=${attemptId}`;
 
   const { data: attempt, isLoading } = useQuery({
     queryKey: ["attempt", attemptId],
@@ -47,6 +56,13 @@ function AttemptContent() {
     },
     enabled: !!attemptId,
   });
+
+  // If attempt is already submitted (e.g. cron auto-submitted), redirect to result
+  useEffect(() => {
+    if (attempt?.status === "SUBMITTED") {
+      router.replace(resultUrl);
+    }
+  }, [attempt, router, resultUrl]);
 
   useEffect(() => {
     if (attempt?.answers) {
@@ -81,6 +97,7 @@ function AttemptContent() {
     return () => clearInterval(id);
   }, [timeLeft]);
 
+  // Auto-save answers every 5 seconds
   useEffect(() => {
     if (!attemptId) return;
     saveTimerRef.current = setInterval(() => {
@@ -103,6 +120,105 @@ function AttemptContent() {
     };
   }, [attemptId, answers]);
 
+  // Heartbeat every 30 seconds
+  useEffect(() => {
+    if (!attemptId) return;
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await api.post(`/attempts/${attemptId}/heartbeat`);
+        if (data.alreadySubmitted) {
+          submittedRef.current = true;
+          router.replace(resultUrl);
+        }
+      } catch {
+        // Ignore network errors — cron will handle it
+      }
+    }, 30_000);
+    // Send initial heartbeat immediately
+    api.post(`/attempts/${attemptId}/heartbeat`).catch(() => {});
+    return () => clearInterval(interval);
+  }, [attemptId, router, resultUrl]);
+
+  // Auto-submit when timer reaches zero
+  useEffect(() => {
+    if (timeLeft === 0 && !submittedRef.current) {
+      handleSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeLeft]);
+
+  // beforeunload — show native "Leave site?" dialog + best-effort save answers
+  useEffect(() => {
+    if (!attemptId) return;
+    const handler = (event: BeforeUnloadEvent) => {
+      if (submittedRef.current) return;
+      // Show native browser confirmation dialog
+      event.preventDefault();
+      // Best-effort save answers via sendBeacon (runs if user confirms leaving)
+      const currentAnswers = answersRef.current;
+      const answerList = Object.entries(currentAnswers).map(
+        ([questionId, answerText]) => ({ questionId, answerText })
+      );
+      if (answerList.length > 0) {
+        const payload = JSON.stringify({ answers: answerList });
+        navigator.sendBeacon(
+          `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api"}/attempts/${attemptId}/answers/bulk`,
+          new Blob([payload], { type: "application/json" })
+        );
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [attemptId]);
+
+  // visibilitychange — check if cron auto-submitted while tab was hidden
+  useEffect(() => {
+    if (!attemptId) return;
+    const handler = async () => {
+      if (document.visibilityState === "visible" && !submittedRef.current) {
+        try {
+          const { data } = await api.post(
+            `/attempts/${attemptId}/heartbeat`
+          );
+          if (data.alreadySubmitted) {
+            submittedRef.current = true;
+            router.replace(resultUrl);
+          }
+        } catch {
+          // Ignore
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, [attemptId, router, resultUrl]);
+
+  // popstate — intercept browser back/forward button with confirmation dialog
+  useEffect(() => {
+    if (!attemptId) return;
+    // Push a dummy history entry so pressing back triggers popstate instead of leaving
+    window.history.pushState(null, "", window.location.href);
+
+    const handler = () => {
+      if (submittedRef.current) return;
+      // Re-push to prevent immediate navigation
+      window.history.pushState(null, "", window.location.href);
+      Modal.confirm({
+        title: "Submit test?",
+        content:
+          "Leaving will submit your test with your current answers. This cannot be undone.",
+        okText: "Submit & Leave",
+        cancelText: "Stay",
+        okButtonProps: { danger: true },
+        onOk: () => handleSubmit(),
+      });
+    };
+
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attemptId]);
+
   const setAnswer = useCallback(
     (questionId: string, val: string) =>
       setAnswers((prev) => ({ ...prev, [questionId]: val })),
@@ -110,10 +226,11 @@ function AttemptContent() {
   );
 
   const handleSubmit = async () => {
-    if (!attemptId) return;
+    if (!attemptId || submittedRef.current) return;
+    submittedRef.current = true;
     setSubmitting(true);
     try {
-      const answerList = Object.entries(answers).map(
+      const answerList = Object.entries(answersRef.current).map(
         ([questionId, answerText]) => ({ questionId, answerText })
       );
       if (answerList.length > 0) {
@@ -123,24 +240,23 @@ function AttemptContent() {
       }
       await api.post(`/attempts/${attemptId}/submit`);
       message.success("Submitted successfully!");
-      router.push(`/tests/${testId}/result?attemptId=${attemptId}`);
+      router.push(resultUrl);
     } catch (err: any) {
+      // If already submitted (idempotent), still navigate to result
+      if (err.response?.status === 400 || err.response?.data?.alreadySubmitted) {
+        router.push(resultUrl);
+        return;
+      }
+      submittedRef.current = false;
       message.error(err.response?.data?.message || "Submission failed");
     } finally {
       setSubmitting(false);
     }
   };
 
+  // Exit now means submit-then-navigate
   const handleExit = async () => {
-    if (attemptId && Object.keys(answers).length > 0) {
-      const answerList = Object.entries(answers).map(
-        ([questionId, answerText]) => ({ questionId, answerText })
-      );
-      await api
-        .post(`/attempts/${attemptId}/answers/bulk`, { answers: answerList })
-        .catch(() => {});
-    }
-    router.back();
+    await handleSubmit();
   };
 
   const handleQuestionClick = useCallback(
