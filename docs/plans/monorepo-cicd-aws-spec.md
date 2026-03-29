@@ -607,6 +607,781 @@ ElastiCache Redis:
 | Unread message counts | Redis (counter) | Fast increment, sync to PG periodically |
 | API response cache | Redis (TTL) | Optional performance optimization |
 
+### 5.8 Redis Implementation Spec — Chat Module
+
+Redis is used **exclusively for the chat module**: Socket.IO cross-task pub/sub, user presence, chat room state, typing indicators, and unread counts. All other features (attempts, AI tutor, writing, caching) use PostgreSQL + REST as they do today.
+
+#### 5.8.1 Dependencies
+
+```bash
+# Core Redis
+pnpm add --filter api ioredis
+
+# Socket.IO with Redis adapter
+pnpm add --filter api @nestjs/websockets @nestjs/platform-socket.io socket.io
+pnpm add --filter api @socket.io/redis-adapter
+```
+
+#### 5.8.2 Module Structure
+
+```
+apps/api/src/
+├── redis/                           # Redis core module (global)
+│   ├── redis.module.ts              # Global module, provides RedisService
+│   └── redis.service.ts             # ioredis wrapper for key-value ops
+│
+├── chat/                            # Chat module (WebSocket + REST)
+│   ├── chat.module.ts               # Imports Redis, Prisma
+│   ├── chat.gateway.ts              # Socket.IO gateway: rooms, messages, typing
+│   ├── chat.service.ts              # Business logic: save messages, manage rooms
+│   ├── chat.controller.ts           # REST: GET /api/chat/conversations, GET /api/chat/messages
+│   ├── redis-io.adapter.ts          # Socket.IO Redis adapter (pub/sub fanout)
+│   └── dto/
+│       ├── send-message.dto.ts
+│       └── create-conversation.dto.ts
+│
+└── main.ts                          # Bootstrap with RedisIoAdapter
+```
+
+#### 5.8.3 Database Schema (Chat tables — add to Prisma)
+
+```prisma
+// apps/api/prisma/schema.prisma — new models for chat
+
+model Conversation {
+  id        String   @id @default(cuid())
+  title     String?  // null for DMs, set for group chats
+  isGroup   Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  members  ConversationMember[]
+  messages ChatMessage[]
+
+  @@map("conversations")
+}
+
+model ConversationMember {
+  id             String   @id @default(cuid())
+  conversationId String   @map("conversation_id")
+  userId         String   @map("user_id")
+  joinedAt       DateTime @default(now()) @map("joined_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@map("conversation_members")
+}
+
+model ChatMessage {
+  id             String   @id @default(cuid())
+  conversationId String   @map("conversation_id")
+  senderId       String   @map("sender_id")
+  content        String
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("chat_messages")
+}
+```
+
+#### 5.8.4 Redis Key Schema (Chat-only)
+
+All keys are scoped to chat. No other module uses Redis.
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      Redis Key Schema — Chat Only                       │
+│                                                                          │
+│  ── Socket.IO Adapter (automatic, @socket.io/redis-adapter) ──────────  │
+│  socket.io#/#                         Broadcast channel (pub/sub)        │
+│  socket.io#/chat#conv-{id}            Room-specific channel (pub/sub)    │
+│  socket.io-request#...                Inter-node requests (pub/sub)      │
+│                                                                          │
+│  ── User Presence ────────────────────────────────────────────────────  │
+│  chat:presence:{userId}               → JSON { socketId, connectedAt }   │
+│    TTL: 120s (refreshed every 30s by heartbeat)                         │
+│                                                                          │
+│  ── Room Members (live WS connections) ───────────────────────────────  │
+│  chat:room:{conversationId}:online    → SET { userId1, userId2, ... }    │
+│    No TTL — cleaned up on disconnect                                    │
+│  chat:user:{userId}:rooms             → SET { convId1, convId2, ... }    │
+│    No TTL — cleaned up on disconnect                                    │
+│                                                                          │
+│  ── Typing Indicators ────────────────────────────────────────────────  │
+│  chat:typing:{conversationId}:{uId}   → "1"                             │
+│    TTL: 3s (auto-expire, no cleanup needed)                             │
+│                                                                          │
+│  ── Unread Counts ────────────────────────────────────────────────────  │
+│  chat:unread:{userId}:{conversationId} → counter (integer)               │
+│    No TTL — reset to 0 when user opens conversation                     │
+│                                                                          │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+**What goes where:**
+
+| Data | Storage | Why |
+|------|---------|-----|
+| Messages | **PostgreSQL** | Permanent, paginated history |
+| Conversations & members | **PostgreSQL** | Permanent, relational |
+| Socket.IO pub/sub | **Redis** (automatic) | Cross-task fanout for multi-instance |
+| User online/offline | **Redis** (TTL 120s) | Ephemeral, high-frequency heartbeat |
+| Who's in a chat room right now | **Redis** SET | Ephemeral, changes on every connect/disconnect |
+| Typing indicators | **Redis** (TTL 3s) | Ultra-short-lived, no persistence needed |
+| Unread message counts | **Redis** counter | Fast increment; not critical if lost on restart |
+
+#### 5.8.5 Core Implementation
+
+**Redis Module (Global):**
+
+```typescript
+// apps/api/src/redis/redis.module.ts
+import { Global, Module } from '@nestjs/common';
+import { RedisService } from './redis.service';
+
+@Global()
+@Module({
+  providers: [RedisService],
+  exports: [RedisService],
+})
+export class RedisModule {}
+```
+
+```typescript
+// apps/api/src/redis/redis.service.ts
+import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
+import Redis from 'ioredis';
+
+@Injectable()
+export class RedisService implements OnModuleDestroy {
+  private readonly logger = new Logger(RedisService.name);
+  private readonly client: Redis;
+
+  constructor() {
+    this.client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+      maxRetriesPerRequest: 3,
+      retryStrategy(times) {
+        return Math.min(times * 200, 2000);
+      },
+    });
+
+    this.client.on('connect', () => this.logger.log('Redis connected'));
+    this.client.on('error', (err) => this.logger.error('Redis error', err));
+  }
+
+  getClient(): Redis { return this.client; }
+
+  // ── Key-Value ────────────────────────────────────
+  async get(key: string): Promise<string | null> {
+    return this.client.get(key);
+  }
+
+  async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
+    if (ttlSeconds) {
+      await this.client.set(key, value, 'EX', ttlSeconds);
+    } else {
+      await this.client.set(key, value);
+    }
+  }
+
+  async del(key: string): Promise<void> {
+    await this.client.del(key);
+  }
+
+  async exists(key: string): Promise<boolean> {
+    return (await this.client.exists(key)) === 1;
+  }
+
+  async incr(key: string): Promise<number> {
+    return this.client.incr(key);
+  }
+
+  // ── JSON helpers ─────────────────────────────────
+  async getJson<T>(key: string): Promise<T | null> {
+    const val = await this.client.get(key);
+    return val ? JSON.parse(val) : null;
+  }
+
+  async setJson<T>(key: string, value: T, ttlSeconds?: number): Promise<void> {
+    await this.set(key, JSON.stringify(value), ttlSeconds);
+  }
+
+  // ── Set (for room members) ───────────────────────
+  async sadd(key: string, ...members: string[]): Promise<void> {
+    await this.client.sadd(key, ...members);
+  }
+
+  async srem(key: string, ...members: string[]): Promise<void> {
+    await this.client.srem(key, ...members);
+  }
+
+  async smembers(key: string): Promise<string[]> {
+    return this.client.smembers(key);
+  }
+
+  async onModuleDestroy() {
+    await this.client.quit();
+  }
+}
+```
+
+**Redis IO Adapter (Socket.IO pub/sub):**
+
+```typescript
+// apps/api/src/chat/redis-io.adapter.ts
+import { IoAdapter } from '@nestjs/platform-socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { createClient } from 'redis';
+import { ServerOptions } from 'socket.io';
+import { INestApplication, Logger } from '@nestjs/common';
+
+export class RedisIoAdapter extends IoAdapter {
+  private readonly logger = new Logger(RedisIoAdapter.name);
+  private adapterConstructor: ReturnType<typeof createAdapter>;
+
+  constructor(app: INestApplication) {
+    super(app);
+  }
+
+  async connectToRedis(): Promise<void> {
+    const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+
+    const pubClient = createClient({ url: redisUrl });
+    const subClient = pubClient.duplicate();
+
+    pubClient.on('error', (err) => this.logger.error('Redis pub error', err));
+    subClient.on('error', (err) => this.logger.error('Redis sub error', err));
+
+    await Promise.all([pubClient.connect(), subClient.connect()]);
+
+    this.adapterConstructor = createAdapter(pubClient, subClient);
+    this.logger.log('Socket.IO Redis adapter connected');
+  }
+
+  createIOServer(port: number, options?: ServerOptions) {
+    const server = super.createIOServer(port, {
+      ...options,
+      cors: {
+        origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+        credentials: true,
+      },
+      transports: ['websocket', 'polling'],
+      pingInterval: 25000,
+      pingTimeout: 20000,
+    });
+
+    server.adapter(this.adapterConstructor);
+    return server;
+  }
+}
+```
+
+#### 5.8.6 Chat Gateway (WebSocket)
+
+```typescript
+// apps/api/src/chat/chat.gateway.ts
+
+import {
+  WebSocketGateway,
+  WebSocketServer,
+  SubscribeMessage,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  ConnectedSocket,
+  MessageBody,
+} from '@nestjs/websockets';
+import { Server, Socket } from 'socket.io';
+import { Logger } from '@nestjs/common';
+import { ChatService } from './chat.service';
+import { RedisService } from '../redis/redis.service';
+
+const KEY = {
+  presence: (uid: string) => `chat:presence:${uid}`,
+  roomOnline: (convId: string) => `chat:room:${convId}:online`,
+  userRooms: (uid: string) => `chat:user:${uid}:rooms`,
+  typing: (convId: string, uid: string) => `chat:typing:${convId}:${uid}`,
+  unread: (uid: string, convId: string) => `chat:unread:${uid}:${convId}`,
+};
+
+const TTL = {
+  PRESENCE: 120,  // 2 min, refreshed every 30s
+  TYPING: 3,      // 3 seconds
+};
+
+@WebSocketGateway({
+  namespace: '/chat',
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  },
+})
+export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  @WebSocketServer() server: Server;
+  private readonly logger = new Logger(ChatGateway.name);
+
+  constructor(
+    private readonly chatService: ChatService,
+    private readonly redis: RedisService,
+  ) {}
+
+  // ── Connection lifecycle ─────────────────────────
+  async handleConnection(client: Socket) {
+    const userId = client.handshake.auth?.userId;
+    if (!userId) {
+      client.disconnect();
+      return;
+    }
+
+    this.logger.log(`Chat connected: ${userId} (${client.id})`);
+
+    // Mark user as online
+    await this.redis.setJson(KEY.presence(userId), {
+      socketId: client.id,
+      connectedAt: Date.now(),
+    }, TTL.PRESENCE);
+
+    // Auto-join all conversations this user belongs to
+    const conversations = await this.chatService.getUserConversationIds(userId);
+    for (const convId of conversations) {
+      client.join(convId);
+      await this.redis.sadd(KEY.roomOnline(convId), userId);
+      await this.redis.sadd(KEY.userRooms(userId), convId);
+
+      // Notify other members this user came online
+      client.to(convId).emit('user-online', { userId, conversationId: convId });
+    }
+  }
+
+  async handleDisconnect(client: Socket) {
+    const userId = client.handshake.auth?.userId;
+    if (!userId) return;
+
+    this.logger.log(`Chat disconnected: ${userId} (${client.id})`);
+
+    // Mark offline
+    await this.redis.del(KEY.presence(userId));
+
+    // Remove from all room online sets
+    const rooms = await this.redis.smembers(KEY.userRooms(userId));
+    for (const convId of rooms) {
+      await this.redis.srem(KEY.roomOnline(convId), userId);
+      this.server.to(convId).emit('user-offline', { userId, conversationId: convId });
+    }
+    await this.redis.del(KEY.userRooms(userId));
+  }
+
+  // ── Heartbeat ────────────────────────────────────
+  @SubscribeMessage('heartbeat')
+  async handleHeartbeat(@ConnectedSocket() client: Socket) {
+    const userId = client.handshake.auth?.userId;
+    if (!userId) return;
+
+    const data = await this.redis.getJson<any>(KEY.presence(userId));
+    if (data) {
+      data.lastSeen = Date.now();
+      await this.redis.setJson(KEY.presence(userId), data, TTL.PRESENCE);
+    }
+  }
+
+  // ── Send message ─────────────────────────────────
+  @SubscribeMessage('send-message')
+  async handleSendMessage(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: { conversationId: string; content: string },
+  ) {
+    const userId = client.handshake.auth?.userId;
+    if (!userId) return;
+
+    // Persist to PostgreSQL
+    const message = await this.chatService.saveMessage({
+      conversationId: data.conversationId,
+      senderId: userId,
+      content: data.content,
+    });
+
+    // Broadcast to all members in room (Redis adapter fans out across ECS tasks)
+    this.server.to(data.conversationId).emit('new-message', message);
+
+    // Increment unread counts for offline members in this room
+    const onlineMembers = await this.redis.smembers(KEY.roomOnline(data.conversationId));
+    const allMembers = await this.chatService.getConversationMemberIds(data.conversationId);
+
+    for (const memberId of allMembers) {
+      if (memberId !== userId && !onlineMembers.includes(memberId)) {
+        await this.redis.incr(KEY.unread(memberId, data.conversationId));
+      }
+    }
+  }
+
+  // ── Typing indicator ─────────────────────────────
+  @SubscribeMessage('typing')
+  async handleTyping(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() conversationId: string,
+  ) {
+    const userId = client.handshake.auth?.userId;
+    if (!userId) return;
+
+    await this.redis.set(KEY.typing(conversationId, userId), '1', TTL.TYPING);
+    client.to(conversationId).emit('user-typing', { userId, conversationId });
+  }
+
+  @SubscribeMessage('stop-typing')
+  async handleStopTyping(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() conversationId: string,
+  ) {
+    const userId = client.handshake.auth?.userId;
+    if (!userId) return;
+
+    await this.redis.del(KEY.typing(conversationId, userId));
+    client.to(conversationId).emit('user-stop-typing', { userId, conversationId });
+  }
+
+  // ── Mark as read ─────────────────────────────────
+  @SubscribeMessage('mark-read')
+  async handleMarkRead(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() conversationId: string,
+  ) {
+    const userId = client.handshake.auth?.userId;
+    if (!userId) return;
+
+    await this.redis.del(KEY.unread(userId, conversationId));
+  }
+
+  // ── Get online members in a conversation ─────────
+  @SubscribeMessage('get-online')
+  async handleGetOnline(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() conversationId: string,
+  ) {
+    const online = await this.redis.smembers(KEY.roomOnline(conversationId));
+    client.emit('online-members', { conversationId, userIds: online });
+  }
+}
+```
+
+#### 5.8.7 Chat Service (PostgreSQL persistence)
+
+```typescript
+// apps/api/src/chat/chat.service.ts
+
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
+
+@Injectable()
+export class ChatService {
+  constructor(private prisma: PrismaService) {}
+
+  async getUserConversationIds(userId: string): Promise<string[]> {
+    const memberships = await this.prisma.conversationMember.findMany({
+      where: { userId },
+      select: { conversationId: true },
+    });
+    return memberships.map(m => m.conversationId);
+  }
+
+  async getConversationMemberIds(conversationId: string): Promise<string[]> {
+    const members = await this.prisma.conversationMember.findMany({
+      where: { conversationId },
+      select: { userId: true },
+    });
+    return members.map(m => m.userId);
+  }
+
+  async saveMessage(data: {
+    conversationId: string;
+    senderId: string;
+    content: string;
+  }) {
+    const message = await this.prisma.chatMessage.create({
+      data: {
+        conversationId: data.conversationId,
+        senderId: data.senderId,
+        content: data.content,
+      },
+      include: {
+        sender: { select: { id: true, name: true } },
+      },
+    });
+
+    // Update conversation updatedAt
+    await this.prisma.conversation.update({
+      where: { id: data.conversationId },
+      data: { updatedAt: new Date() },
+    });
+
+    return message;
+  }
+
+  async getMessages(conversationId: string, page = 1, limit = 50) {
+    const [data, total] = await Promise.all([
+      this.prisma.chatMessage.findMany({
+        where: { conversationId },
+        include: { sender: { select: { id: true, name: true } } },
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.prisma.chatMessage.count({ where: { conversationId } }),
+    ]);
+    return { data: data.reverse(), total, page, limit };
+  }
+
+  async getConversations(userId: string) {
+    return this.prisma.conversation.findMany({
+      where: { members: { some: { userId } } },
+      include: {
+        members: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+        messages: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          include: { sender: { select: { id: true, name: true } } },
+        },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+  }
+
+  async createConversation(creatorId: string, memberIds: string[], title?: string) {
+    const allMembers = [...new Set([creatorId, ...memberIds])];
+    return this.prisma.conversation.create({
+      data: {
+        title,
+        isGroup: allMembers.length > 2,
+        members: {
+          create: allMembers.map(userId => ({ userId })),
+        },
+      },
+      include: {
+        members: {
+          include: { user: { select: { id: true, name: true } } },
+        },
+      },
+    });
+  }
+}
+```
+
+#### 5.8.8 Chat REST Controller (history, conversations)
+
+```typescript
+// apps/api/src/chat/chat.controller.ts
+
+import { Controller, Get, Post, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { ChatService } from './chat.service';
+import { RedisService } from '../redis/redis.service';
+
+@Controller('chat')
+@UseGuards(JwtAuthGuard)
+export class ChatController {
+  constructor(
+    private chatService: ChatService,
+    private redis: RedisService,
+  ) {}
+
+  // GET /api/chat/conversations — list user's conversations
+  @Get('conversations')
+  async getConversations(@Request() req) {
+    return this.chatService.getConversations(req.user.id);
+  }
+
+  // POST /api/chat/conversations — create DM or group chat
+  @Post('conversations')
+  async createConversation(
+    @Request() req,
+    @Body() body: { memberIds: string[]; title?: string },
+  ) {
+    return this.chatService.createConversation(req.user.id, body.memberIds, body.title);
+  }
+
+  // GET /api/chat/conversations/:id/messages — paginated message history
+  @Get('conversations/:id/messages')
+  async getMessages(
+    @Param('id') conversationId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.chatService.getMessages(
+      conversationId,
+      page ? parseInt(page) : 1,
+      limit ? parseInt(limit) : 50,
+    );
+  }
+
+  // GET /api/chat/unread — get all unread counts for current user
+  @Get('unread')
+  async getUnreadCounts(@Request() req) {
+    const convIds = await this.chatService.getUserConversationIds(req.user.id);
+    const counts: Record<string, number> = {};
+    for (const convId of convIds) {
+      const val = await this.redis.get(`chat:unread:${req.user.id}:${convId}`);
+      if (val && parseInt(val) > 0) {
+        counts[convId] = parseInt(val);
+      }
+    }
+    return counts;
+  }
+}
+```
+
+#### 5.8.9 Bootstrap (main.ts)
+
+```typescript
+// apps/api/src/main.ts — add Redis adapter
+import { RedisIoAdapter } from './chat/redis-io.adapter';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+  app.setGlobalPrefix('api');
+
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.enableCors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  });
+
+  // Redis-backed Socket.IO adapter (for chat WebSocket fanout across ECS tasks)
+  if (process.env.REDIS_URL) {
+    const redisAdapter = new RedisIoAdapter(app);
+    await redisAdapter.connectToRedis();
+    app.useWebSocketAdapter(redisAdapter);
+  }
+
+  await app.listen(process.env.PORT || 4000);
+}
+bootstrap();
+```
+
+#### 5.8.10 App Module Registration
+
+```typescript
+// apps/api/src/app.module.ts — add Redis + Chat
+import { RedisModule } from './redis/redis.module';
+import { ChatModule } from './chat/chat.module';
+
+@Module({
+  imports: [
+    RedisModule,     // Global — provides RedisService to ChatModule
+    ChatModule,      // WebSocket gateway + REST endpoints + chat service
+    PrismaModule,
+    AuthModule,
+    UsersModule,
+    TagsModule,
+    TestsModule,
+    AttemptsModule,
+    CommentsModule,
+  ],
+})
+export class AppModule {}
+```
+
+#### 5.8.11 Environment & Local Dev
+
+```env
+# apps/api/.env — add
+REDIS_URL=redis://localhost:6379
+
+# Production (ElastiCache):
+# REDIS_URL=redis://ielts-ai-redis.xxxxx.apse1.cache.amazonaws.com:6379
+```
+
+```yaml
+# docker-compose.yml — add Redis service
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ielts_platform
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 64mb --maxmemory-policy allkeys-lru
+
+volumes:
+  pgdata:
+```
+
+#### 5.8.12 Chat API Summary
+
+**REST Endpoints:**
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/chat/conversations` | JWT | List user's conversations (with last message) |
+| `POST` | `/api/chat/conversations` | JWT | Create DM or group chat. Body: `{ memberIds, title? }` |
+| `GET` | `/api/chat/conversations/:id/messages` | JWT | Paginated message history. Query: `?page=&limit=` |
+| `GET` | `/api/chat/unread` | JWT | Unread counts per conversation (from Redis) |
+
+**WebSocket Events (namespace: `/chat`):**
+
+| Direction | Event | Payload | Description |
+|-----------|-------|---------|-------------|
+| Client → | `send-message` | `{ conversationId, content }` | Send chat message |
+| Client → | `typing` | `conversationId` | Start typing indicator |
+| Client → | `stop-typing` | `conversationId` | Stop typing indicator |
+| Client → | `mark-read` | `conversationId` | Reset unread count |
+| Client → | `heartbeat` | — | Refresh presence TTL |
+| Client → | `get-online` | `conversationId` | Request online members |
+| → Client | `new-message` | `{ id, content, sender, createdAt }` | New message in room |
+| → Client | `user-typing` | `{ userId, conversationId }` | Someone is typing |
+| → Client | `user-stop-typing` | `{ userId, conversationId }` | Someone stopped typing |
+| → Client | `user-online` | `{ userId, conversationId }` | Member came online |
+| → Client | `user-offline` | `{ userId, conversationId }` | Member went offline |
+| → Client | `online-members` | `{ conversationId, userIds[] }` | Online member list |
+
+**WS Handshake auth:**
+
+```typescript
+// Frontend: connect with JWT userId
+const socket = io('ws://localhost:4000/chat', {
+  auth: { userId: currentUser.id },
+});
+```
+
+#### 5.8.13 Data Flow Diagram
+
+```
+┌──────────┐    WebSocket    ┌──────────────┐    Pub/Sub    ┌──────────────┐    WebSocket    ┌──────────┐
+│ Client A │───────────────▶│  ECS Task 1  │─────────────▶│    Redis     │◀────────────────│ ECS Task 2│◀──────────────│ Client B │
+│          │                │              │              │              │                │              │               │          │
+│ send-msg │                │ 1. Save to   │              │ 2. Fan out   │                │ 3. Deliver   │               │ new-msg  │
+│          │                │    PostgreSQL │              │    via pub/  │                │    to local  │               │          │
+│          │                │ 2. Emit to   │              │    sub       │                │    sockets   │               │          │
+│          │                │    room      │              │              │                │              │               │          │
+└──────────┘                └──────────────┘              └──────────────┘                └──────────────┘               └──────────┘
+                                   │                                                                                         │
+                                   │  Permanent storage                                                                      │
+                                   ▼                                                                                         │
+                            ┌──────────────┐                                                                                 │
+                            │  PostgreSQL  │  messages, conversations, members                                               │
+                            └──────────────┘                                                                                 │
+
+Redis stores ONLY ephemeral chat state:
+  • Socket.IO pub/sub channels (automatic)
+  • presence:{userId} — online status (TTL 120s)
+  • room:{convId}:online — who's connected now (SET)
+  • typing:{convId}:{userId} — typing indicator (TTL 3s)
+  • unread:{userId}:{convId} — unread counter
+```
+
 ---
 
 ## 6. Async / Event-Driven Architecture (SNS/SQS/Lambda)

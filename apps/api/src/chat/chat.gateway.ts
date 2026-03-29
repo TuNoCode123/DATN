@@ -12,7 +12,28 @@ import { Server, Socket } from 'socket.io';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ChatService } from './chat.service';
+import { RedisService } from '../redis/redis.service';
 import { MessageType } from '@prisma/client';
+
+// ── Redis key helpers (chat-scoped) ─────────────────
+const KEY = {
+  /** User presence: JSON { socketIds, connectedAt } — TTL 120s */
+  presence: (uid: string) => `chat:presence:${uid}`,
+  /** All socket IDs for a user (SET) — cleaned on disconnect */
+  userSockets: (uid: string) => `chat:user:${uid}:sockets`,
+  /** Typing indicator — TTL 3s */
+  typing: (convId: string, uid: string) => `chat:typing:${convId}:${uid}`,
+  /** Rate limit: list of timestamps — TTL 10s */
+  rateLimit: (uid: string) => `chat:ratelimit:${uid}`,
+  /** Set of all online user IDs */
+  onlineSet: () => `chat:online`,
+};
+
+const TTL = {
+  PRESENCE: 120, // 2 min, refreshed by heartbeat
+  TYPING: 5, // 5 seconds auto-expire
+  RATE_LIMIT: 10, // 10s sliding window
+};
 
 @WebSocketGateway({
   namespace: '/chat',
@@ -24,15 +45,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger('ChatGateway');
 
-  // In-memory maps
-  private presenceMap = new Map<string, Set<string>>(); // userId -> Set<socketId>
-  private typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>(); // `convId:userId` -> timeout
-  private rateLimitMap = new Map<string, number[]>(); // userId -> timestamps
-
   constructor(
     private jwtService: JwtService,
     private configService: ConfigService,
     private chatService: ChatService,
+    private redis: RedisService,
   ) {}
 
   // ─── Connection ─────────────────────────────────────
@@ -45,20 +62,30 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = this.jwtService.verify(token, {
         secret: this.configService.get<string>('JWT_SECRET'),
       });
-      socket.data.user = { id: payload.sub, email: payload.email, role: payload.role };
+      socket.data.user = {
+        id: payload.sub,
+        email: payload.email,
+        role: payload.role,
+      };
 
       const userId = payload.sub;
 
-      // Add to presence
-      if (!this.presenceMap.has(userId)) {
-        this.presenceMap.set(userId, new Set());
-      }
-      this.presenceMap.get(userId)!.add(socket.id);
+      // Track this socket in Redis
+      await this.redis.sadd(KEY.userSockets(userId), socket.id);
+      await this.redis.sadd(KEY.onlineSet(), userId);
+      await this.redis.setJson(
+        KEY.presence(userId),
+        { connectedAt: Date.now(), lastSeen: Date.now() },
+        TTL.PRESENCE,
+      );
 
-      const socketCount = this.presenceMap.get(userId)!.size;
+      const socketCount = (
+        await this.redis.smembers(KEY.userSockets(userId))
+      ).length;
+
       this.logger.log(
         `[CONNECT] user=${userId} email=${payload.email} socket=${socket.id} ` +
-        `activeSockets=${socketCount} totalOnline=${this.presenceMap.size}`,
+          `activeSockets=${socketCount}`,
       );
 
       // Broadcast online if first socket
@@ -67,7 +94,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.logger.log(`[ONLINE] user=${userId} — now online`);
       }
     } catch (err: any) {
-      this.logger.warn(`[CONNECT_FAIL] socket=${socket.id} reason=${err.message}`);
+      this.logger.warn(
+        `[CONNECT_FAIL] socket=${socket.id} reason=${err.message}`,
+      );
       socket.emit('auth_error', { message: 'Token expired' });
       socket.disconnect();
     }
@@ -77,31 +106,53 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = socket.data?.user?.id;
     if (!userId) return;
 
-    // Remove from presence
-    const sockets = this.presenceMap.get(userId);
-    if (sockets) {
-      sockets.delete(socket.id);
-      if (sockets.size === 0) {
-        this.presenceMap.delete(userId);
-        this.server.emit('user_offline', { userId, lastSeen: new Date().toISOString() });
-        this.logger.log(
-          `[DISCONNECT] user=${userId} socket=${socket.id} — now offline. totalOnline=${this.presenceMap.size}`,
-        );
-      } else {
-        this.logger.log(
-          `[DISCONNECT] user=${userId} socket=${socket.id} — still has ${sockets.size} socket(s)`,
-        );
-      }
+    // Remove this socket from the user's set
+    await this.redis.srem(KEY.userSockets(userId), socket.id);
+    const remaining = await this.redis.smembers(KEY.userSockets(userId));
+
+    if (remaining.length === 0) {
+      // Last socket — user is offline
+      await this.redis.srem(KEY.onlineSet(), userId);
+      await this.redis.del(KEY.presence(userId));
+      await this.redis.del(KEY.userSockets(userId));
+
+      this.server.emit('user_offline', {
+        userId,
+        lastSeen: new Date().toISOString(),
+      });
+      this.logger.log(
+        `[DISCONNECT] user=${userId} socket=${socket.id} — now offline`,
+      );
+    } else {
+      this.logger.log(
+        `[DISCONNECT] user=${userId} socket=${socket.id} — still has ${remaining.length} socket(s)`,
+      );
     }
 
-    // Clear typing timeouts for this user
-    for (const [key, timeout] of this.typingTimeouts.entries()) {
-      if (key.endsWith(`:${userId}`)) {
-        clearTimeout(timeout);
-        this.typingTimeouts.delete(key);
-        const conversationId = key.split(':')[0];
-        socket.to(`conversation:${conversationId}`).emit('user_stop_typing', { conversationId, userId });
+    // Clear typing for this user in all conversations they were in
+    // (typing keys auto-expire via TTL, but emit stop-typing for immediate UX)
+    for (const room of socket.rooms) {
+      if (room.startsWith('conversation:')) {
+        const convId = room.replace('conversation:', '');
+        await this.redis.del(KEY.typing(convId, userId));
+        socket
+          .to(room)
+          .emit('user_stop_typing', { conversationId: convId, userId });
       }
+    }
+  }
+
+  // ─── Heartbeat (presence refresh) ───────────────────
+
+  @SubscribeMessage('heartbeat')
+  async handleHeartbeat(@ConnectedSocket() socket: Socket) {
+    const userId = socket.data.user?.id;
+    if (!userId) return;
+
+    const data = await this.redis.getJson<any>(KEY.presence(userId));
+    if (data) {
+      data.lastSeen = Date.now();
+      await this.redis.setJson(KEY.presence(userId), data, TTL.PRESENCE);
     }
   }
 
@@ -122,16 +173,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.chatService.assertMember(data.conversationId, userId);
       socket.join(`conversation:${data.conversationId}`);
 
-      // Log room members
-      const room = (this.server.adapter as any).rooms?.get(`conversation:${data.conversationId}`);
+      const room = this.server.adapter
+        ? (this.server.adapter as any).rooms?.get(
+            `conversation:${data.conversationId}`,
+          )
+        : undefined;
       const roomSize = room?.size ?? 0;
       this.logger.log(
         `[JOIN] user=${userId} conversation=${data.conversationId} ` +
-        `roomSize=${roomSize} socket=${socket.id}`,
+          `roomSize=${roomSize} socket=${socket.id}`,
       );
       return { success: true };
     } catch {
-      this.logger.warn(`[JOIN_FAIL] user=${userId} conversation=${data.conversationId} — not a member`);
+      this.logger.warn(
+        `[JOIN_FAIL] user=${userId} conversation=${data.conversationId} — not a member`,
+      );
       return { success: false, error: 'NOT_MEMBER' };
     }
   }
@@ -144,11 +200,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = socket.data.user?.id;
     socket.leave(`conversation:${data.conversationId}`);
 
-    const room = (this.server.adapter as any).rooms?.get(`conversation:${data.conversationId}`);
-    const roomSize = room?.size ?? 0;
     this.logger.log(
-      `[LEAVE] user=${userId ?? 'unknown'} conversation=${data.conversationId} ` +
-      `roomSize=${roomSize} socket=${socket.id}`,
+      `[LEAVE] user=${userId ?? 'unknown'} conversation=${data.conversationId} socket=${socket.id}`,
     );
     return { success: true };
   }
@@ -158,7 +211,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('send_message')
   async handleSendMessage(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() data: {
+    @MessageBody()
+    data: {
       conversationId: string;
       content?: string;
       type?: MessageType;
@@ -172,16 +226,14 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = socket.data.user?.id;
     if (!userId) return { success: false, error: 'NOT_AUTHENTICATED' };
 
-    // Rate limit: max 10 messages per 5 seconds
-    const now = Date.now();
-    const timestamps = this.rateLimitMap.get(userId) || [];
-    const recent = timestamps.filter(t => now - t < 5000);
-    if (recent.length >= 10) {
-      this.logger.warn(`[RATE_LIMIT] user=${userId} conversation=${data.conversationId}`);
+    // Rate limit via Redis: max 10 messages per 5 seconds
+    const rateLimited = await this.checkRateLimit(userId);
+    if (rateLimited) {
+      this.logger.warn(
+        `[RATE_LIMIT] user=${userId} conversation=${data.conversationId}`,
+      );
       return { success: false, error: 'RATE_LIMITED' };
     }
-    recent.push(now);
-    this.rateLimitMap.set(userId, recent);
 
     const type = data.type || MessageType.TEXT;
 
@@ -189,17 +241,25 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!data.clientId) {
       return { success: false, error: 'VALIDATION_ERROR' };
     }
-    if (type === MessageType.TEXT && (!data.content || data.content.length > 5000)) {
+    if (
+      type === MessageType.TEXT &&
+      (!data.content || data.content.length > 5000)
+    ) {
       return { success: false, error: 'VALIDATION_ERROR' };
     }
-    if ((type === MessageType.IMAGE || type === MessageType.FILE) && !data.attachmentUrl) {
+    if (
+      (type === MessageType.IMAGE || type === MessageType.FILE) &&
+      !data.attachmentUrl
+    ) {
       return { success: false, error: 'ATTACHMENT_REQUIRED' };
     }
 
     try {
       await this.chatService.assertMember(data.conversationId, userId);
     } catch {
-      this.logger.warn(`[SEND_FAIL] user=${userId} conversation=${data.conversationId} — not a member`);
+      this.logger.warn(
+        `[SEND_FAIL] user=${userId} conversation=${data.conversationId} — not a member`,
+      );
       return { success: false, error: 'NOT_MEMBER' };
     }
 
@@ -222,8 +282,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         attachment,
       );
 
-      // Broadcast to room (excluding sender)
-      socket.to(`conversation:${data.conversationId}`).emit('new_message', message);
+      // Broadcast to room (excluding sender) — Redis adapter fans out across ECS tasks
+      socket
+        .to(`conversation:${data.conversationId}`)
+        .emit('new_message', message);
 
       return { success: true, message };
     } catch (error: any) {
@@ -245,12 +307,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!userId) return { success: false, error: 'NOT_AUTHENTICATED' };
 
     try {
-      const result = await this.chatService.markRead(data.conversationId, userId, data.seqNumber);
-      socket.to(`conversation:${data.conversationId}`).emit('message_read', {
-        conversationId: data.conversationId,
+      const result = await this.chatService.markRead(
+        data.conversationId,
         userId,
-        lastReadSeq: result.lastReadSeq,
-      });
+        data.seqNumber,
+      );
+      socket
+        .to(`conversation:${data.conversationId}`)
+        .emit('message_read', {
+          conversationId: data.conversationId,
+          userId,
+          lastReadSeq: result.lastReadSeq,
+        });
       return { success: true, ...result };
     } catch {
       return { success: false, error: 'ERROR' };
@@ -262,7 +330,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('edit_message')
   async handleEditMessage(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() data: { conversationId: string; messageId: string; content: string },
+    @MessageBody()
+    data: { conversationId: string; messageId: string; content: string },
   ) {
     const userId = socket.data.user?.id;
     if (!userId) return { success: false, error: 'NOT_AUTHENTICATED' };
@@ -279,16 +348,20 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data.content,
       );
 
-      socket.to(`conversation:${data.conversationId}`).emit('message_edited', {
-        conversationId: data.conversationId,
-        messageId: data.messageId,
-        content: message.content,
-        editedAt: message.editedAt,
-      });
+      socket
+        .to(`conversation:${data.conversationId}`)
+        .emit('message_edited', {
+          conversationId: data.conversationId,
+          messageId: data.messageId,
+          content: message.content,
+          editedAt: message.editedAt,
+        });
 
       return { success: true, message };
     } catch (error: any) {
-      this.logger.warn(`[EDIT_FAIL] user=${userId} message=${data.messageId} error=${error.message}`);
+      this.logger.warn(
+        `[EDIT_FAIL] user=${userId} message=${data.messageId} error=${error.message}`,
+      );
       return { success: false, error: error.message || 'INTERNAL_ERROR' };
     }
   }
@@ -298,28 +371,45 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('delete_message')
   async handleDeleteMessage(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() data: { conversationId: string; messageId: string; mode: 'self' | 'everyone' },
+    @MessageBody()
+    data: {
+      conversationId: string;
+      messageId: string;
+      mode: 'self' | 'everyone';
+    },
   ) {
     const userId = socket.data.user?.id;
     if (!userId) return { success: false, error: 'NOT_AUTHENTICATED' };
 
     try {
       if (data.mode === 'everyone') {
-        await this.chatService.deleteForEveryone(data.conversationId, data.messageId, userId);
+        await this.chatService.deleteForEveryone(
+          data.conversationId,
+          data.messageId,
+          userId,
+        );
 
-        socket.to(`conversation:${data.conversationId}`).emit('message_deleted', {
-          conversationId: data.conversationId,
-          messageId: data.messageId,
-          deletedForAll: true,
-        });
+        socket
+          .to(`conversation:${data.conversationId}`)
+          .emit('message_deleted', {
+            conversationId: data.conversationId,
+            messageId: data.messageId,
+            deletedForAll: true,
+          });
       } else {
-        await this.chatService.deleteForMe(data.conversationId, data.messageId, userId);
+        await this.chatService.deleteForMe(
+          data.conversationId,
+          data.messageId,
+          userId,
+        );
         // No broadcast for "delete for me" — local only
       }
 
       return { success: true };
     } catch (error: any) {
-      this.logger.warn(`[DELETE_FAIL] user=${userId} message=${data.messageId} error=${error.message}`);
+      this.logger.warn(
+        `[DELETE_FAIL] user=${userId} message=${data.messageId} error=${error.message}`,
+      );
       return { success: false, error: error.message || 'INTERNAL_ERROR' };
     }
   }
@@ -329,7 +419,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('toggle_reaction')
   async handleToggleReaction(
     @ConnectedSocket() socket: Socket,
-    @MessageBody() data: { conversationId: string; messageId: string; emoji: string },
+    @MessageBody()
+    data: { conversationId: string; messageId: string; emoji: string },
   ) {
     const userId = socket.data.user?.id;
     if (!userId) return { success: false, error: 'NOT_AUTHENTICATED' };
@@ -341,32 +432,52 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       // Check if reaction already exists — toggle
       const existing = await this.chatService['prisma'].messageReaction.findUnique({
-        where: { messageId_userId_emoji: { messageId: data.messageId, userId, emoji: data.emoji } },
+        where: {
+          messageId_userId_emoji: {
+            messageId: data.messageId,
+            userId,
+            emoji: data.emoji,
+          },
+        },
       });
 
       let result;
       let action: 'add' | 'remove';
 
       if (existing) {
-        result = await this.chatService.removeReaction(data.conversationId, data.messageId, userId, data.emoji);
+        result = await this.chatService.removeReaction(
+          data.conversationId,
+          data.messageId,
+          userId,
+          data.emoji,
+        );
         action = 'remove';
       } else {
-        result = await this.chatService.addReaction(data.conversationId, data.messageId, userId, data.emoji);
+        result = await this.chatService.addReaction(
+          data.conversationId,
+          data.messageId,
+          userId,
+          data.emoji,
+        );
         action = 'add';
       }
 
-      socket.to(`conversation:${data.conversationId}`).emit('reaction_updated', {
-        conversationId: data.conversationId,
-        messageId: data.messageId,
-        emoji: data.emoji,
-        userId,
-        action,
-        reactions: result.reactions,
-      });
+      socket
+        .to(`conversation:${data.conversationId}`)
+        .emit('reaction_updated', {
+          conversationId: data.conversationId,
+          messageId: data.messageId,
+          emoji: data.emoji,
+          userId,
+          action,
+          reactions: result.reactions,
+        });
 
       return { success: true, action, reactions: result.reactions };
     } catch (error: any) {
-      this.logger.warn(`[REACTION_FAIL] user=${userId} message=${data.messageId} error=${error.message}`);
+      this.logger.warn(
+        `[REACTION_FAIL] user=${userId} message=${data.messageId} error=${error.message}`,
+      );
       return { success: false, error: error.message || 'INTERNAL_ERROR' };
     }
   }
@@ -381,32 +492,21 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = socket.data.user?.id;
     if (!userId) return;
 
-    const key = `${data.conversationId}:${userId}`;
-
-    // Clear existing timeout
-    if (this.typingTimeouts.has(key)) {
-      clearTimeout(this.typingTimeouts.get(key));
-    }
-
-    // Broadcast typing
-    const displayName = socket.data.user?.email; // fallback
-    socket.to(`conversation:${data.conversationId}`).emit('user_typing', {
-      conversationId: data.conversationId,
-      userId,
-      displayName,
-    });
-
-    // Auto-expire after 5 seconds
-    this.typingTimeouts.set(
-      key,
-      setTimeout(() => {
-        this.typingTimeouts.delete(key);
-        socket.to(`conversation:${data.conversationId}`).emit('user_stop_typing', {
-          conversationId: data.conversationId,
-          userId,
-        });
-      }, 5000),
+    // Set typing key with TTL — auto-expires, no cleanup needed
+    await this.redis.set(
+      KEY.typing(data.conversationId, userId),
+      '1',
+      TTL.TYPING,
     );
+
+    const displayName = socket.data.user?.email;
+    socket
+      .to(`conversation:${data.conversationId}`)
+      .emit('user_typing', {
+        conversationId: data.conversationId,
+        userId,
+        displayName,
+      });
   }
 
   @SubscribeMessage('typing_stop')
@@ -417,41 +517,65 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = socket.data.user?.id;
     if (!userId) return;
 
-    const key = `${data.conversationId}:${userId}`;
-    if (this.typingTimeouts.has(key)) {
-      clearTimeout(this.typingTimeouts.get(key));
-      this.typingTimeouts.delete(key);
-    }
+    await this.redis.del(KEY.typing(data.conversationId, userId));
 
-    socket.to(`conversation:${data.conversationId}`).emit('user_stop_typing', {
-      conversationId: data.conversationId,
-      userId,
-    });
+    socket
+      .to(`conversation:${data.conversationId}`)
+      .emit('user_stop_typing', {
+        conversationId: data.conversationId,
+        userId,
+      });
   }
 
   // ─── Presence Query ─────────────────────────────────
 
   @SubscribeMessage('get_online_users')
   async handleGetOnlineUsers(@ConnectedSocket() socket: Socket) {
-    const userIds = Array.from(this.presenceMap.keys());
+    const userIds = await this.redis.smembers(KEY.onlineSet());
     this.logger.log(
       `[PRESENCE_QUERY] from=${socket.data.user?.id ?? socket.id} onlineUsers=${userIds.length}`,
     );
     return { success: true, userIds };
   }
 
-  // ─── Helpers (used by ChatService via injection) ────
+  // ─── Helpers (used by ChatController via injection) ──
 
   emitToUser(userId: string, event: string, data: any) {
-    const sockets = this.presenceMap.get(userId);
-    if (sockets) {
-      for (const socketId of sockets) {
+    // Emit to all sockets of this user via their personal room
+    // Each socket joins a user-specific room on connect for targeted delivery
+    this.redis.smembers(KEY.userSockets(userId)).then((socketIds) => {
+      for (const socketId of socketIds) {
         this.server.to(socketId).emit(event, data);
       }
-    }
+    });
   }
 
   emitToRoom(conversationId: string, event: string, data: any) {
-    this.server.to(`conversation:${conversationId}`).emit(event, data);
+    this.server
+      .to(`conversation:${conversationId}`)
+      .emit(event, data);
+  }
+
+  // ─── Rate Limiter (Redis-backed) ────────────────────
+
+  private async checkRateLimit(userId: string): Promise<boolean> {
+    const key = KEY.rateLimit(userId);
+    const now = Date.now();
+
+    // Push current timestamp and trim old entries
+    await this.redis.lpush(key, now.toString());
+    await this.redis.ltrim(key, 0, 9); // Keep max 10 entries
+    await this.redis.expire(key, TTL.RATE_LIMIT);
+
+    // Check if 10th entry is within 5 seconds
+    const timestamps = await this.redis.lrange(key, 0, 9);
+    if (timestamps.length >= 10) {
+      const oldest = parseInt(timestamps[timestamps.length - 1], 10);
+      if (now - oldest < 5000) {
+        return true; // rate limited
+      }
+    }
+
+    return false;
   }
 }
