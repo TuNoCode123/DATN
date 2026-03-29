@@ -28,21 +28,22 @@ COPY --from=pruner /app/out/full/ .
 RUN pnpm --filter api run db:generate
 RUN pnpm --filter api run build
 
+# Create a standalone deploy directory with all production deps
+RUN pnpm --filter api deploy --prod /app/deploy
+
+# Copy generated Prisma client into deploy
+RUN cp -r /app/node_modules/.pnpm/@prisma+client*/node_modules/.prisma /app/deploy/node_modules/.prisma
+
 # ── Production stage ─────────────────────────────────────────
 FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-COPY --from=builder /app/apps/api/package.json ./package.json
+COPY --from=builder /app/deploy/node_modules ./node_modules
+COPY --from=builder /app/deploy/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/prisma ./prisma
-COPY --from=builder /app/apps/api/node_modules ./node_modules
-COPY --from=builder /app/node_modules/.pnpm ./node_modules/.pnpm
-
-# Copy Prisma client
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 EXPOSE 4000
 
