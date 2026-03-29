@@ -1,11 +1,10 @@
 # ── Prune stage: create minimal monorepo subset ─────────────
 FROM node:20-alpine AS pruner
 RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
-RUN pnpm add -g turbo
 WORKDIR /app
 
 COPY . .
-RUN turbo prune web --docker
+RUN pnpm dlx turbo prune web --docker
 
 # ── Install dependencies ─────────────────────────────────────
 FROM node:20-alpine AS installer
