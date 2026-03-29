@@ -10,7 +10,7 @@ import {
   FilePptOutlined,
 } from '@ant-design/icons';
 
-const ICON_MAP: Record<string, { icon: React.ComponentType<any>; color: string }> = {
+const ICON_MAP: Record<string, { icon: React.ComponentType<{ style?: React.CSSProperties }>; color: string }> = {
   'application/pdf': { icon: FilePdfOutlined, color: '#e53e3e' },
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { icon: FileExcelOutlined, color: '#38a169' },
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { icon: FileWordOutlined, color: '#3182ce' },

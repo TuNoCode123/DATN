@@ -22,6 +22,7 @@ export function UploadPreview({ file, progress, uploading, error, onCancel, onRe
   useEffect(() => {
     if (isImage) {
       const url = URL.createObjectURL(file);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPreview(url);
       return () => URL.revokeObjectURL(url);
     }
@@ -31,6 +32,7 @@ export function UploadPreview({ file, progress, uploading, error, onCancel, onRe
     <div className="mx-3 mb-2 p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center gap-3">
       {/* Preview / Icon */}
       {isImage && preview ? (
+        /* eslint-disable-next-line @next/next/no-img-element */
         <img
           src={preview}
           alt={file.name}

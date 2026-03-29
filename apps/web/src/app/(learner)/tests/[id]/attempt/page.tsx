@@ -242,14 +242,14 @@ function AttemptContent() {
       await api.post(`/attempts/${attemptId}/submit`);
       message.success("Submitted successfully!");
       router.push(resultUrl);
-    } catch (err: any) {
-      // If already submitted (idempotent), still navigate to result
-      if (err.response?.status === 400 || err.response?.data?.alreadySubmitted) {
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { status?: number; data?: { message?: string; alreadySubmitted?: boolean } } };
+      if (axiosErr.response?.status === 400 || axiosErr.response?.data?.alreadySubmitted) {
         router.push(resultUrl);
         return;
       }
       submittedRef.current = false;
-      message.error(err.response?.data?.message || "Submission failed");
+      message.error(axiosErr.response?.data?.message || "Submission failed");
     } finally {
       setSubmitting(false);
     }

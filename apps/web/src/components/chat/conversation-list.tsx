@@ -83,8 +83,9 @@ export function ConversationList() {
       setShowNewChat(false);
       setUserSearch('');
       setUserResults([]);
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'Failed to start conversation');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      message.error(axiosErr.response?.data?.message || 'Failed to start conversation');
     }
   };
 

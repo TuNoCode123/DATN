@@ -36,8 +36,8 @@ export default function RegisterPage() {
       setUser(user);
       message.success('Account created successfully!');
       router.push('/tests');
-    } catch (err: any) {
-      const msg = err.response?.data?.message || 'Registration failed';
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message || 'Registration failed';
       message.error(msg);
     } finally {
       setLoading(false);

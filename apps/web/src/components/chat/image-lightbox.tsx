@@ -52,7 +52,7 @@ export function ImageLightbox({ src, alt, onClose }: Props) {
         />
       </div>
 
-      {/* Image */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={src}
         alt={alt || 'Image'}

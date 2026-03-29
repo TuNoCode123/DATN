@@ -139,7 +139,8 @@ export const useChatStore = create<ChatState>()(
   setUserOffline: (userId) =>
     set((s) => {
       if (!s.onlineUsers[userId]) return s;
-      const { [userId]: _, ...rest } = s.onlineUsers;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { [userId]: _unused, ...rest } = s.onlineUsers;
       return { onlineUsers: rest };
     }),
 

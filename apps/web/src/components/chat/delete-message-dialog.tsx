@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Modal, Radio, Space } from 'antd';
 import type { ChatMessage } from '@/lib/chat-store';
 
@@ -15,13 +15,18 @@ interface Props {
 export function DeleteMessageDialog({ open, message, isOwn, onConfirm, onCancel }: Props) {
   const [mode, setMode] = useState<'self' | 'everyone'>('self');
 
-  if (!message) return null;
+  const canDeleteForEveryone = useMemo(() => {
+    if (!message) return false;
+    // eslint-disable-next-line react-hooks/purity
+    const now = Date.now();
+    return (
+      isOwn &&
+      message.type !== 'SYSTEM' &&
+      new Date(message.createdAt).getTime() > now - 60 * 60 * 1000
+    );
+  }, [message, isOwn]);
 
-  const oneHourAgo = Date.now() - 60 * 60 * 1000;
-  const canDeleteForEveryone =
-    isOwn &&
-    message.type !== 'SYSTEM' &&
-    new Date(message.createdAt).getTime() > oneHourAgo;
+  if (!message) return null;
 
   const handleOk = () => {
     onConfirm(mode);

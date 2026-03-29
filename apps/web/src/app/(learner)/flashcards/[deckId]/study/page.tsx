@@ -92,7 +92,7 @@ export default function StudyModePage() {
   const onTouchStart = (e: React.TouchEvent) => { touchStartX.current = e.changedTouches[0].screenX; };
   const onTouchEnd = (e: React.TouchEvent) => {
     const diff = touchStartX.current - e.changedTouches[0].screenX;
-    if (Math.abs(diff) > 60) { diff > 0 ? goNext() : goPrev(); }
+    if (Math.abs(diff) > 60) { if (diff > 0) { goNext(); } else { goPrev(); } }
   };
 
   const slideClass = ({ 'exit-left': 'card-slide-exit-left', 'exit-right': 'card-slide-exit-right', 'enter-from-left': 'card-slide-enter-from-left', 'enter-from-right': 'card-slide-enter-from-right' } as Record<string, string>)[animPhase] || '';

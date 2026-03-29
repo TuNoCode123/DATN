@@ -63,7 +63,7 @@ export default function CreateDeckPage() {
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="block text-xs font-bold text-foreground mb-1.5 uppercase tracking-wider">Visibility</label>
-              <select value={visibility} onChange={(e) => setVisibility(e.target.value as any)} className={inputCls}>
+              <select value={visibility} onChange={(e) => setVisibility(e.target.value as 'PRIVATE' | 'PUBLIC')} className={inputCls}>
                 <option value="PRIVATE">Private</option>
                 <option value="PUBLIC">Public</option>
               </select>

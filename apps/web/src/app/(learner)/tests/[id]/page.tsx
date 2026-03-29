@@ -19,7 +19,7 @@ interface QuestionFromAPI {
   questionNumber: number;
   orderIndex: number;
   stem: string | null;
-  options: any;
+  options: unknown;
 }
 
 interface QuestionGroupFromAPI {
@@ -27,7 +27,7 @@ interface QuestionGroupFromAPI {
   questionType: string;
   orderIndex: number;
   instructions: string | null;
-  matchingOptions: any;
+  matchingOptions: unknown;
   questions: QuestionFromAPI[];
 }
 
@@ -122,8 +122,8 @@ export default function TestDetailPage() {
         timeLimitMins: timeLimit > 0 ? timeLimit : undefined,
       });
       router.push(`/tests/${testId}/attempt?attemptId=${attempt.id}`);
-    } catch (err: any) {
-      const msg = err.response?.data?.message || 'Could not start the test';
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message || 'Could not start the test';
       message.error(msg);
     } finally {
       setStarting(false);

@@ -103,6 +103,7 @@ export function MessageBubble({ message, isOwn, onEdit, onDelete, onReaction }: 
             >
               {/* IMAGE content */}
               {message.type === 'IMAGE' && message.attachmentUrl && (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={message.attachmentUrl}
                   alt={message.attachmentName || 'Image'}

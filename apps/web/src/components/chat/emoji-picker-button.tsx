@@ -48,7 +48,7 @@ export function EmojiPickerButton({ onSelect }: Props) {
         <div className="absolute bottom-10 left-0 z-50">
           <Picker
             data={data}
-            onEmojiSelect={(emoji: any) => {
+            onEmojiSelect={(emoji: { native: string }) => {
               onSelect(emoji.native);
               setOpen(false);
             }}

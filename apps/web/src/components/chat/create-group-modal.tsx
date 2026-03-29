@@ -68,8 +68,9 @@ export function CreateGroupModal({ open, onClose }: Props) {
       setActiveConversation(conv.id);
       message.success('Group created!');
       handleClose();
-    } catch (err: any) {
-      message.error(err.response?.data?.message || 'Failed to create group');
+    } catch (err: unknown) {
+      const axiosErr = err as { response?: { data?: { message?: string } } };
+      message.error(axiosErr.response?.data?.message || 'Failed to create group');
     }
   };
 

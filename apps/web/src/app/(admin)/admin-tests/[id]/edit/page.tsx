@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   ArrowLeft, Save, Send, Plus, Trash2, Loader2,
   Headphones, BookOpen, Pen, Mic, AlertTriangle,
   Eye, ChevronDown, ChevronRight, ChevronLeft,
-  Image, Music, Settings2, FileText, HelpCircle, Check, Info, X,
+  Image, Music, Settings2, FileText, HelpCircle, Info, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,7 +18,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import TiptapEditor from '@/components/admin/tiptap-editor';
 import { ConfirmDialog } from '@/components/admin/confirm-dialog';
 import {
@@ -105,6 +104,7 @@ export default function TestEditorPage() {
   // Initialize local state when server data loads
   useEffect(() => {
     if (serverTest && !localTest) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalTest(cloneTest(serverTest));
     }
   }, [serverTest, localTest]);
@@ -113,6 +113,7 @@ export default function TestEditorPage() {
   // Only if not dirty (don't overwrite unsaved changes)
   useEffect(() => {
     if (serverTest && !isDirty) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLocalTest(cloneTest(serverTest));
     }
   }, [serverTest, isDirty]);
@@ -188,8 +189,9 @@ export default function TestEditorPage() {
       setLocalTest(cloneTest(result));
       setIsDirty(false);
       toast.success('All changes saved');
-    } catch (err: any) {
-      toast.error(err?.response?.data?.message || 'Failed to save');
+    } catch (err: unknown) {
+      const axiosData = (err as { response?: { data?: { message?: string } } })?.response?.data;
+      toast.error(axiosData?.message || (err instanceof Error ? err.message : 'Failed to save'));
     }
   }
 
@@ -746,7 +748,7 @@ function SectionSetupGuide({
   const titleLower = sectionTitle.toLowerCase();
 
   let guide: { title: string; steps: string[] } | null = null;
-  let allGuides: { key: string; title: string; steps: string[] }[] = [];
+  const allGuides: { key: string; title: string; steps: string[] }[] = [];
 
   if (examType === 'TOEIC_LR') {
     for (const [key, val] of Object.entries(TOEIC_LR_GUIDE)) {
@@ -1329,6 +1331,7 @@ function QuestionGroupEditor({
           )}
           {group.imageUrl && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              {/* eslint-disable-next-line jsx-a11y/alt-text */}
               <Image className="h-4 w-4 shrink-0" />
               <span className="truncate">{group.imageUrl}</span>
             </div>
@@ -1441,7 +1444,7 @@ function QuestionEditor({
           {/* MCQ Options */}
           {isMCQ && Array.isArray(question.options) && (
             <div className="space-y-2.5 pl-1">
-              {question.options.map((opt: any, i: number) => (
+              {question.options.map((opt: { label: string; text: string }, i: number) => (
                 <div key={i} className="flex items-center gap-3">
                   <button
                     className={cn(
@@ -1524,6 +1527,7 @@ function QuestionEditor({
               )}
               onClick={() => setShowMedia(!showMedia)}
             >
+              {/* eslint-disable-next-line jsx-a11y/alt-text */}
               <Image className="h-3.5 w-3.5" />
               Media
             </Button>

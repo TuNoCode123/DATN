@@ -28,6 +28,7 @@ export default function EditDeckPage() {
 
   useEffect(() => {
     if (deck) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setTitle(deck.title);
       setDescription(deck.description || '');
       setVisibility(deck.visibility);
@@ -96,7 +97,7 @@ export default function EditDeckPage() {
           <div className="flex gap-4">
             <div className="flex-1">
               <label className="text-xs font-bold uppercase tracking-wider text-foreground mb-1 block">Visibility</label>
-              <select value={visibility} onChange={(e) => setVisibility(e.target.value as any)} className={inputClasses}>
+              <select value={visibility} onChange={(e) => setVisibility(e.target.value as 'PRIVATE' | 'PUBLIC')} className={inputClasses}>
                 <option value="PRIVATE">Private</option>
                 <option value="PUBLIC">Public</option>
               </select>

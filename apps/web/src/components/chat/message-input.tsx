@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Button, message as antMessage } from 'antd';
-import { SendOutlined, PaperClipOutlined, SmileOutlined, CloseOutlined } from '@ant-design/icons';
+import { SendOutlined, PaperClipOutlined, CloseOutlined } from '@ant-design/icons';
 import { getSocket } from '@/lib/socket';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/auth-store';
@@ -68,7 +68,7 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
               attachmentSize: result.size,
               attachmentType: result.type,
             },
-            (res: any) => {
+            (res: { success: boolean; message?: ChatMessage }) => {
               if (res.success && res.message) {
                 queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
                 queryClient.invalidateQueries({ queryKey: ['conversations'] });
@@ -93,8 +93,9 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
     const clientId = crypto.randomUUID();
 
     // Optimistic update
-    queryClient.setQueryData(['messages', conversationId], (old: any) => {
+    queryClient.setQueryData(['messages', conversationId], (old: unknown) => {
       if (!old) return old;
+      const data = old as { pages: Array<{ data: unknown[] }> };
       const optimisticMsg = {
         id: clientId,
         conversationId,
@@ -108,12 +109,12 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
         pending: true,
         reactions: [],
       };
-      const firstPage = old.pages[0];
+      const firstPage = data.pages[0];
       return {
-        ...old,
+        ...data,
         pages: [
           { ...firstPage, data: [optimisticMsg, ...firstPage.data] },
-          ...old.pages.slice(1),
+          ...data.pages.slice(1),
         ],
       };
     });
@@ -124,15 +125,16 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
 
     const sendCallback = (res: { success: boolean; message?: ChatMessage; error?: string }) => {
       if (res.success && res.message) {
-        queryClient.setQueryData(['messages', conversationId], (old: any) => {
+        queryClient.setQueryData(['messages', conversationId], (old: unknown) => {
           if (!old) return old;
+          const data = old as { pages: Array<{ data: Array<{ clientId?: string }> }> };
           return {
-            ...old,
-            pages: old.pages.map((page: any, i: number) => {
+            ...data,
+            pages: data.pages.map((page, i: number) => {
               if (i !== 0) return page;
               return {
                 ...page,
-                data: page.data.map((m: any) =>
+                data: page.data.map((m) =>
                   m.clientId === clientId ? { ...res.message, pending: false } : m,
                 ),
               };
@@ -141,15 +143,16 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
         });
         queryClient.invalidateQueries({ queryKey: ['conversations'] });
       } else {
-        queryClient.setQueryData(['messages', conversationId], (old: any) => {
+        queryClient.setQueryData(['messages', conversationId], (old: unknown) => {
           if (!old) return old;
+          const data = old as { pages: Array<{ data: Array<{ clientId?: string }> }> };
           return {
-            ...old,
-            pages: old.pages.map((page: any, i: number) => {
+            ...data,
+            pages: data.pages.map((page, i: number) => {
               if (i !== 0) return page;
               return {
                 ...page,
-                data: page.data.map((m: any) =>
+                data: page.data.map((m) =>
                   m.clientId === clientId ? { ...m, pending: false, failed: true } : m,
                 ),
               };
@@ -176,16 +179,16 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
       socket.emit(
         'edit_message',
         { conversationId, messageId: editingMessage.id, content: editText.trim() },
-        (res: any) => {
+        (res: { success: boolean }) => {
           if (res.success) {
-            // Update cache
-            queryClient.setQueryData(['messages', conversationId], (old: any) => {
+            queryClient.setQueryData(['messages', conversationId], (old: unknown) => {
               if (!old) return old;
+              const data = old as { pages: Array<{ data: Array<{ id: string }> }> };
               return {
-                ...old,
-                pages: old.pages.map((page: any) => ({
+                ...data,
+                pages: data.pages.map((page) => ({
                   ...page,
-                  data: page.data.map((m: any) =>
+                  data: page.data.map((m) =>
                     m.id === editingMessage.id
                       ? { ...m, content: editText.trim(), isEdited: true, editedAt: new Date().toISOString() }
                       : m,

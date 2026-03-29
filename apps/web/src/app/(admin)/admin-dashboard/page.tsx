@@ -16,8 +16,6 @@ import {
 import { Users, FileText, ClipboardList, TrendingUp } from "lucide-react";
 import {
   ResponsiveContainer,
-  LineChart,
-  Line,
   BarChart,
   Bar,
   XAxis,

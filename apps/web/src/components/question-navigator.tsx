@@ -31,7 +31,8 @@ export function QuestionNavigator({
   submitting,
   onSubmit,
   onQuestionClick,
-  activeSectionIndex,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  activeSectionIndex: _activeSectionIndex,
   activeQuestionId,
 }: QuestionNavigatorProps) {
   const formatTime = (s: number) =>

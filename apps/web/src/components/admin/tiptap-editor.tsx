@@ -14,8 +14,7 @@ import Highlight from "@tiptap/extension-highlight";
 import Placeholder from "@tiptap/extension-placeholder";
 import Image from "@tiptap/extension-image";
 import HardBreak from "@tiptap/extension-hard-break";
-import { Extension } from "@tiptap/core";
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bold,
   Italic,
@@ -40,12 +39,10 @@ import {
   ImageIcon,
   TableCellsMerge,
   Trash2,
-  Plus,
   ArrowUp,
   ArrowDown,
   ArrowLeft,
   ArrowRight,
-  Grid3X3,
 } from "lucide-react";
 
 interface TiptapEditorProps {

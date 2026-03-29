@@ -24,7 +24,7 @@ export default function ReviewPage() {
 
   const [phase, setPhase] = useState<Phase>('stats');
   const [sessionId, setSessionId] = useState('');
-  const [cards, setCards] = useState<any[]>([]);
+  const [cards, setCards] = useState<unknown[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [reviewedCount, setReviewedCount] = useState(0);

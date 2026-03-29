@@ -20,6 +20,7 @@ export function ChatBubble() {
   // Track if panel has ever been opened (to keep ChatLayout mounted)
   useEffect(() => {
     if (chatBubbleOpen && !hasBeenOpened) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHasBeenOpened(true);
     }
   }, [chatBubbleOpen, hasBeenOpened]);

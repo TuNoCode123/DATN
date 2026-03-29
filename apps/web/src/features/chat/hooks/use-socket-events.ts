@@ -28,13 +28,12 @@ export function useSocketEvents() {
 
     const handleNewMessage = (message: ChatMessage) => {
       console.log('[WS] new_message received:', message.id, 'in conversation:', message.conversationId);
-      // Add message to cache
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       queryClient.setQueryData(['messages', message.conversationId], (old: any) => {
         if (!old) return old;
-        // Deduplicate: don't add if message already exists (by id or clientId)
         const firstPage = old.pages[0];
         const exists = firstPage.data.some(
-          (m: any) => m.id === message.id || (message.clientId && m.clientId === message.clientId),
+          (m: { id: string; clientId?: string }) => m.id === message.id || (message.clientId && m.clientId === message.clientId),
         );
         if (exists) return old;
         return {
@@ -49,7 +48,8 @@ export function useSocketEvents() {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     };
 
-    const handleMessageRead = (data: { conversationId: string; userId: string; lastReadSeq: number }) => {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const handleMessageRead = (_data: { conversationId: string; userId: string; lastReadSeq: number }) => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
     };
 
@@ -97,13 +97,15 @@ export function useSocketEvents() {
     };
 
     const handleMessageEdited = (data: { conversationId: string; messageId: string; content: string; editedAt: string }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       queryClient.setQueryData(['messages', data.conversationId], (old: any) => {
         if (!old) return old;
         return {
           ...old,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           pages: old.pages.map((page: any) => ({
             ...page,
-            data: page.data.map((m: any) =>
+            data: page.data.map((m: { id: string }) =>
               m.id === data.messageId
                 ? { ...m, content: data.content, isEdited: true, editedAt: data.editedAt }
                 : m,
@@ -115,13 +117,15 @@ export function useSocketEvents() {
 
     const handleMessageDeleted = (data: { conversationId: string; messageId: string; deletedForAll: boolean }) => {
       if (data.deletedForAll) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         queryClient.setQueryData(['messages', data.conversationId], (old: any) => {
           if (!old) return old;
           return {
             ...old,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             pages: old.pages.map((page: any) => ({
               ...page,
-              data: page.data.map((m: any) =>
+              data: page.data.map((m: { id: string }) =>
                 m.id === data.messageId
                   ? { ...m, deletedForAll: true, content: '', attachmentUrl: null, attachmentName: null, attachmentSize: null, attachmentType: null, reactions: [] }
                   : m,
@@ -133,14 +137,16 @@ export function useSocketEvents() {
       }
     };
 
-    const handleReactionUpdated = (data: { conversationId: string; messageId: string; reactions: any[] }) => {
+    const handleReactionUpdated = (data: { conversationId: string; messageId: string; reactions: unknown[] }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       queryClient.setQueryData(['messages', data.conversationId], (old: any) => {
         if (!old) return old;
         return {
           ...old,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           pages: old.pages.map((page: any) => ({
             ...page,
-            data: page.data.map((m: any) =>
+            data: page.data.map((m: { id: string }) =>
               m.id === data.messageId ? { ...m, reactions: data.reactions } : m,
             ),
           })),
@@ -271,7 +277,7 @@ export function useSocketEvents() {
   }, []);
 
   const editMessage = useCallback(
-    (conversationId: string, messageId: string, content: string, callback?: (res: any) => void) => {
+    (conversationId: string, messageId: string, content: string, callback?: (res: { success: boolean; error?: string }) => void) => {
       const socket = getSocket();
       if (socket) {
         socket.emit('edit_message', { conversationId, messageId, content }, callback);
@@ -281,7 +287,7 @@ export function useSocketEvents() {
   );
 
   const deleteMessage = useCallback(
-    (conversationId: string, messageId: string, mode: 'self' | 'everyone', callback?: (res: any) => void) => {
+    (conversationId: string, messageId: string, mode: 'self' | 'everyone', callback?: (res: { success: boolean; error?: string }) => void) => {
       const socket = getSocket();
       if (socket) {
         socket.emit('delete_message', { conversationId, messageId, mode }, callback);
@@ -291,7 +297,7 @@ export function useSocketEvents() {
   );
 
   const toggleReaction = useCallback(
-    (conversationId: string, messageId: string, emoji: string, callback?: (res: any) => void) => {
+    (conversationId: string, messageId: string, emoji: string, callback?: (res: { success: boolean; error?: string }) => void) => {
       const socket = getSocket();
       if (socket) {
         socket.emit('toggle_reaction', { conversationId, messageId, emoji }, callback);

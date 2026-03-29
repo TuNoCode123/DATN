@@ -4,7 +4,6 @@ import { useChatStore } from './chat-store';
 const SOCKET_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:4000';
 
 let socket: Socket | null = null;
-let connectionPromise: Promise<Socket> | null = null;
 
 export function connectSocket(): Socket {
   // Return existing socket if already connected or connecting

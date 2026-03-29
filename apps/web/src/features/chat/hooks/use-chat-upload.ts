@@ -97,11 +97,11 @@ export function useChatUpload() {
         size: file.size,
         type: file.type,
       };
-    } catch (err: any) {
+    } catch (err: unknown) {
       xhrRef.current = null;
       setUploading(false);
       setProgress(0);
-      const msg = err.message || 'Upload failed';
+      const msg = (err as { message?: string }).message || 'Upload failed';
       setError(msg);
       throw err;
     }

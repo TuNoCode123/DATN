@@ -16,8 +16,6 @@ export function MessageActions({ message, isOwn, onReact, onEdit, onDelete }: Pr
   if (message.deletedForAll || message.type === 'SYSTEM') return null;
 
   const canEdit = isOwn;
-  const oneHourAgo = Date.now() - 60 * 60 * 1000;
-  const canDeleteForEveryone = isOwn && new Date(message.createdAt).getTime() > oneHourAgo;
 
   return (
     <div className="absolute -top-3 right-0 opacity-0 group-hover:opacity-100 transition-opacity flex bg-white border border-gray-200 rounded-lg shadow-sm z-10">

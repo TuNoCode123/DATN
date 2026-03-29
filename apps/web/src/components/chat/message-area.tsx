@@ -119,6 +119,7 @@ export function MessageArea({ conversationId }: Props) {
   useEffect(() => {
     isInitialLoadRef.current = true;
     isAtBottomRef.current = true;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditingMessage(null);
     if (scrollRef.current) {
       scrollRef.current.scrollTop = 0;
@@ -159,17 +160,17 @@ export function MessageArea({ conversationId }: Props) {
         socket.emit(
           'delete_message',
           { conversationId, messageId: deleteTarget.id, mode },
-          (res: any) => {
+          (res: { success: boolean; error?: string }) => {
             if (res.success) {
               if (mode === 'self') {
-                // Remove from cache locally
-                queryClient.setQueryData(['messages', conversationId], (old: any) => {
+                queryClient.setQueryData(['messages', conversationId], (old: unknown) => {
                   if (!old) return old;
+                  const data = old as { pages: Array<{ data: Array<{ id: string }> }> };
                   return {
-                    ...old,
-                    pages: old.pages.map((page: any) => ({
+                    ...data,
+                    pages: data.pages.map((page) => ({
                       ...page,
-                      data: page.data.filter((m: any) => m.id !== deleteTarget.id),
+                      data: page.data.filter((m) => m.id !== deleteTarget.id),
                     })),
                   };
                 });
@@ -195,15 +196,16 @@ export function MessageArea({ conversationId }: Props) {
         socket.emit(
           'toggle_reaction',
           { conversationId, messageId, emoji },
-          (res: any) => {
+          (res: { success: boolean; reactions?: unknown[] }) => {
             if (res.success) {
-              queryClient.setQueryData(['messages', conversationId], (old: any) => {
+              queryClient.setQueryData(['messages', conversationId], (old: unknown) => {
                 if (!old) return old;
+                const data = old as { pages: Array<{ data: Array<{ id: string; reactions?: unknown[] }> }> };
                 return {
-                  ...old,
-                  pages: old.pages.map((page: any) => ({
+                  ...data,
+                  pages: data.pages.map((page) => ({
                     ...page,
-                    data: page.data.map((m: any) =>
+                    data: page.data.map((m) =>
                       m.id === messageId ? { ...m, reactions: res.reactions } : m,
                     ),
                   })),
@@ -219,12 +221,12 @@ export function MessageArea({ conversationId }: Props) {
 
   // ─── Conversation display info ────────────────────────────────────────
   const isGroup = convDetail?.type === 'GROUP';
-  const otherMember = !isGroup ? convDetail?.members?.find((m: any) => m.userId !== user?.id) : null;
+  const otherMember = !isGroup ? convDetail?.members?.find((m: { userId: string }) => m.userId !== user?.id) : null;
   const headerName = isGroup
     ? convDetail?.name
     : otherMember?.user?.displayName || 'Chat';
   const otherUserId = otherMember?.userId || null;
-  const memberIds = isGroup ? convDetail?.members?.map((m: any) => m.userId) || [] : [];
+  const memberIds = isGroup ? convDetail?.members?.map((m: { userId: string }) => m.userId) || [] : [];
   const isOtherOnline = useChatStore((s) => otherUserId ? !!s.onlineUsers[otherUserId] : false);
   const onlineCount = useChatStore((s) =>
     isGroup ? memberIds.filter((id: string) => !!s.onlineUsers[id]).length : 0,
