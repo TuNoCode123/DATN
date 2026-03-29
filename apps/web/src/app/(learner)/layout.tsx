@@ -5,13 +5,15 @@ import { useAuthStore } from '@/lib/auth-store';
 import { api } from '@/lib/api';
 import { Navbar } from '@/components/landing/navbar';
 import { Footer } from '@/components/landing/footer';
+import { ChatBubble } from '@/components/chat/chat-bubble';
 
 export default function LearnerLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { user, setUser } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
 
   // Restore session on mount
   useEffect(() => {
@@ -25,7 +27,8 @@ export default function LearnerLayout({
           localStorage.removeItem('refreshToken');
         });
     }
-  }, [user, setUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="min-h-screen bg-cream flex flex-col">
@@ -34,6 +37,7 @@ export default function LearnerLayout({
         {children}
       </main>
       <Footer />
+      <ChatBubble />
     </div>
   );
 }

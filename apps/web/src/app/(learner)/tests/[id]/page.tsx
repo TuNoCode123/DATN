@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Checkbox, Select, message } from 'antd';
+import { Checkbox, Select, App } from 'antd';
 import {
   Clock,
   Users,
@@ -78,6 +78,7 @@ function getQuestionTypeBadge(type: string): string {
 }
 
 export default function TestDetailPage() {
+  const { message } = App.useApp();
   const params = useParams();
   const router = useRouter();
   const testId = params.id as string;

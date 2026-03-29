@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { message, Modal } from "antd";
+import { App, Modal } from "antd";
 import { X, Info, ChevronRight, ChevronLeft } from "lucide-react";
 import { api } from "@/lib/api";
 import { LayoutRouter } from "@/components/attempt-layouts/layout-router";
@@ -24,6 +24,7 @@ interface AttemptFromAPI {
 
 // ─── AttemptContent ──────────────────────────────────────
 function AttemptContent() {
+  const { message } = App.useApp();
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();

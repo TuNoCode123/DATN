@@ -13,6 +13,20 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
+  async search(query: string, limit = 10) {
+    return this.prisma.user.findMany({
+      where: {
+        isActive: true,
+        OR: [
+          { displayName: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      select: { id: true, displayName: true, email: true, avatarUrl: true },
+      take: limit,
+    });
+  }
+
   async create(data: {
     email: string;
     passwordHash: string;

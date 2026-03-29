@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { MessageSquare, ArrowUpDown } from 'lucide-react';
-import { message } from 'antd';
+import { App } from 'antd';
 import { useAuthStore } from '@/lib/auth-store';
 import { CommentInput } from './comment-input';
 import { CommentItem } from './comment-item';
@@ -20,6 +20,7 @@ interface CommentSectionProps {
 }
 
 export function CommentSection({ testId }: CommentSectionProps) {
+  const { message } = App.useApp();
   const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
   const user = useAuthStore((s) => s.user);
 

@@ -13,6 +13,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/auth-store';
 import { CommentInput } from './comment-input';
 import { CommentReplies } from './comment-replies';
+import { UserProfilePopover } from './user-profile-popover';
 import type { Comment } from './types';
 import { timeAgo, getInitials } from './types';
 
@@ -97,14 +98,16 @@ export function CommentItem({
   return (
     <div className={indent ? 'ml-11' : ''}>
       <div className="flex gap-3 py-3">
-        <Avatar size="default" className="shrink-0">
-          {comment.user.avatarUrl ? (
-            <AvatarImage src={comment.user.avatarUrl} />
-          ) : null}
-          <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
-            {getInitials(comment.user.displayName)}
-          </AvatarFallback>
-        </Avatar>
+        <UserProfilePopover user={comment.user}>
+          <Avatar size="default" className="shrink-0">
+            {comment.user.avatarUrl ? (
+              <AvatarImage src={comment.user.avatarUrl} />
+            ) : null}
+            <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+              {getInitials(comment.user.displayName)}
+            </AvatarFallback>
+          </Avatar>
+        </UserProfilePopover>
 
         <div className="flex-1 min-w-0">
           {/* Header */}

@@ -427,6 +427,151 @@ h1, h2, h3, h4, h5, h6 {
   display: none;
 }
 
+/* ─── Flashcard 3D Flip ─── */
+
+.flashcard-perspective {
+  perspective: 1200px;
+}
+
+.flashcard-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.4, 0.0, 0.2, 1);
+  will-change: transform;
+}
+
+.flashcard-inner.flipped {
+  transform: rotateY(180deg);
+}
+
+.flashcard-face {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.flashcard-back {
+  transform: rotateY(180deg);
+}
+
+/* Neo-brutalist base card (matches site style) */
+.brutal-card {
+  border-radius: 16px;
+  border: 2.5px solid var(--border-strong);
+  box-shadow: 4px 4px 0px var(--shadow-brutal);
+  background: white;
+  transition: all 200ms ease-out;
+}
+
+.brutal-card:hover {
+  box-shadow: 6px 6px 0px var(--shadow-brutal);
+  transform: translateY(-2px);
+}
+
+/* Brutal button — pill shape, dark border, offset shadow */
+.brutal-btn {
+  border-radius: 9999px;
+  border: 2.5px solid var(--border-strong);
+  box-shadow: 3px 3px 0px var(--shadow-brutal);
+  transition: all 150ms ease-out;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.brutal-btn:hover {
+  box-shadow: 4px 4px 0px var(--shadow-brutal);
+  transform: translateY(-1px);
+}
+
+.brutal-btn:active {
+  box-shadow: 1px 1px 0px var(--shadow-brutal);
+  transform: translateY(2px);
+}
+
+/* Brutal btn filled variant */
+.brutal-btn-fill {
+  border-radius: 9999px;
+  border: 2.5px solid var(--border-strong);
+  box-shadow: 3px 3px 0px var(--shadow-brutal);
+  transition: all 150ms ease-out;
+  cursor: pointer;
+  font-weight: 700;
+  background: var(--primary);
+  color: white;
+}
+
+.brutal-btn-fill:hover {
+  box-shadow: 4px 4px 0px var(--shadow-brutal);
+  transform: translateY(-1px);
+}
+
+.brutal-btn-fill:active {
+  box-shadow: 1px 1px 0px var(--shadow-brutal);
+  transform: translateY(2px);
+}
+
+/* Hover lift on flashcard — desktop only */
+@media (hover: hover) {
+  .flashcard-hover {
+    transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+  }
+  .flashcard-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 6px 6px 0px var(--shadow-brutal);
+  }
+  .flashcard-hover:hover .flashcard-inner:not(.flipped) {
+    transform: rotateY(2deg);
+  }
+  .flashcard-hover:hover .flashcard-inner.flipped {
+    transform: rotateY(178deg);
+  }
+}
+
+/* Slide transitions for card navigation */
+.card-slide-enter {
+  animation: cardSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.card-slide-exit-left {
+  animation: cardSlideOutLeft 0.3s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+}
+
+.card-slide-exit-right {
+  animation: cardSlideOutRight 0.3s cubic-bezier(0.55, 0, 1, 0.45) forwards;
+}
+
+.card-slide-enter-from-left {
+  animation: cardSlideInFromLeft 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.card-slide-enter-from-right {
+  animation: cardSlideInFromRight 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes cardSlideOutLeft {
+  0% { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(-60%) scale(0.92); opacity: 0; }
+}
+
+@keyframes cardSlideOutRight {
+  0% { transform: translateX(0) scale(1); opacity: 1; }
+  100% { transform: translateX(60%) scale(0.92); opacity: 0; }
+}
+
+@keyframes cardSlideInFromRight {
+  0% { transform: translateX(40%) scale(0.95); opacity: 0; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+@keyframes cardSlideInFromLeft {
+  0% { transform: translateX(-40%) scale(0.95); opacity: 0; }
+  100% { transform: translateX(0) scale(1); opacity: 1; }
+}
+
+/* Generic enter (for first load) */
+@keyframes cardSlideIn {
+  0% { transform: scale(0.96); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

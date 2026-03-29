@@ -10,6 +10,8 @@ import { TagsModule } from './tags/tags.module';
 import { CommentsModule } from './comments/comments.module';
 import { AdminModule } from './admin/admin.module';
 import { UploadModule } from './upload/upload.module';
+import { ChatModule } from './chat/chat.module';
+import { FlashcardsModule } from './flashcards/flashcards.module';
 
 @Module({
   imports: [
@@ -24,6 +26,8 @@ import { UploadModule } from './upload/upload.module';
     CommentsModule,
     AdminModule,
     UploadModule,
+    ChatModule,
+    FlashcardsModule,
   ],
 })
 export class AppModule {}
