@@ -140,7 +140,7 @@ export function useCreateSection() {
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: (data: { testId: string; payload: Record<string, any> }) =>
-      adminSectionsApi.create(data.testId, data.payload),
+      adminSectionsApi.create(data.testId, data.payload as Parameters<typeof adminSectionsApi.create>[1]),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
     },
@@ -177,7 +177,7 @@ export function useCreatePassage() {
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: (data: { sectionId: string; testId: string; payload: Record<string, any> }) =>
-      adminPassagesApi.create(data.sectionId, data.payload),
+      adminPassagesApi.create(data.sectionId, data.payload as Parameters<typeof adminPassagesApi.create>[1]),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
     },
@@ -203,7 +203,7 @@ export function useCreateGroup() {
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: (data: { sectionId: string; testId: string; payload: Record<string, any> }) =>
-      adminGroupsApi.create(data.sectionId, data.payload),
+      adminGroupsApi.create(data.sectionId, data.payload as Parameters<typeof adminGroupsApi.create>[1]),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
     },
@@ -240,7 +240,7 @@ export function useCreateQuestions() {
   return useMutation({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: (data: { groupId: string; testId: string; questions: Record<string, any>[] }) =>
-      adminQuestionsApi.create(data.groupId, data.questions),
+      adminQuestionsApi.create(data.groupId, data.questions as Parameters<typeof adminQuestionsApi.create>[1]),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
     },

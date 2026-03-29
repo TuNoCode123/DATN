@@ -14,6 +14,18 @@ const QUALITY_OPTIONS = [
   { value: 5, label: 'Easy', bg: 'bg-emerald-500' },
 ];
 
+interface ReviewFlashcard {
+  word: string;
+  ipa?: string;
+  meaning: string;
+  exampleSentence?: string;
+  id: string;
+}
+
+interface ReviewCard {
+  flashcard: ReviewFlashcard;
+}
+
 type Phase = 'stats' | 'review' | 'complete';
 
 export default function ReviewPage() {
@@ -24,7 +36,7 @@ export default function ReviewPage() {
 
   const [phase, setPhase] = useState<Phase>('stats');
   const [sessionId, setSessionId] = useState('');
-  const [cards, setCards] = useState<unknown[]>([]);
+  const [cards, setCards] = useState<ReviewCard[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [reviewedCount, setReviewedCount] = useState(0);
