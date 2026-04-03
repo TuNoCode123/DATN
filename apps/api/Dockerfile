@@ -50,6 +50,8 @@ RUN apk add --no-cache openssl curl
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
+ENV CHECKPOINT_DISABLE=1
 
 COPY --from=builder /app/deploy/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./dist
