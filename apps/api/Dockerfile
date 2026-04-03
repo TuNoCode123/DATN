@@ -46,7 +46,7 @@ RUN PRISMA_PKG=$(find /app/node_modules/.pnpm -path '*/@prisma/client/package.js
 
 # ── Production stage ─────────────────────────────────────────
 FROM node:20-alpine AS runner
-RUN apk add --no-cache openssl
+RUN apk add --no-cache openssl curl
 WORKDIR /app
 
 ENV NODE_ENV=production
