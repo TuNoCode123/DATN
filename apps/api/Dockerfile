@@ -44,6 +44,11 @@ RUN PRISMA_PKG=$(find /app/node_modules/.pnpm -path '*/@prisma/client/package.js
  && cp -rL "$PRISMA_PKG" /app/deploy/node_modules/@prisma/client \
  && echo "Copied @prisma/client from: $PRISMA_PKG"
 
+# Copy prisma CLI (devDep) into deploy so we can run migrations at startup
+RUN PRISMA_CLI=$(find /app/node_modules/.pnpm -path '*/prisma/package.json' ! -path '*/@prisma/*' -exec dirname {} \; | head -1) \
+ && cp -rL "$PRISMA_CLI" /app/deploy/node_modules/prisma \
+ && echo "Copied prisma CLI from: $PRISMA_CLI"
+
 # ── Production stage ─────────────────────────────────────────
 FROM node:20-alpine AS runner
 RUN apk add --no-cache openssl curl
@@ -59,4 +64,5 @@ COPY --from=builder /app/apps/api/prisma ./prisma
 
 EXPOSE 4000
 
-CMD ["node", "dist/main"]
+# Run migrations then start the app
+CMD ["sh", "-c", "npx prisma migrate deploy --schema ./prisma/schema.prisma && node dist/main"]
