@@ -179,11 +179,23 @@ export function useSocketEvents() {
     socket.on('message_deleted', handleMessageDeleted);
     socket.on('reaction_updated', handleReactionUpdated);
 
-    // Fetch online users when connected (or immediately if already connected)
+    // On connect/reconnect: catch up on missed messages and re-join active room
+    const handleConnect = () => {
+      fetchOnlineUsers();
+      // Refetch conversation list to catch up on anything missed
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      // Re-join active conversation room if viewing one
+      const activeConv = useChatStore.getState().activeConversationId;
+      if (activeConv) {
+        socket.emit('join_conversation', { conversationId: activeConv });
+        queryClient.invalidateQueries({ queryKey: ['messages', activeConv] });
+      }
+    };
+
     if (socket.connected) {
       fetchOnlineUsers();
     }
-    socket.on('connect', fetchOnlineUsers);
+    socket.on('connect', handleConnect);
 
     return () => {
       socket.off('new_message', handleNewMessage);
@@ -199,7 +211,7 @@ export function useSocketEvents() {
       socket.off('message_edited', handleMessageEdited);
       socket.off('message_deleted', handleMessageDeleted);
       socket.off('reaction_updated', handleReactionUpdated);
-      socket.off('connect', fetchOnlineUsers);
+      socket.off('connect', handleConnect);
       disconnectSocket();
     };
   }, [queryClient, addTypingUser, removeTypingUser, setUserOnline, setUserOffline, setOnlineUsers]);

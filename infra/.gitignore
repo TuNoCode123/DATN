@@ -1,0 +1,26 @@
+# Terraform state (stored in S3, not locally)
+*.tfstate
+*.tfstate.*
+
+# Terraform secrets (passwords, IPs)
+terraform.tfvars
+
+# Terraform working directories
+.terraform/
+.terraform.lock.hcl
+
+# Plan output files
+*.tfplan
+tfplan
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files (used for local testing)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+*pem

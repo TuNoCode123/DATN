@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, Clock, Users, MessageSquare, ChevronLeft, ChevronRight, BarChart3, Info, User } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { Search, Clock, Users, MessageSquare, ChevronLeft, ChevronRight, BarChart3, Info, User, X } from "lucide-react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
@@ -85,12 +86,22 @@ interface TestFromAPI {
   tags: { tag: { id: string; name: string; slug: string } }[];
 }
 
-export default function TestsPage() {
+function TestsContent() {
+  const searchParams = useSearchParams();
+  const [linkedBanner, setLinkedBanner] = useState(false);
   const [activeCategory, setActiveCategory] = useState("all");
   const [activeFormat, setActiveFormat] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [inputValue, setInputValue] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+
+  useEffect(() => {
+    if (searchParams.get("linked") === "1") {
+      setLinkedBanner(true);
+      // Clean up URL without reloading
+      window.history.replaceState({}, "", "/tests");
+    }
+  }, [searchParams]);
 
   const { data, isLoading } = useQuery({
     queryKey: ["tests", activeCategory, activeFormat, searchQuery, currentPage],
@@ -130,6 +141,17 @@ export default function TestsPage() {
   return (
     <div className="flex gap-6 items-start">
       <div className="flex-1 min-w-0">
+        {linkedBanner && (
+          <div className="brutal-card bg-blue-50 border-blue-300 p-4 mb-4 flex items-center justify-between">
+            <p className="text-sm text-blue-800">
+              Your social login has been linked to your existing account. You can now sign in with either method.
+            </p>
+            <button onClick={() => setLinkedBanner(false)} className="text-blue-400 hover:text-blue-600 cursor-pointer">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         <h1 className="text-3xl font-extrabold text-foreground mb-6">Test Library</h1>
 
         {/* Category filter */}
@@ -294,5 +316,13 @@ export default function TestsPage() {
 
       <UserSidebar />
     </div>
+  );
+}
+
+export default function TestsPage() {
+  return (
+    <Suspense>
+      <TestsContent />
+    </Suspense>
   );
 }

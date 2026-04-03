@@ -1,83 +1,106 @@
+# =============================================================================
+# DEPLOY API — Build Docker image → Push to ECR → Deploy to ECS
+# =============================================================================
+# Triggered on push to main when API code changes.
+# Uses OIDC for AWS auth (no stored credentials).
+# Performs rolling deployment (zero downtime).
+# =============================================================================
+
 name: Deploy API
 
+# Trigger: run when these files change on the main branch
 on:
   push:
     branches: [main]
     paths:
-      - 'apps/api/**'
-      - '.github/workflows/deploy-api.yml'
+      - 'apps/api/**'                        # API source code changed
+      - 'packages/**'                         # Shared packages changed
+      - '.github/workflows/deploy-api.yml'    # This workflow changed
 
+# Environment variables used across all steps
 env:
-  AWS_REGION: ap-southeast-1
-  ECR_REPOSITORY: ielts-ai-api
-  ECS_CLUSTER: ielts-ai-cluster
-  ECS_SERVICE: ielts-api
+  AWS_REGION: ap-southeast-2        # Sydney (must match Terraform config)
+  ECR_REPOSITORY: ielts-ai-api      # ECR repository name (from Terraform ECR module)
+  ECS_CLUSTER: ielts-ai-cluster     # ECS cluster name (from Terraform ECS module)
+  ECS_SERVICE: ielts-ai-api         # ECS service name (from Terraform ECS module)
 
+# OIDC permissions: allows GitHub to request temporary AWS credentials
 permissions:
-  id-token: write
-  contents: read
+  id-token: write    # Needed for OIDC token exchange with AWS
+  contents: read     # Needed to checkout repository code
 
 jobs:
   build-and-deploy:
     name: Build → Push ECR → Deploy ECS
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Clone the repository
       - uses: actions/checkout@v4
 
+      # Step 2: Authenticate to AWS using OIDC (no stored access keys!)
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}  # IAM role from Terraform IAM module
           aws-region: ${{ env.AWS_REGION }}
 
+      # Step 3: Docker login to ECR (private Docker registry)
       - name: Login to Amazon ECR
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Build and push Docker image
+      # Step 4: Set up Docker Buildx (enables build caching)
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - uses: docker/build-push-action@v6
+      # Step 5: Build and push Docker image with commit SHA tag
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
         with:
-          context: .
-          file: apps/api/Dockerfile
-          push: true
+          context: .                    # Build context is repo root (for monorepo)
+          file: apps/api/Dockerfile     # Dockerfile path
+          push: true                    # Push to ECR after building
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha          # Use GitHub Actions cache for faster builds
+          cache-to: type=gha,mode=max   # Save all layers to cache
 
+      # Step 6: Get current task definition from ECS
       - name: Download current task definition
         run: |
           aws ecs describe-task-definition \
-            --task-definition ielts-api \
+            --task-definition ielts-ai-api \
             --query taskDefinition \
             > task-definition.json
 
+      # Step 7: Update task definition JSON with new image tag
       - name: Update task definition with new image
         id: task-def
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: task-definition.json
-          container-name: api
+          container-name: api           # Must match container name in task definition
           image: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
+      # Step 8: Deploy new task definition to ECS (rolling update)
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true
+          wait-for-service-stability: true  # Wait until new tasks pass health checks
 
+      # Step 9: Run Prisma database migrations as a one-off ECS task
       - name: Run database migrations
         run: |
           TASK_ARN=$(aws ecs run-task \
             --cluster $ECS_CLUSTER \
-            --task-definition ielts-api-migrate \
+            --task-definition ielts-ai-api-migrate \
             --launch-type EC2 \
             --query 'tasks[0].taskArn' \
             --output text)
           echo "Migration task: $TASK_ARN"
           aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
+          echo "Migration completed successfully"

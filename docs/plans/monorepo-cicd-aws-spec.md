@@ -1,24 +1,36 @@
 # IELTS AI Platform — Enterprise AWS Infrastructure Spec
 
+> **Domain**: `neu-study.online` (registered externally, NS → Route 53)
+> **Subdomains**: `api.neu-study.online` (backend), `web.neu-study.online` (frontend)
+> **Region**: `ap-southeast-2` (Sydney) for all services
+> **Cognito**: Separate Terraform (existing), referenced via variables
+
 ## 1. High-Level Architecture Diagram
 
 ```
                             ┌─────────────────────────┐
                             │     Route 53 (DNS)       │
-                            │  ielts-platform.com      │
+                            │  neu-study.online        │
+                            │  (hosted zone, external  │
+                            │   registrar NS → R53)    │
                             └────────┬────────────────┘
                                      │
-                            ┌────────▼────────────────┐
-                            │     CloudFront CDN       │
-                            │  Edge caching, WAF,      │
-                            │  SSL termination          │
-                            │                          │
-                            │  Behaviors:              │
-                            │  /api/*  → ALB origin    │
-                            │  /*      → ALB origin    │
-                            │  /assets → S3 origin     │
-                            └────────┬────────────────┘
-                                     │
+                    ┌────────────────┼────────────────────┐
+                    │                                     │
+       api.neu-study.online               web.neu-study.online
+       (A record → ALB)                   (A record → CloudFront)
+                    │                                     │
+                    │                     ┌───────────────▼───────────┐
+                    │                     │     CloudFront CDN        │
+                    │                     │  web.neu-study.online     │
+                    │                     │  Edge caching, WAF        │
+                    │                     │                           │
+                    │                     │  Behaviors:               │
+                    │                     │  /_next/static/* → cache  │
+                    │                     │  /* → ALB origin (no      │
+                    │                     │       cache, SSR)         │
+                    │                     └───────────────┬───────────┘
+                    │                                     │
   ┌──────────────────────────────────▼──────────────────────────────────────────┐
   │                            VPC  (10.0.0.0/16)                              │
   │                                                                            │
@@ -27,15 +39,15 @@
   │  │  ┌────────────────────────────────────────────────────────────────┐   │  │
   │  │  │           Application Load Balancer (ALB)                     │   │  │
   │  │  │                                                                │   │  │
-  │  │  │   Listener :443 (HTTPS — ACM cert)                            │   │  │
-  │  │  │   ┌──────────────────┐  ┌──────────────────────────────────┐  │   │  │
-  │  │  │   │ /api/*           │  │ /* (default)                     │  │   │  │
-  │  │  │   │ → API Target Grp │  │ → Web Target Group               │  │   │  │
-  │  │  │   └────────┬─────────┘  └────────┬─────────────────────────┘  │   │  │
-  │  │  │            │                      │                            │   │  │
-  │  │  │   /socket.io/*                                                 │   │  │
-  │  │  │   → API Target Grp (WebSocket sticky)                         │   │  │
-  │  │  └────────────┼──────────────────────┼────────────────────────────┘   │  │
+  │  │  │   Listener :443 (HTTPS — ACM wildcard *.neu-study.online)     │   │  │
+  │  │  │   ┌──────────────────────┐  ┌──────────────────────────────┐  │   │  │
+  │  │  │   │ Host: api.neu-study  │  │ Default                      │  │   │  │
+  │  │  │   │ .online              │  │ → Web Target Group            │  │   │  │
+  │  │  │   │ → API Target Grp     │  │ (CloudFront origin)          │  │   │  │
+  │  │  │   │ (sticky sessions)    │  └──────────────────────────────┘  │   │  │
+  │  │  │   └────────┬─────────────┘                                    │   │  │
+  │  │  │            │                                                   │   │  │
+  │  │  └────────────┼───────────────────────────────────────────────────┘   │  │
   │  │               │                      │                                │  │
   │  │  ┌────────────┤    NAT Gateway ──────┤──── (for private subnet       │  │
   │  │  │            │    outbound traffic) │      internet access)         │  │
@@ -81,7 +93,7 @@
   └─────┼──────────────────────────────────────────────────────────────────────┘
         │
   ┌─────▼──────────────────────────────────────────────────────────────────────┐
-  │                        Async / Event-Driven Layer                          │
+  │                 Async / Event-Driven Layer  [FUTURE — NOT YET DEPLOYED]    │
   │                                                                            │
   │  ┌──────────┐   ┌──────────────┐   ┌────────────────┐   ┌──────────────┐  │
   │  │   SNS    │──▶│   SQS        │──▶│   Lambda       │   │     SES      │  │
@@ -107,13 +119,13 @@
   └────────────────────────────────────────────────────────────────────────────┘
 
   ┌────────────────────────────────────────────────────────────────────────────┐
-  │                         Observability & Monitoring                         │
+  │                  Observability & Monitoring  [FUTURE]                      │
   │                                                                            │
-  │  CloudWatch Logs  ←── ECS tasks, Lambda, ALB access logs                  │
+  │  CloudWatch Logs  ←── ECS tasks, ALB access logs                          │
   │  CloudWatch Metrics ← ECS CPU/Mem, RDS connections, ALB latency           │
   │  CloudWatch Alarms → SNS → Email alerts                                   │
-  │  X-Ray Tracing (optional) ← API request tracing                           │
   │                                                                            │
+  │  (ECS log groups created in initial deploy; alarms/dashboards are future)  │
   └────────────────────────────────────────────────────────────────────────────┘
 
   ┌────────────────────────────────────────────────────────────────────────────┐
@@ -131,25 +143,25 @@
 
 ### 2.1 Service Inventory
 
-| Component | AWS Service | Justification |
-|-----------|------------|---------------|
-| **Frontend** | Next.js on ECS (EC2) | SSR requires server; container orchestration via ECS |
-| **Backend API** | NestJS on ECS (EC2) | Containerized, auto-scaling, health-checked |
-| **Database** | RDS PostgreSQL | Managed backups, encryption, private subnet isolation |
-| **CDN** | CloudFront | Edge caching, DDoS protection, global performance |
-| **Load Balancer** | ALB | Path-based routing, health checks, SSL termination |
-| **DNS** | Route 53 | Hosted zone, alias records to CloudFront |
-| **SSL** | ACM | Free managed certificates, auto-renewal |
-| **Container Registry** | ECR | Private Docker image storage, lifecycle policies |
-| **File Storage** | S3 | Static assets, user uploads, presigned URLs |
-| **Cache / Pub-Sub** | ElastiCache Redis | Socket.IO adapter for WebSocket fanout across ECS tasks, user presence, caching |
-| **Email** | SES | Transactional emails, templates |
-| **Event Bus** | SNS | Fan-out notifications to multiple queues |
-| **Job Queue** | SQS + DLQ | Reliable async processing, retry with dead-letter |
-| **Workers** | Lambda | Serverless async processors, pay-per-invocation |
-| **Monitoring** | CloudWatch | Logs, metrics, alarms, dashboards |
-| **IaC** | Terraform | Reproducible, version-controlled infrastructure |
-| **CI/CD** | GitHub Actions | Build, test, deploy automation |
+| Component | AWS Service | Status | Justification |
+|-----------|------------|--------|---------------|
+| **Frontend** | Next.js on ECS (EC2) | **Initial** | SSR requires server; container orchestration via ECS |
+| **Backend API** | NestJS on ECS (EC2) | **Initial** | Containerized, auto-scaling, health-checked |
+| **Database** | RDS PostgreSQL | **Initial** | Managed backups, encryption, private subnet isolation |
+| **CDN** | CloudFront | **Initial** | Edge caching for web.neu-study.online, DDoS protection |
+| **Load Balancer** | ALB | **Initial** | Host-based routing (api./web.), health checks, SSL |
+| **DNS** | Route 53 | **Initial** | Hosted zone (external registrar NS → R53), alias records |
+| **SSL** | ACM | **Initial** | Wildcard certs *.neu-study.online (2 regions) |
+| **Container Registry** | ECR | **Initial** | Private Docker image storage, lifecycle policies |
+| **File Storage** | S3 | **Initial** | User uploads via presigned URLs |
+| **Cache / Pub-Sub** | ElastiCache Redis | **Initial** | Socket.IO adapter, user presence, caching |
+| **Email** | SES | *Future* | Transactional emails, templates |
+| **Event Bus** | SNS | *Future* | Fan-out notifications to multiple queues |
+| **Job Queue** | SQS + DLQ | *Future* | Reliable async processing, retry with dead-letter |
+| **Workers** | Lambda | *Future* | Serverless async processors, pay-per-invocation |
+| **Monitoring** | CloudWatch | *Future* | Alarms, dashboards (log groups created with ECS) |
+| **IaC** | Terraform | **Initial** | Reproducible, version-controlled infrastructure |
+| **CI/CD** | GitHub Actions | **Initial** | Build, test, deploy automation |
 
 ### 2.2 Why ECS EC2 (not Fargate)
 
@@ -173,12 +185,12 @@ For a thesis project demonstrating cloud engineering depth:
 VPC: 10.0.0.0/16 (65,536 IPs)
 
 Public Subnets (ALB, NAT Gateway):
-  ├── 10.0.1.0/24  — ap-southeast-1a  (256 IPs)
-  └── 10.0.2.0/24  — ap-southeast-1b  (256 IPs)
+  ├── 10.0.1.0/24  — ap-southeast-2a  (256 IPs)
+  └── 10.0.2.0/24  — ap-southeast-2b  (256 IPs)
 
 Private Subnets (ECS, RDS, Lambda):
-  ├── 10.0.10.0/24 — ap-southeast-1a  (256 IPs)
-  └── 10.0.11.0/24 — ap-southeast-1b  (256 IPs)
+  ├── 10.0.10.0/24 — ap-southeast-2a  (256 IPs)
+  └── 10.0.11.0/24 — ap-southeast-2b  (256 IPs)
 ```
 
 ### 3.2 Route Tables
@@ -297,16 +309,21 @@ ECS Cluster: "ielts-ai-cluster"
       └── Target Group: tg-web (ALB)
 ```
 
-### 4.2 ALB Routing Rules
+### 4.2 ALB Routing Rules (Host-Based)
 
 ```
-ALB Listener :443 (HTTPS)
-  ├── Rule 1: Path /api/*       → Target Group: tg-api   (priority 10)
-  ├── Rule 2: Path /socket.io/* → Target Group: tg-api   (priority 20, sticky sessions)
-  └── Default:                  → Target Group: tg-web   (priority 99)
+ALB Listener :443 (HTTPS — ACM wildcard *.neu-study.online)
+  ├── Rule 1: Host api.neu-study.online → Target Group: tg-api  (priority 10)
+  │            (sticky sessions enabled for WebSocket/Socket.IO)
+  └── Default:                          → Target Group: tg-web  (priority 99)
+              (serves as CloudFront origin for web.neu-study.online)
 
 ALB Listener :80 (HTTP)
   └── Redirect → HTTPS 443
+
+DNS routing:
+  api.neu-study.online → A (alias) → ALB   (direct, WebSocket-friendly)
+  web.neu-study.online → A (alias) → CloudFront → ALB (cached static assets)
 ```
 
 ### 4.3 Auto Scaling
@@ -1386,6 +1403,11 @@ Redis stores ONLY ephemeral chat state:
 
 ## 6. Async / Event-Driven Architecture (SNS/SQS/Lambda)
 
+> **STATUS: FUTURE** — This entire section is planned but **not deployed in the initial release**.
+> The Terraform modules (`messaging/`, `lambda/`, SES) will be added when async processing
+> is needed (e.g., email notifications, file processing). For now, the API handles everything
+> synchronously.
+
 ### 6.1 SNS Topics
 
 | Topic | Publishers | Purpose |
@@ -1438,9 +1460,9 @@ Lambda: file-processor
 
 ```
 SES Configuration:
-  ├── Verified domain: ielts-platform.com
+  ├── Verified domain: neu-study.online
   ├── DKIM: enabled
-  ├── From: noreply@ielts-platform.com
+  ├── From: noreply@neu-study.online
   └── Templates: welcome, password-reset, test-result
 ```
 
@@ -1459,21 +1481,29 @@ User submits test → API saves result to RDS
 
 ## 7. CloudFront + S3 Design
 
-### 7.1 CloudFront Distribution
+### 7.1 CloudFront Distribution (web.neu-study.online only)
+
+CloudFront serves the **frontend only**. The API (`api.neu-study.online`) connects directly to ALB for WebSocket compatibility and lower latency.
 
 ```
 Distribution: d1234.cloudfront.net
-  ├── CNAME: ielts-platform.com
-  ├── SSL: ACM certificate (us-east-1 for CloudFront)
-  ├── WAF: AWS WAF (rate limiting, SQL injection protection)
+  ├── CNAME: web.neu-study.online
+  ├── SSL: ACM wildcard *.neu-study.online (us-east-1 — required for CloudFront)
+  ├── WAF: AWS WAF (rate limiting: 2000 req/5min per IP)
   │
-  ├── Origin 1: ALB (for dynamic content)
-  │   ├── Behavior: /api/*    → ALB, no cache, all methods, CORS headers
-  │   ├── Behavior: /socket.io/* → ALB, no cache, WebSocket upgrade
-  │   └── Behavior: /* (default) → ALB, cache static assets (/_next/static/*)
+  ├── Origin: ALB (web target group, HTTPS)
+  │   ├── Behavior: /_next/static/*  → cache 365 days (immutable hashed assets)
+  │   ├── Behavior: /favicon.ico     → cache 1 day
+  │   ├── Behavior: /robots.txt      → cache 1 day
+  │   └── Behavior: /* (default)     → no cache, forward all headers/cookies (SSR)
   │
-  └── Origin 2: S3 (for uploaded assets)
-      └── Behavior: /uploads/* → S3 bucket, cache 7 days
+  └── Note: /uploads/* served via presigned S3 URLs from the API,
+            not through CloudFront
+
+ACM Certificates (2 wildcard certs needed):
+  1. *.neu-study.online in ap-southeast-2 → ALB (api.neu-study.online)
+  2. *.neu-study.online in us-east-1      → CloudFront (web.neu-study.online)
+  Both auto-validated via Route 53 DNS records.
 ```
 
 ### 7.2 S3 Buckets
@@ -1481,7 +1511,7 @@ Distribution: d1234.cloudfront.net
 | Bucket | Purpose | Access | Lifecycle |
 |--------|---------|--------|-----------|
 | `ielts-ai-uploads-prod` | User file uploads (audio, images) | Presigned URLs via API | Move to IA after 90 days |
-| `ielts-ai-assets-prod` | Static assets served via CloudFront | CloudFront OAI | Immutable, long cache |
+| `ielts-ai-assets-prod` | Static assets (media, shared files) | Presigned URLs / API | Immutable, long cache |
 | `ielts-ai-terraform-state` | Terraform remote state | IAM only | Versioning enabled |
 
 ### 7.3 Presigned URL Flow
@@ -1493,7 +1523,7 @@ Distribution: d1234.cloudfront.net
 4. Frontend → PUT directly to S3 presigned URL (no API bandwidth)
 5. Frontend → POST /api/uploads/complete { fileKey }
 6. API publishes to SNS "file-process" → Lambda processes file
-7. File available at: https://ielts-platform.com/uploads/{fileKey}
+7. File available via presigned GET URL from API
 ```
 
 ---
@@ -1532,7 +1562,7 @@ on:
       - '.github/workflows/deploy-api.yml'
 
 env:
-  AWS_REGION: ap-southeast-1
+  AWS_REGION: ap-southeast-2
   ECR_REPOSITORY: ielts-ai-api
   ECS_CLUSTER: ielts-ai-cluster
   ECS_SERVICE: ielts-api
@@ -1615,7 +1645,7 @@ on:
       - '.github/workflows/deploy-web.yml'
 
 env:
-  AWS_REGION: ap-southeast-1
+  AWS_REGION: ap-southeast-2
   ECR_REPOSITORY: ielts-ai-web
   ECS_CLUSTER: ielts-ai-cluster
   ECS_SERVICE: ielts-web
@@ -1727,7 +1757,7 @@ on:
     paths: ['infra/**']
 
 env:
-  AWS_REGION: ap-southeast-1
+  AWS_REGION: ap-southeast-2
   TF_VERSION: "1.9"
 
 permissions:
@@ -1779,7 +1809,7 @@ jobs:
         run: terraform apply -auto-approve tfplan
 ```
 
-### 8.6 Lambda Deploy — `.github/workflows/deploy-lambdas.yml`
+### 8.6 Lambda Deploy — `.github/workflows/deploy-lambdas.yml` [FUTURE]
 
 ```yaml
 name: Deploy Lambdas
@@ -1818,7 +1848,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ap-southeast-1
+          aws-region: ap-southeast-2
 
       - name: Deploy Lambda
         working-directory: apps/lambdas/${{ matrix.function }}
@@ -1840,24 +1870,17 @@ infra/
 ├── variables.tf               # All input variables
 ├── outputs.tf                 # All outputs
 ├── terraform.tfvars           # Your values (.gitignored)
+├── terraform.tfvars.example   # Template with placeholder values
 ├── backend.tf                 # S3 remote state
+│
+├── bootstrap/                 # One-time: S3 state bucket + DynamoDB lock
+│   └── main.tf
 │
 ├── modules/
 │   ├── networking/            # VPC, subnets, IGW, NAT, route tables, SGs
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
-│   │
-│   ├── alb/                   # ALB, listeners, target groups, ACM cert
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── outputs.tf
-│   │
-│   ├── ecs/                   # ECS cluster, capacity provider, ASG, launch template
-│   │   ├── main.tf            # services, task definitions
-│   │   ├── variables.tf
-│   │   ├── outputs.tf
-│   │   └── user_data.sh
 │   │
 │   ├── ecr/                   # ECR repositories + lifecycle policies
 │   │   ├── main.tf
@@ -1869,46 +1892,66 @@ infra/
 │   │   ├── variables.tf
 │   │   └── outputs.tf
 │   │
-│   ├── s3/                    # S3 buckets (uploads, assets)
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── outputs.tf
-│   │
-│   ├── cloudfront/            # CloudFront distribution, WAF, OAI
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── outputs.tf
-│   │
-│   ├── messaging/             # SNS topics, SQS queues, DLQs
-│   │   ├── main.tf
-│   │   ├── variables.tf
-│   │   └── outputs.tf
-│   │
 │   ├── elasticache/           # ElastiCache Redis (Socket.IO adapter, presence, cache)
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
 │   │
-│   ├── lambda/                # Lambda functions, IAM roles, event source mappings
+│   ├── acm/                   # ACM wildcard cert *.neu-study.online + DNS validation
+│   │   ├── main.tf            # (used twice: ap-southeast-2 for ALB, us-east-1 for CF)
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   │
+│   ├── alb/                   # ALB, host-based routing, target groups
+│   │   ├── main.tf            # api.neu-study.online → API TG, default → Web TG
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   │
+│   ├── ecs/                   # ECS cluster, capacity provider, ASG, launch template
+│   │   ├── main.tf            # services, task definitions
+│   │   ├── variables.tf
+│   │   ├── outputs.tf
+│   │   └── user_data.sh
+│   │
+│   ├── s3/                    # S3 buckets (uploads, assets)
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
 │   │
-│   ├── monitoring/            # CloudWatch log groups, alarms, dashboard
+│   ├── cloudfront/            # CloudFront for web.neu-study.online ONLY
+│   │   ├── main.tf            # Caches /_next/static/*, WAF rate limiting
+│   │   ├── variables.tf
+│   │   └── outputs.tf
+│   │
+│   ├── dns/                   # Route 53 data source for existing hosted zone
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
 │   │
-│   ├── dns/                   # Route 53 hosted zone, records
+│   ├── dns-records/           # A records: api. → ALB, web. → CloudFront
 │   │   ├── main.tf
 │   │   ├── variables.tf
 │   │   └── outputs.tf
 │   │
-│   └── iam/                   # IAM roles (ECS task, EC2 instance, GitHub OIDC, Lambda)
+│   └── iam/                   # IAM roles (ECS task, EC2 instance, GitHub OIDC)
 │       ├── main.tf
 │       ├── variables.tf
 │       └── outputs.tf
+│
+│   # ── Future modules (not in initial deployment) ──
+│   # ├── messaging/           # SNS topics, SQS queues, DLQs
+│   # ├── lambda/              # Lambda workers (email, notification, file)
+│   # └── monitoring/          # CloudWatch alarms, dashboard
+
+scripts/
+├── stop-infra.sh              # Scale to zero, delete expensive resources (~$1/mo)
+└── start-infra.sh             # terraform apply + scale back up (~10 min)
 ```
+
+> **Note on Cognito**: The Cognito User Pool Terraform lives separately at
+> `apps/api/infra/cognito/` (ap-southeast-2). It is NOT part of the main
+> `infra/` stack. Cognito IDs are passed as input variables to the main stack.
+> This avoids cross-region complexity and protects the existing user pool.
 
 ### 9.2 Root `main.tf`
 
@@ -1935,6 +1978,26 @@ provider "aws" {
 provider "aws" {
   alias  = "us_east_1"
   region = "us-east-1"
+}
+
+module "dns" {
+  source      = "./modules/dns"
+  domain_name = var.domain_name  # neu-study.online
+}
+
+module "acm" {
+  source      = "./modules/acm"
+  domain_name = var.domain_name
+  zone_id     = module.dns.zone_id
+}
+
+# CloudFront requires ACM cert in us-east-1
+module "acm_cloudfront" {
+  source      = "./modules/acm"
+  domain_name = var.domain_name
+  zone_id     = module.dns.zone_id
+
+  providers = { aws = aws.us_east_1 }
 }
 
 module "networking" {
@@ -1972,12 +2035,13 @@ module "elasticache" {
 }
 
 module "alb" {
-  source              = "./modules/alb"
-  project_name        = var.project_name
-  vpc_id              = module.networking.vpc_id
-  public_subnet_ids   = module.networking.public_subnet_ids
+  source                = "./modules/alb"
+  project_name          = var.project_name
+  vpc_id                = module.networking.vpc_id
+  public_subnet_ids     = module.networking.public_subnet_ids
   alb_security_group_id = module.networking.alb_security_group_id
-  acm_certificate_arn = var.acm_certificate_arn
+  acm_certificate_arn   = module.acm.certificate_arn
+  api_domain            = "api.${var.domain_name}"  # api.neu-study.online
 }
 
 module "ecs" {
@@ -2010,57 +2074,34 @@ module "s3" {
 module "cloudfront" {
   source              = "./modules/cloudfront"
   project_name        = var.project_name
-  domain_name         = var.domain_name
+  web_domain          = "web.${var.domain_name}"  # web.neu-study.online
   alb_dns_name        = module.alb.dns_name
-  uploads_bucket      = module.s3.uploads_bucket_domain
-  acm_certificate_arn = var.acm_cf_certificate_arn  # must be us-east-1
-
-  providers = {
-    aws = aws.us_east_1
-  }
+  acm_certificate_arn = module.acm_cloudfront.certificate_arn  # must be us-east-1
 }
 
-module "messaging" {
-  source       = "./modules/messaging"
-  project_name = var.project_name
-  environment  = var.environment
-}
-
-module "lambda" {
-  source              = "./modules/lambda"
-  project_name        = var.project_name
-  environment         = var.environment
-  private_subnet_ids  = module.networking.private_subnet_ids
-  lambda_security_group_id = module.networking.lambda_security_group_id
-  email_queue_arn     = module.messaging.email_queue_arn
-  notif_queue_arn     = module.messaging.notification_queue_arn
-  file_queue_arn      = module.messaging.file_processing_queue_arn
-  uploads_bucket_arn  = module.s3.uploads_bucket_arn
-}
-
-module "monitoring" {
-  source       = "./modules/monitoring"
-  project_name = var.project_name
-  ecs_cluster  = module.ecs.cluster_name
-  alb_arn      = module.alb.arn
-  rds_id       = module.rds.instance_id
-  alarm_email  = var.alarm_email
-}
-
-module "dns" {
-  source              = "./modules/dns"
-  domain_name         = var.domain_name
-  cloudfront_domain   = module.cloudfront.domain_name
-  cloudfront_zone_id  = module.cloudfront.hosted_zone_id
+# DNS records: api. → ALB, web. → CloudFront
+module "dns_records" {
+  source             = "./modules/dns-records"
+  domain_name        = var.domain_name
+  zone_id            = module.dns.zone_id
+  alb_dns_name       = module.alb.dns_name
+  alb_zone_id        = module.alb.zone_id
+  cloudfront_domain  = module.cloudfront.domain_name
+  cloudfront_zone_id = module.cloudfront.hosted_zone_id
 }
 
 module "iam" {
-  source          = "./modules/iam"
-  project_name    = var.project_name
-  github_org      = var.github_org
-  github_repo     = var.github_repo
-  ecr_arns        = module.ecr.repository_arns
+  source       = "./modules/iam"
+  project_name = var.project_name
+  github_org   = var.github_org
+  github_repo  = var.github_repo
+  ecr_arns     = module.ecr.repository_arns
 }
+
+# ── Future modules (not in initial deployment) ──────────
+# module "messaging" { ... }  # SNS/SQS when async processing needed
+# module "lambda" { ... }     # Lambda workers for email/notifications
+# module "monitoring" { ... } # CloudWatch alarms and dashboards
 ```
 
 ### 9.3 Key Module: Networking
@@ -2651,7 +2692,7 @@ resource "aws_ecs_service" "web" {
 }
 ```
 
-### 9.5 Key Module: ALB
+### 9.5 Key Module: ALB (Host-Based Routing)
 
 ```hcl
 # infra/modules/alb/main.tf
@@ -2683,8 +2724,8 @@ resource "aws_lb_target_group" "api" {
   }
 
   # Sticky sessions — required for Socket.IO WebSocket handshake
-  # Socket.IO starts with long-polling (multiple HTTP requests), then upgrades
-  # to WebSocket. All requests must hit the same ECS task during handshake.
+  # Socket.IO starts with long-polling, then upgrades to WebSocket.
+  # All requests must hit the same ECS task during handshake.
   stickiness {
     type            = "lb_cookie"
     cookie_duration = 86400  # 24 hours
@@ -2720,14 +2761,15 @@ resource "aws_lb_listener" "https" {
   ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
   certificate_arn   = var.acm_certificate_arn
 
+  # Default → Web (CloudFront origin hits this)
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.web.arn
   }
 }
 
-# ── Path-based routing ──────────────────────────────
-resource "aws_lb_listener_rule" "api" {
+# ── Host-based routing: api.neu-study.online → API ──
+resource "aws_lb_listener_rule" "api_host" {
   listener_arn = aws_lb_listener.https.arn
   priority     = 10
 
@@ -2737,21 +2779,7 @@ resource "aws_lb_listener_rule" "api" {
   }
 
   condition {
-    path_pattern { values = ["/api/*"] }
-  }
-}
-
-resource "aws_lb_listener_rule" "websocket" {
-  listener_arn = aws_lb_listener.https.arn
-  priority     = 20
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn
-  }
-
-  condition {
-    path_pattern { values = ["/socket.io/*"] }
+    host_header { values = [var.api_domain] }  # api.neu-study.online
   }
 }
 
@@ -2770,6 +2798,17 @@ resource "aws_lb_listener" "http_redirect" {
     }
   }
 }
+```
+
+```hcl
+# infra/modules/alb/variables.tf
+
+variable "project_name"          { type = string }
+variable "vpc_id"                { type = string }
+variable "public_subnet_ids"     { type = list(string) }
+variable "alb_security_group_id" { type = string }
+variable "acm_certificate_arn"   { type = string }
+variable "api_domain"            { type = string }  # api.neu-study.online
 ```
 
 ```hcl
@@ -2919,7 +2958,11 @@ output "port" {
 
 ---
 
-## 10. Monitoring & Observability
+## 10. Monitoring & Observability [FUTURE]
+
+> **STATUS: FUTURE** — CloudWatch log groups for ECS are created in the initial deploy
+> (inside the `ecs/` module). Full dashboards, alarms, and Lambda log groups will be
+> added when the `monitoring/` Terraform module is implemented.
 
 ### 10.1 CloudWatch Dashboard
 
@@ -3025,7 +3068,8 @@ output "port" {
 
 ```
 Demo Day (everything running):     ~$3-4/day
-Off Mode (stopped, not destroyed): ~$1-2/day (just storage + Route 53)
+Off Mode (run stop-infra.sh):      ~$1/mo (just storage + Route 53)
+Resume (run start-infra.sh):       ~10 min to full availability
 ```
 
 ---
@@ -3034,58 +3078,146 @@ Off Mode (stopped, not destroyed): ~$1-2/day (just storage + Route 53)
 
 ### 12.1 After Demo — What to STOP (keep state, resume later)
 
-| Resource | Action | State Preserved | Resume Time |
-|----------|--------|----------------|-------------|
-| ECS Services | Set desired count → 0 | Task definitions kept | 1-2 min |
-| EC2 ASG | Set min/max/desired → 0 | Launch template kept | 2-3 min |
-| RDS | `aws rds stop-db-instance` | Data + snapshots kept | 5-10 min |
-| ElastiCache | Delete cluster (stateless/ephemeral) | Recreate via Terraform | 5-8 min |
-| NAT Gateway | Delete (stateless) | Recreate via Terraform | 2-3 min |
+#### What stays running (free/cheap — ~$1/mo):
+
+| Resource | Why Keep | Cost |
+|----------|----------|------|
+| VPC, Subnets, SGs, IGW | Free networking config | $0 |
+| Route 53 Hosted Zone | DNS must resolve | $0.50/mo |
+| ECR Repositories | Store Docker images | ~$0.20/mo |
+| S3 Buckets | Store uploads/assets | ~$0.10/mo |
+| ACM Certificates | Free, must stay for HTTPS | $0 |
+| IAM Roles/Policies | Free | $0 |
+| ECS Cluster (empty) | Free when no tasks running | $0 |
+| CloudFront (disabled) | Keep config, no traffic cost | $0 |
+
+#### What to stop/delete (~$110/mo → $0/mo):
+
+| Resource | Running Cost | Action | Resume Time |
+|----------|-------------|--------|-------------|
+| NAT Gateway | ~$32/mo | **Delete** + release EIP | 2 min |
+| EC2 (ECS ASG) | ~$30/mo | Scale to 0 | 2-3 min |
+| ALB | ~$18/mo | **Delete** | 2 min |
+| RDS | ~$13/mo | Stop instance | 5-10 min |
+| ElastiCache Redis | ~$13/mo | **Delete** (ephemeral) | 5-8 min |
+| ECS Services | (runs on EC2) | Desired count → 0 | 1 min |
 
 **Stop script** (`scripts/stop-infra.sh`):
 ```bash
 #!/bin/bash
-# Stop ECS services
-aws ecs update-service --cluster ielts-ai-cluster --service ielts-api --desired-count 0
-aws ecs update-service --cluster ielts-ai-cluster --service ielts-web --desired-count 0
+set -e
+CLUSTER="ielts-ai-cluster"
+ASG="ielts-ai-ecs-asg"
+RDS_ID="ielts-ai-postgres"
+REDIS_ID="ielts-ai-redis"
+REGION="ap-southeast-2"
+CF_DIST_ID="YOUR_DISTRIBUTION_ID"  # update after first deploy
 
-# Scale ASG to 0
+echo "=== Stopping IELTS AI Infrastructure ==="
+
+# 1. ECS services → 0
+echo "→ Scaling ECS services to 0..."
+aws ecs update-service --cluster $CLUSTER --service ielts-ai-api --desired-count 0 --region $REGION
+aws ecs update-service --cluster $CLUSTER --service ielts-ai-web --desired-count 0 --region $REGION
+
+# 2. ASG → 0 (terminates EC2 instances)
+echo "→ Scaling ASG to 0..."
 aws autoscaling update-auto-scaling-group \
-  --auto-scaling-group-name ielts-ai-ecs-asg \
-  --min-size 0 --max-size 0 --desired-capacity 0
+  --auto-scaling-group-name $ASG \
+  --min-size 0 --max-size 0 --desired-capacity 0 --region $REGION
 
-# Stop RDS (auto-restarts after 7 days — re-stop if needed)
-aws rds stop-db-instance --db-instance-identifier ielts-ai-postgres
+# 3. Stop RDS (auto-restarts after 7 days — re-stop if needed)
+echo "→ Stopping RDS..."
+aws rds stop-db-instance --db-instance-identifier $RDS_ID --region $REGION 2>/dev/null || echo "  (already stopped)"
 
-# Delete ElastiCache (ephemeral data — no backup needed, recreate via Terraform)
-aws elasticache delete-cache-cluster --cache-cluster-id ielts-ai-redis
+# 4. Delete ElastiCache Redis (ephemeral data, no backup needed)
+echo "→ Deleting ElastiCache Redis..."
+aws elasticache delete-cache-cluster --cache-cluster-id $REDIS_ID --region $REGION 2>/dev/null || echo "  (already deleted)"
 
-echo "Infrastructure stopped. Costs reduced to ~$1-2/day (storage only)."
-echo "To resume: run start-infra.sh (ElastiCache needs terraform apply to recreate)"
+# 5. Delete NAT Gateway + release EIP ($32/mo savings)
+echo "→ Deleting NAT Gateway..."
+NAT_GW_ID=$(aws ec2 describe-nat-gateways --filter "Name=tag:Name,Values=ielts-ai-nat" "Name=state,Values=available" --query 'NatGateways[0].NatGatewayId' --output text --region $REGION)
+if [ "$NAT_GW_ID" != "None" ] && [ -n "$NAT_GW_ID" ]; then
+  EIP_ALLOC=$(aws ec2 describe-nat-gateways --nat-gateway-ids $NAT_GW_ID --query 'NatGateways[0].NatGatewayAddresses[0].AllocationId' --output text --region $REGION)
+  aws ec2 delete-nat-gateway --nat-gateway-id $NAT_GW_ID --region $REGION
+  echo "  Waiting for NAT GW deletion..."
+  sleep 30
+  aws ec2 release-address --allocation-id $EIP_ALLOC --region $REGION 2>/dev/null || true
+fi
+
+# 6. Delete ALB ($18/mo savings)
+echo "→ Deleting ALB..."
+ALB_ARN=$(aws elbv2 describe-load-balancers --names ielts-ai-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text --region $REGION 2>/dev/null)
+if [ "$ALB_ARN" != "None" ] && [ -n "$ALB_ARN" ]; then
+  # Delete listeners first
+  for LISTENER_ARN in $(aws elbv2 describe-listeners --load-balancer-arn $ALB_ARN --query 'Listeners[*].ListenerArn' --output text --region $REGION); do
+    aws elbv2 delete-listener --listener-arn $LISTENER_ARN --region $REGION
+  done
+  aws elbv2 delete-load-balancer --load-balancer-arn $ALB_ARN --region $REGION
+  # Delete target groups
+  for TG_ARN in $(aws elbv2 describe-target-groups --query "TargetGroups[?starts_with(TargetGroupName,'ielts-ai')].TargetGroupArn" --output text --region $REGION); do
+    aws elbv2 delete-target-group --target-group-arn $TG_ARN --region $REGION 2>/dev/null || true
+  done
+fi
+
+# 7. Disable CloudFront
+echo "→ Disabling CloudFront distribution..."
+if [ "$CF_DIST_ID" != "YOUR_DISTRIBUTION_ID" ]; then
+  ETAG=$(aws cloudfront get-distribution-config --id $CF_DIST_ID --query 'ETag' --output text)
+  aws cloudfront get-distribution-config --id $CF_DIST_ID --query 'DistributionConfig' > /tmp/cf-config.json
+  # Set Enabled=false
+  python3 -c "import json; c=json.load(open('/tmp/cf-config.json')); c['Enabled']=False; json.dump(c,open('/tmp/cf-config.json','w'))"
+  aws cloudfront update-distribution --id $CF_DIST_ID --if-match $ETAG --distribution-config file:///tmp/cf-config.json 2>/dev/null || true
+fi
+
+echo ""
+echo "=== Infrastructure stopped ==="
+echo "Cost reduced from ~\$110/mo to ~\$1/mo"
+echo "To resume: run start-infra.sh"
 ```
 
 **Resume script** (`scripts/start-infra.sh`):
 ```bash
 #!/bin/bash
-# Start RDS
-aws rds start-db-instance --db-instance-identifier ielts-ai-postgres
+set -e
+CLUSTER="ielts-ai-cluster"
+ASG="ielts-ai-ecs-asg"
+RDS_ID="ielts-ai-postgres"
+REGION="ap-southeast-2"
 
-# Wait for RDS
-aws rds wait db-instance-available --db-instance-identifier ielts-ai-postgres
+echo "=== Starting IELTS AI Infrastructure ==="
 
-# Scale ASG back
+# 1. Terraform apply — recreates NAT GW, ALB, ElastiCache, EIP
+echo "→ Recreating deleted resources via Terraform..."
+cd "$(dirname "$0")/../infra"
+terraform apply -auto-approve
+
+# 2. Start RDS
+echo "→ Starting RDS..."
+aws rds start-db-instance --db-instance-identifier $RDS_ID --region $REGION 2>/dev/null || echo "  (already running)"
+echo "  Waiting for RDS to be available (this takes 5-10 min)..."
+aws rds wait db-instance-available --db-instance-identifier $RDS_ID --region $REGION
+
+# 3. Scale ASG back
+echo "→ Scaling ASG to 1..."
 aws autoscaling update-auto-scaling-group \
-  --auto-scaling-group-name ielts-ai-ecs-asg \
-  --min-size 1 --max-size 3 --desired-capacity 1
+  --auto-scaling-group-name $ASG \
+  --min-size 1 --max-size 3 --desired-capacity 1 --region $REGION
 
-# Wait for EC2 instance to join ECS
+# 4. Wait for EC2 instance to register with ECS
+echo "  Waiting for EC2 to join ECS cluster..."
 sleep 60
 
-# Start ECS services
-aws ecs update-service --cluster ielts-ai-cluster --service ielts-api --desired-count 1
-aws ecs update-service --cluster ielts-ai-cluster --service ielts-web --desired-count 1
+# 5. Start ECS services
+echo "→ Starting ECS services..."
+aws ecs update-service --cluster $CLUSTER --service ielts-ai-api --desired-count 1 --region $REGION
+aws ecs update-service --cluster $CLUSTER --service ielts-ai-web --desired-count 1 --region $REGION
 
-echo "Infrastructure started. Full availability in 5-10 minutes."
+echo ""
+echo "=== Infrastructure started ==="
+echo "Full availability in 2-3 minutes."
+echo "Verify: https://api.neu-study.online/api/health"
+echo "Verify: https://web.neu-study.online"
 ```
 
 ### 12.2 Project Done — What to DESTROY
@@ -3274,7 +3406,7 @@ For a thesis project, these are **accepted trade-offs**:
 |--------|-------------|--------|
 | `AWS_ROLE_ARN` | IAM role for GitHub OIDC | `terraform output github_actions_role_arn` |
 | `ECR_REGISTRY` | ECR registry URL | `terraform output ecr_registry` |
-| `NEXT_PUBLIC_API_URL` | Public URL | `https://ielts-platform.com` |
+| `NEXT_PUBLIC_API_URL` | Public URL | `https://api.neu-study.online/api` |
 
 ---
 

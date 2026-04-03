@@ -37,6 +37,14 @@ export class ChatService {
     }
   }
 
+  async getMemberIds(conversationId: string): Promise<string[]> {
+    const members = await this.prisma.conversationMember.findMany({
+      where: { conversationId },
+      select: { userId: true },
+    });
+    return members.map(m => m.userId);
+  }
+
   // ─── Conversations ───────────────────────────────────
 
   async createConversation(currentUserId: string, dto: CreateConversationDto) {

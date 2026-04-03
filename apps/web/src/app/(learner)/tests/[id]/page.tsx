@@ -105,13 +105,6 @@ export default function TestDetailPage() {
   const handleStart = async () => {
     if (!test) return;
 
-    const token = localStorage.getItem('accessToken');
-    if (!token) {
-      message.warning('Please sign in to take a test');
-      router.push('/login');
-      return;
-    }
-
     setStarting(true);
     try {
       const sectionIds = mode === 'full' ? test.sections.map((s) => s.id) : selectedSections;

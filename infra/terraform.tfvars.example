@@ -1,0 +1,46 @@
+# =============================================================================
+# terraform.tfvars.example — COPY this to terraform.tfvars and fill in values
+# =============================================================================
+#
+# IMPORTANT: terraform.tfvars contains secrets (passwords, IPs).
+#            It is .gitignored and MUST NOT be committed to git.
+#
+# Usage:
+#   cp terraform.tfvars.example terraform.tfvars
+#   # Edit terraform.tfvars with your actual values
+#   terraform plan   # Preview changes
+#   terraform apply  # Create resources
+# =============================================================================
+
+# General
+project_name = "ielts-ai"
+environment  = "prod"
+aws_region   = "ap-southeast-2"
+
+# Domain (must already have Route 53 hosted zone)
+domain_name = "neu-study.online"
+
+# Network — YOUR public IP for SSH access
+# Find it: https://whatismyip.com → add /32
+my_ip = "YOUR_PUBLIC_IP/32"
+
+# Database
+db_name           = "ielts_platform"
+db_username       = "ielts_user"
+db_password       = "CHANGE_ME_TO_A_STRONG_PASSWORD"
+db_instance_class = "db.t3.micro"
+
+# Redis
+redis_node_type = "cache.t3.micro"
+
+# ECS
+ecs_instance_type = "t3.medium"
+key_name          = "ielts-ai-key"  # EC2 key pair name (or null for no SSH)
+
+# GitHub (for CI/CD OIDC)
+github_org  = "royden"
+github_repo = "ielts-ai-platform"
+
+# Cognito (from separate Terraform in apps/api/infra/cognito/)
+cognito_user_pool_id = ""
+cognito_client_id    = ""
