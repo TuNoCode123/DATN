@@ -83,3 +83,15 @@ jobs:
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
+
+      # After deploying new code, invalidate CloudFront cache so users get fresh assets.
+      # /_next/static/* is cached for 365 days — without invalidation, stale files persist.
+      - name: Invalidate CloudFront cache
+        run: |
+          DISTRIBUTION_ID=$(aws cloudfront list-distributions \
+            --query "DistributionList.Items[?Aliases.Items[?@=='web.neu-study.online']].Id | [0]" \
+            --output text)
+          echo "Invalidating CloudFront distribution: $DISTRIBUTION_ID"
+          aws cloudfront create-invalidation \
+            --distribution-id "$DISTRIBUTION_ID" \
+            --paths "/_next/static/*" "/favicon.ico"
