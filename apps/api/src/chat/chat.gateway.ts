@@ -9,9 +9,8 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
 import { ChatService } from './chat.service';
+import { CognitoAuthService } from '../auth/cognito-auth.service';
 import { RedisService } from '../redis/redis.service';
 import { MessageType } from '@prisma/client';
 
@@ -37,7 +36,10 @@ const TTL = {
 
 @WebSocketGateway({
   namespace: '/chat',
-  cors: { origin: '*' },
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true,
+  },
 })
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -46,9 +48,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger('ChatGateway');
 
   constructor(
-    private jwtService: JwtService,
-    private configService: ConfigService,
     private chatService: ChatService,
+    private cognitoAuthService: CognitoAuthService,
     private redis: RedisService,
   ) {}
 
@@ -56,19 +57,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   async handleConnection(socket: Socket) {
     try {
-      const token = socket.handshake.auth?.token;
-      if (!token) throw new Error('No token');
+      const user = await this.authenticateSocket(socket);
+      socket.data.user = user;
 
-      const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('JWT_SECRET'),
-      });
-      socket.data.user = {
-        id: payload.sub,
-        email: payload.email,
-        role: payload.role,
-      };
+      const userId = user.id;
 
-      const userId = payload.sub;
+      // Join personal room — delivers events regardless of which conversation is open
+      socket.join(`user:${userId}`);
 
       // Track this socket in Redis
       await this.redis.sadd(KEY.userSockets(userId), socket.id);
@@ -84,7 +79,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       ).length;
 
       this.logger.log(
-        `[CONNECT] user=${userId} email=${payload.email} socket=${socket.id} ` +
+        `[CONNECT] user=${userId} email=${user.email} socket=${socket.id} ` +
           `activeSockets=${socketCount}`,
       );
 
@@ -173,12 +168,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.chatService.assertMember(data.conversationId, userId);
       socket.join(`conversation:${data.conversationId}`);
 
-      const room = this.server.adapter
-        ? (this.server.adapter as any).rooms?.get(
-            `conversation:${data.conversationId}`,
-          )
-        : undefined;
-      const roomSize = room?.size ?? 0;
+      const sockets = await this.server
+        .in(`conversation:${data.conversationId}`)
+        .fetchSockets();
+      const roomSize = sockets.length;
       this.logger.log(
         `[JOIN] user=${userId} conversation=${data.conversationId} ` +
           `roomSize=${roomSize} socket=${socket.id}`,
@@ -282,10 +275,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         attachment,
       );
 
-      // Broadcast to room (excluding sender) — Redis adapter fans out across ECS tasks
-      socket
-        .to(`conversation:${data.conversationId}`)
-        .emit('new_message', message);
+      // Notify ALL conversation members (except sender) regardless of room
+      this.notifyAllMembers(data.conversationId, userId, 'new_message', message);
 
       return { success: true, message };
     } catch (error: any) {
@@ -348,14 +339,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         data.content,
       );
 
-      socket
-        .to(`conversation:${data.conversationId}`)
-        .emit('message_edited', {
-          conversationId: data.conversationId,
-          messageId: data.messageId,
-          content: message.content,
-          editedAt: message.editedAt,
-        });
+      this.notifyAllMembers(data.conversationId, userId, 'message_edited', {
+        conversationId: data.conversationId,
+        messageId: data.messageId,
+        content: message.content,
+        editedAt: message.editedAt,
+      });
 
       return { success: true, message };
     } catch (error: any) {
@@ -389,13 +378,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
           userId,
         );
 
-        socket
-          .to(`conversation:${data.conversationId}`)
-          .emit('message_deleted', {
-            conversationId: data.conversationId,
-            messageId: data.messageId,
-            deletedForAll: true,
-          });
+        this.notifyAllMembers(data.conversationId, userId, 'message_deleted', {
+          conversationId: data.conversationId,
+          messageId: data.messageId,
+          deletedForAll: true,
+        });
       } else {
         await this.chatService.deleteForMe(
           data.conversationId,
@@ -554,6 +541,66 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.server
       .to(`conversation:${conversationId}`)
       .emit(event, data);
+  }
+
+  // ─── Socket Authentication ──────────────────────────────
+
+  /**
+   * Authenticate a socket connection.
+   * Tries cookie-based Cognito auth first, falls back to legacy JWT auth.
+   */
+  private async authenticateSocket(
+    socket: Socket,
+  ): Promise<{ id: string; email: string; role: string }> {
+    // 1. Try cookie-based auth (Cognito) — browser sends cookies on WS upgrade
+    const cookieHeader = socket.handshake.headers.cookie;
+    const cookies = this.parseCookies(cookieHeader);
+    const cookieToken = cookies['access_token'];
+
+    if (cookieToken) {
+      const payload =
+        await this.cognitoAuthService.verifyCognitoJwt(cookieToken);
+      const user = await this.cognitoAuthService.findOrCreateFromCognito(
+        payload.sub,
+        payload.email ?? payload.username ?? '',
+        payload['cognito:groups'],
+      );
+      return { id: user.id, email: user.email, role: user.role };
+    }
+
+    throw new Error('No authentication token');
+  }
+
+  private parseCookies(header?: string): Record<string, string> {
+    if (!header) return {};
+    return Object.fromEntries(
+      header.split(';').map((c) => {
+        const [key, ...val] = c.trim().split('=');
+        return [key, val.join('=')];
+      }),
+    );
+  }
+
+  // ─── Notify all conversation members via personal rooms ──
+
+  private async notifyAllMembers(
+    conversationId: string,
+    excludeUserId: string,
+    event: string,
+    data: any,
+  ) {
+    try {
+      const memberIds = await this.chatService.getMemberIds(conversationId);
+      for (const memberId of memberIds) {
+        if (memberId === excludeUserId) continue;
+        // Emit to user:{memberId} room — works across servers via Redis adapter
+        this.server.to(`user:${memberId}`).emit(event, data);
+      }
+    } catch (err: any) {
+      this.logger.warn(
+        `[NOTIFY_MEMBERS] error=${err.message} conversation=${conversationId}`,
+      );
+    }
   }
 
   // ─── Rate Limiter (Redis-backed) ────────────────────

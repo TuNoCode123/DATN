@@ -15,16 +15,14 @@ export default function LearnerLayout({
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
 
-  // Restore session on mount
+  // Restore session on mount (cookie-based auth)
   useEffect(() => {
-    const token = localStorage.getItem('accessToken');
-    if (token && !user) {
+    if (!user) {
       api
-        .get('/users/me')
+        .get('/auth/cognito/me')
         .then(({ data }) => setUser(data))
         .catch(() => {
-          localStorage.removeItem('accessToken');
-          localStorage.removeItem('refreshToken');
+          // Not authenticated — cookies missing or expired
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

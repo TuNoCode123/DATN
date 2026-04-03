@@ -21,6 +21,11 @@ export class AuthService {
   async register(dto: RegisterDto) {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) {
+      if (existing.cognitoSub && !existing.passwordHash) {
+        throw new ConflictException(
+          'This email is linked to a social login account. Please sign in with Google instead.',
+        );
+      }
       throw new ConflictException('Email already registered');
     }
 
@@ -38,6 +43,11 @@ export class AuthService {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) {
       throw new UnauthorizedException('Invalid credentials');
+    }
+    if (!user.passwordHash) {
+      throw new UnauthorizedException(
+        'This email is linked to a social login account. Please sign in with Google instead.',
+      );
     }
 
     const valid = await bcrypt.compare(dto.password, user.passwordHash);

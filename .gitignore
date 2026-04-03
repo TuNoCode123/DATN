@@ -21,5 +21,7 @@ infra/.terraform/
 infra/*.tfstate
 infra/*.tfstate.*
 infra/*.tfplan
+infra/plan.json
+infra/plan.out
 infra/terraform.tfvars
 infra/.terraform.lock.hcl

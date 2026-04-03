@@ -1,0 +1,24 @@
+# Copy this file to terraform.tfvars and fill in real values
+# DO NOT commit terraform.tfvars to version control
+
+aws_region            = "ap-southeast-2"
+project_name          = "ielts-ai"
+environment           = "dev"
+
+frontend_url          = "http://localhost:3000"
+backend_url           = "http://localhost:4000"
+cognito_domain_prefix = "ielts-ai"  # Must be globally unique
+
+# Google OAuth2 (https://console.cloud.google.com/apis/credentials)
+google_client_id     = "YOUR_GOOGLE_CLIENT_ID"
+google_client_secret = "YOUR_GOOGLE_CLIENT_SECRET"
+
+# Facebook — coming soon
+# facebook_app_id     = "YOUR_FACEBOOK_APP_ID"
+# facebook_app_secret = "YOUR_FACEBOOK_APP_SECRET"
+
+# Migration Lambda (deploy first, then set ARN here)
+migration_lambda_arn = ""
+
+# MFA: "OFF" | "OPTIONAL" | "ON"
+mfa_configuration = "OPTIONAL"
