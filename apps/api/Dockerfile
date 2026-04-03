@@ -33,6 +33,7 @@ RUN pnpm --filter api deploy --prod /app/deploy
 
 # Copy generated Prisma client into deploy
 RUN cp -r /app/node_modules/.pnpm/@prisma+client*/node_modules/.prisma /app/deploy/node_modules/.prisma
+RUN cp -r /app/node_modules/.pnpm/@prisma+client*/node_modules/@prisma/client /app/deploy/node_modules/@prisma/client
 
 # ── Production stage ─────────────────────────────────────────
 FROM node:20-alpine AS runner
@@ -42,6 +43,7 @@ ENV NODE_ENV=production
 
 COPY --from=builder /app/deploy/node_modules ./node_modules
 COPY --from=builder /app/deploy/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/deploy/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/prisma ./prisma
 
