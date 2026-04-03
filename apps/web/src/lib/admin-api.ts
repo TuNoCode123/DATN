@@ -55,9 +55,11 @@ export const adminTestsApi = {
     api.get('/admin/tests', { params }).then((r) => r.data),
   getById: (id: string) =>
     api.get(`/admin/tests/${id}`).then((r) => r.data),
-  create: (data: any) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  create: (data: Record<string, any>) =>
     api.post('/admin/tests', data).then((r) => r.data),
-  update: (id: string, data: any) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  update: (id: string, data: Record<string, any>) =>
     api.put(`/admin/tests/${id}`, data).then((r) => r.data),
   updateMetadata: (id: string, data: {
     title?: string;
@@ -81,7 +83,8 @@ export const adminTestsApi = {
     api.post(`/admin/tests/${id}/add-missing-sections`).then((r) => r.data),
   delete: (id: string) =>
     api.delete(`/admin/tests/${id}`).then((r) => r.data),
-  sync: (id: string, data: any) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  sync: (id: string, data: Record<string, any>) =>
     api.put(`/admin/tests/${id}/sync`, data).then((r) => r.data),
 };
 
@@ -98,7 +101,8 @@ export const adminSectionsApi = {
     api.post(`/admin/tests/${testId}/sections`, data).then((r) => r.data),
   get: (testId: string, id: string) =>
     api.get(`/admin/tests/${testId}/sections/${id}`).then((r) => r.data),
-  update: (testId: string, id: string, data: any) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  update: (testId: string, id: string, data: Record<string, any>) =>
     api.patch(`/admin/tests/${testId}/sections/${id}`, data).then((r) => r.data),
   delete: (testId: string, id: string) =>
     api.delete(`/admin/tests/${testId}/sections/${id}`).then((r) => r.data),
@@ -123,6 +127,7 @@ export const adminGroupsApi = {
   create: (sectionId: string, data: {
     questionType: QuestionType;
     instructions?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     matchingOptions?: any;
     audioUrl?: string;
     imageUrl?: string;
@@ -130,7 +135,8 @@ export const adminGroupsApi = {
     api.post(`/admin/sections/${sectionId}/groups`, data).then((r) => r.data),
   get: (id: string) =>
     api.get(`/admin/groups/${id}`).then((r) => r.data),
-  update: (id: string, data: any) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  update: (id: string, data: Record<string, any>) =>
     api.patch(`/admin/groups/${id}`, data).then((r) => r.data),
   delete: (id: string) =>
     api.delete(`/admin/groups/${id}`).then((r) => r.data),
@@ -155,6 +161,7 @@ export const adminQuestionsApi = {
   // CRUD
   create: (groupId: string, questions: {
     stem?: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     options?: any;
     correctAnswer: string;
     explanation?: string;
@@ -162,7 +169,8 @@ export const adminQuestionsApi = {
     audioUrl?: string;
   }[]) =>
     api.post(`/admin/groups/${groupId}/questions`, { questions }).then((r) => r.data),
-  update: (id: string, data: any) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  update: (id: string, data: Record<string, any>) =>
     api.patch(`/admin/questions/${id}`, data).then((r) => r.data),
   delete: (id: string) =>
     api.delete(`/admin/questions/${id}`).then((r) => r.data),

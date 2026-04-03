@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   ForbiddenException,
@@ -8,8 +9,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ScoringService, SectionResult, Skill } from '../scoring/scoring.service';
 import { AttemptMode, AttemptStatus, Prisma } from '@prisma/client';
 
+const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
+
 @Injectable()
 export class AttemptsService {
+  private readonly logger = new Logger(AttemptsService.name);
+
   constructor(
     private prisma: PrismaService,
     private scoringService: ScoringService,
@@ -32,10 +37,28 @@ export class AttemptsService {
     const existing = await this.prisma.userAttempt.findFirst({
       where: { userId, testId, status: AttemptStatus.IN_PROGRESS },
     });
+
     if (existing) {
-      throw new BadRequestException(
-        'You already have an in-progress attempt for this test. Resume or abandon it first.',
+      const isStale = this.isHeartbeatStale(
+        existing.lastHeartbeatAt,
+        existing.startedAt,
       );
+      if (isStale) {
+        // Auto-submit the stale attempt before allowing a new one
+        try {
+          await this.submitAttempt(existing.id, userId);
+        } catch {
+          // If submission fails, force-close it
+          await this.prisma.userAttempt.update({
+            where: { id: existing.id },
+            data: { status: AttemptStatus.SUBMITTED, submittedAt: new Date() },
+          });
+        }
+      } else {
+        throw new BadRequestException(
+          'You already have an active attempt for this test in another tab.',
+        );
+      }
     }
 
     const selectedSections =
@@ -53,6 +76,7 @@ export class AttemptsService {
         testId,
         mode,
         status: AttemptStatus.IN_PROGRESS,
+        lastHeartbeatAt: new Date(),
         timeLimitMins:
           mode === AttemptMode.FULL_TEST
             ? test.durationMins
@@ -156,6 +180,26 @@ export class AttemptsService {
     return this.prisma.$transaction(operations);
   }
 
+  async heartbeat(attemptId: string, userId: string) {
+    const attempt = await this.prisma.userAttempt.findUnique({
+      where: { id: attemptId },
+    });
+    if (!attempt) throw new NotFoundException('Attempt not found');
+    if (attempt.userId !== userId) throw new ForbiddenException();
+
+    // Idempotent: if already submitted, tell the client
+    if (attempt.status === AttemptStatus.SUBMITTED) {
+      return { alreadySubmitted: true };
+    }
+
+    await this.prisma.userAttempt.update({
+      where: { id: attemptId },
+      data: { lastHeartbeatAt: new Date() },
+    });
+
+    return { ok: true };
+  }
+
   async submitAttempt(attemptId: string, userId: string) {
     const attempt = await this.prisma.userAttempt.findUnique({
       where: { id: attemptId },
@@ -176,8 +220,10 @@ export class AttemptsService {
     });
     if (!attempt) throw new NotFoundException('Attempt not found');
     if (attempt.userId !== userId) throw new ForbiddenException();
-    if (attempt.status !== AttemptStatus.IN_PROGRESS) {
-      throw new BadRequestException('Attempt already submitted');
+
+    // Idempotent: if already submitted, return existing result
+    if (attempt.status === AttemptStatus.SUBMITTED) {
+      return attempt;
     }
 
     // Grade each answer
@@ -321,22 +367,6 @@ export class AttemptsService {
     return attempt;
   }
 
-  async abandonAttempt(attemptId: string, userId: string) {
-    const attempt = await this.prisma.userAttempt.findUnique({
-      where: { id: attemptId },
-    });
-    if (!attempt) throw new NotFoundException('Attempt not found');
-    if (attempt.userId !== userId) throw new ForbiddenException();
-    if (attempt.status !== AttemptStatus.IN_PROGRESS) {
-      throw new BadRequestException('Can only abandon in-progress attempts');
-    }
-
-    return this.prisma.userAttempt.update({
-      where: { id: attemptId },
-      data: { status: AttemptStatus.ABANDONED },
-    });
-  }
-
   async findByUser(userId: string) {
     return this.prisma.userAttempt.findMany({
       where: { userId },
@@ -349,10 +379,72 @@ export class AttemptsService {
     });
   }
 
-  async findInProgress(userId: string, testId: string) {
-    return this.prisma.userAttempt.findFirst({
-      where: { userId, testId, status: AttemptStatus.IN_PROGRESS },
-      include: { sections: true },
+  /**
+   * Auto-submit all stale IN_PROGRESS attempts.
+   * Called by the cron job every minute.
+   */
+  async autoSubmitStaleAttempts() {
+    const now = new Date();
+    const staleThreshold = new Date(now.getTime() - STALE_THRESHOLD_MS);
+
+    const staleAttempts = await this.prisma.userAttempt.findMany({
+      where: {
+        status: AttemptStatus.IN_PROGRESS,
+        OR: [
+          // Heartbeat is stale
+          { lastHeartbeatAt: { lt: staleThreshold } },
+          // No heartbeat and started long ago
+          { lastHeartbeatAt: null, startedAt: { lt: staleThreshold } },
+        ],
+      },
     });
+
+    // Also find attempts that exceeded their time limit
+    const timedOutAttempts = await this.prisma.userAttempt.findMany({
+      where: {
+        status: AttemptStatus.IN_PROGRESS,
+        timeLimitMins: { not: null },
+      },
+    });
+
+    const allStale = new Map<string, { id: string; userId: string }>();
+    for (const a of staleAttempts) {
+      allStale.set(a.id, { id: a.id, userId: a.userId });
+    }
+    for (const a of timedOutAttempts) {
+      const deadline = new Date(
+        a.startedAt.getTime() + (a.timeLimitMins! * 60 * 1000),
+      );
+      if (now > deadline) {
+        allStale.set(a.id, { id: a.id, userId: a.userId });
+      }
+    }
+
+    let submitted = 0;
+    for (const { id, userId } of allStale.values()) {
+      try {
+        await this.submitAttempt(id, userId);
+        submitted++;
+      } catch (err) {
+        this.logger.warn(`Failed to auto-submit attempt ${id}: ${err}`);
+      }
+    }
+
+    if (submitted > 0) {
+      this.logger.log(`Auto-submitted ${submitted} stale attempt(s)`);
+    }
+
+    return submitted;
+  }
+
+  private isHeartbeatStale(
+    lastHeartbeatAt: Date | null,
+    startedAt: Date,
+  ): boolean {
+    const now = Date.now();
+    if (lastHeartbeatAt) {
+      return now - lastHeartbeatAt.getTime() > STALE_THRESHOLD_MS;
+    }
+    return now - startedAt.getTime() > STALE_THRESHOLD_MS;
   }
 }

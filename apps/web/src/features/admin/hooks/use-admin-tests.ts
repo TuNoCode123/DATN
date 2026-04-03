@@ -35,7 +35,8 @@ export function useAdminTest(id: string) {
 export function useCreateTest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: any) => adminTestsApi.create(data),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: Record<string, any>) => adminTestsApi.create(data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-tests'] }),
   });
 }
@@ -52,7 +53,8 @@ export function useCreateFromTemplate() {
 export function useUpdateTest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; payload: any }) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { id: string; payload: Record<string, any> }) =>
       adminTestsApi.update(data.id, data.payload),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-tests'] });
@@ -64,7 +66,8 @@ export function useUpdateTest() {
 export function useSyncTest() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; payload: any }) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { id: string; payload: Record<string, any> }) =>
       adminTestsApi.sync(data.id, data.payload),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-tests'] });
@@ -77,7 +80,8 @@ export function useSyncTest() {
 export function useUpdateTestMetadata() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; payload: any }) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { id: string; payload: Record<string, any> }) =>
       adminTestsApi.updateMetadata(data.id, data.payload),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-tests'] });
@@ -134,8 +138,9 @@ export function useAddMissingSections() {
 export function useCreateSection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { testId: string; payload: any }) =>
-      adminSectionsApi.create(data.testId, data.payload),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { testId: string; payload: Record<string, any> }) =>
+      adminSectionsApi.create(data.testId, data.payload as Parameters<typeof adminSectionsApi.create>[1]),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
     },
@@ -145,7 +150,8 @@ export function useCreateSection() {
 export function useUpdateSection() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { testId: string; id: string; payload: any }) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { testId: string; id: string; payload: Record<string, any> }) =>
       adminSectionsApi.update(data.testId, data.id, data.payload),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
@@ -169,8 +175,9 @@ export function useDeleteSection() {
 export function useCreatePassage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { sectionId: string; testId: string; payload: any }) =>
-      adminPassagesApi.create(data.sectionId, data.payload),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { sectionId: string; testId: string; payload: Record<string, any> }) =>
+      adminPassagesApi.create(data.sectionId, data.payload as Parameters<typeof adminPassagesApi.create>[1]),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
     },
@@ -180,7 +187,8 @@ export function useCreatePassage() {
 export function useUpdatePassage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; testId: string; payload: any }) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { id: string; testId: string; payload: Record<string, any> }) =>
       adminPassagesApi.update(data.id, data.payload),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
@@ -193,8 +201,9 @@ export function useUpdatePassage() {
 export function useCreateGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { sectionId: string; testId: string; payload: any }) =>
-      adminGroupsApi.create(data.sectionId, data.payload),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { sectionId: string; testId: string; payload: Record<string, any> }) =>
+      adminGroupsApi.create(data.sectionId, data.payload as Parameters<typeof adminGroupsApi.create>[1]),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
     },
@@ -204,7 +213,8 @@ export function useCreateGroup() {
 export function useUpdateGroup() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; testId: string; payload: any }) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { id: string; testId: string; payload: Record<string, any> }) =>
       adminGroupsApi.update(data.id, data.payload),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
@@ -228,8 +238,9 @@ export function useDeleteGroup() {
 export function useCreateQuestions() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { groupId: string; testId: string; questions: any[] }) =>
-      adminQuestionsApi.create(data.groupId, data.questions),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { groupId: string; testId: string; questions: Record<string, any>[] }) =>
+      adminQuestionsApi.create(data.groupId, data.questions as Parameters<typeof adminQuestionsApi.create>[1]),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });
     },
@@ -239,7 +250,8 @@ export function useCreateQuestions() {
 export function useUpdateQuestion() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { id: string; testId: string; payload: any }) =>
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    mutationFn: (data: { id: string; testId: string; payload: Record<string, any> }) =>
       adminQuestionsApi.update(data.id, data.payload),
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-test', vars.testId] });

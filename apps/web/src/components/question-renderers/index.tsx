@@ -2,7 +2,7 @@
 
 import { RichContent } from '@/components/rich-content';
 import { McqRenderer } from './mcq-renderer';
-import { FillInBlankRenderer } from './fill-in-blank-renderer';
+
 
 interface QuestionFromAPI {
   id: string;

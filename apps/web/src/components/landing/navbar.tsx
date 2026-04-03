@@ -7,13 +7,16 @@ import { Menu, X, BookOpen } from 'lucide-react';
 
 const navLinks = [
   { href: '/tests', label: 'Tests' },
+  { href: '/flashcards', label: 'Flashcards' },
   { href: '/dashboard', label: 'Dashboard' },
   { href: '#pricing', label: 'Pricing' },
   { href: '#about', label: 'About' },
 ];
 
 export function Navbar() {
-  const { user, isAuthenticated, logout } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const logout = useAuthStore((s) => s.logout);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 

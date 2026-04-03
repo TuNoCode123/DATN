@@ -2,14 +2,24 @@
   "name": "ielts-ai-platform",
   "version": "1.0.0",
   "private": true,
+  "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "dev:api": "cd apps/api && npm run start:dev",
-    "dev:web": "cd apps/web && npm run dev",
-    "build:api": "cd apps/api && npm run build",
-    "build:web": "cd apps/web && npm run build",
-    "db:generate": "cd apps/api && npm run db:generate",
-    "db:migrate": "cd apps/api && npm run db:migrate",
-    "db:seed": "cd apps/api && npm run db:seed",
-    "db:studio": "cd apps/api && npm run db:studio"
+    "dev": "turbo run dev",
+    "dev:api": "turbo run dev --filter=api",
+    "dev:web": "turbo run dev --filter=web",
+    "build": "turbo run build",
+    "build:api": "turbo run build --filter=api",
+    "build:web": "turbo run build --filter=web",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter api run db:generate",
+    "db:migrate": "pnpm --filter api run db:migrate",
+    "db:seed": "pnpm --filter api run db:seed",
+    "db:studio": "pnpm --filter api run db:studio",
+    "docker:api": "docker build -f apps/api/Dockerfile -t ielts-ai-api .",
+    "docker:web": "docker build -f apps/web/Dockerfile -t ielts-ai-web ."
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0"
   }
 }

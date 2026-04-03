@@ -85,8 +85,6 @@ export default function AdminResultsPage() {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="SUBMITTED">Submitted</SelectItem>
-                <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
-                <SelectItem value="ABANDONED">Abandoned</SelectItem>
               </SelectContent>
             </Select>
           </div>

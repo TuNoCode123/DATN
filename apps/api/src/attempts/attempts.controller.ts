@@ -4,10 +4,7 @@ import {
   Get,
   Body,
   Param,
-  Query,
   UseGuards,
-  HttpCode,
-  HttpStatus,
 } from '@nestjs/common';
 import { AttemptsService } from './attempts.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -37,14 +34,6 @@ export class AttemptsController {
       body.sectionIds,
       body.timeLimitMins,
     );
-  }
-
-  @Get('in-progress')
-  findInProgress(
-    @CurrentUser('id') userId: string,
-    @Query('testId') testId: string,
-  ) {
-    return this.attemptsService.findInProgress(userId, testId);
   }
 
   @Get(':id')
@@ -83,21 +72,20 @@ export class AttemptsController {
     return this.attemptsService.saveAnswersBulk(attemptId, body.answers);
   }
 
+  @Post(':id/heartbeat')
+  heartbeat(
+    @Param('id') attemptId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.attemptsService.heartbeat(attemptId, userId);
+  }
+
   @Post(':id/submit')
   submit(
     @Param('id') attemptId: string,
     @CurrentUser('id') userId: string,
   ) {
     return this.attemptsService.submitAttempt(attemptId, userId);
-  }
-
-  @Post(':id/abandon')
-  @HttpCode(HttpStatus.OK)
-  abandon(
-    @Param('id') attemptId: string,
-    @CurrentUser('id') userId: string,
-  ) {
-    return this.attemptsService.abandonAttempt(attemptId, userId);
   }
 
   @Get()

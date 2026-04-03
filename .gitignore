@@ -3,8 +3,23 @@ dist/
 .next/
 .env
 .env.local
+.env.*
+!.env.example
 *.log
 .DS_Store
 Thumbs.db
-.turbo
 coverage/
+
+# Turbo
+.turbo/
+
+# pnpm
+.pnpm-store/
+
+# Terraform
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/*.tfplan
+infra/terraform.tfvars
+infra/.terraform.lock.hcl

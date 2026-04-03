@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "comments" ADD COLUMN     "deletedAt" TIMESTAMP(3),
+ADD COLUMN     "depth" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "replyCount" INTEGER NOT NULL DEFAULT 0;

@@ -51,8 +51,8 @@ export function useFileUpload() {
 
       setProgress(100);
       return { fileUrl, key };
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.message || 'Upload failed';
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message || (err as { message?: string })?.message || 'Upload failed';
       setError(msg);
       throw err;
     } finally {

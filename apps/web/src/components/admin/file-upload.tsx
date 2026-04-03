@@ -84,6 +84,7 @@ export function FileUpload({
       {value && !uploading && (
         <div className="flex items-center gap-2 rounded-md border bg-muted/50 p-2">
           {isImage && (
+            /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={previewSrc!}
               alt="Preview"

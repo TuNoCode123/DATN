@@ -33,7 +33,7 @@ interface QuestionFromAPI {
   stem: string | null;
   correctAnswer: string;
   explanation: string | null;
-  options: any;
+  options: unknown;
   imageUrl: string | null;
   audioUrl: string | null;
 }
@@ -148,7 +148,6 @@ function QuestionDetailModal({
   status,
 }: QuestionDetailProps) {
   const [showExplanation, setShowExplanation] = useState(false);
-  const [showTranscript, setShowTranscript] = useState(false);
 
   // Resolve audio/image: question-level first, then group-level
   const audioUrl = question.audioUrl || group.audioUrl;
@@ -160,11 +159,12 @@ function QuestionDetailModal({
     if (!question.options) return [];
     const opts = question.options;
     if (Array.isArray(opts)) {
-      return opts.map((o: any, i: number) => {
+      return opts.map((o: unknown, i: number) => {
         if (typeof o === "string") {
           return { label: String.fromCharCode(65 + i), text: o };
         }
-        return { label: o.label || String.fromCharCode(65 + i), text: o.text || String(o) };
+        const obj = o as { label?: string; text?: string };
+        return { label: obj.label || String.fromCharCode(65 + i), text: obj.text || String(o) };
       });
     }
     return [];
@@ -203,6 +203,7 @@ function QuestionDetailModal({
           </div>
         ) : imageUrl ? (
           <div className="rounded-lg overflow-hidden border border-slate-200">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={imageUrl}
               alt={`Question ${question.questionNumber}`}

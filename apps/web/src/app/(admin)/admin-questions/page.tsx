@@ -66,6 +66,7 @@ export default function AdminQuestionsPage() {
         if (!q.imageUrl && !q.audioUrl) return <span className="text-muted-foreground">—</span>;
         return (
           <div className="flex items-center gap-1.5" title={[q.imageUrl && `Image: ${q.imageUrl}`, q.audioUrl && `Audio: ${q.audioUrl}`].filter(Boolean).join('\n')}>
+            {/* eslint-disable-next-line jsx-a11y/alt-text */}
             {q.imageUrl && <Image className="h-3.5 w-3.5 text-indigo-500" />}
             {q.audioUrl && <Music className="h-3.5 w-3.5 text-amber-500" />}
           </div>

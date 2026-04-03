@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { message } from 'antd';
+import { App } from 'antd';
 import { Mail, Lock, User, ArrowRight, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
@@ -10,6 +10,7 @@ import { useAuthStore } from '@/lib/auth-store';
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { message } = App.useApp();
   const setUser = useAuthStore((s) => s.setUser);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -35,8 +36,8 @@ export default function RegisterPage() {
       setUser(user);
       message.success('Account created successfully!');
       router.push('/tests');
-    } catch (err: any) {
-      const msg = err.response?.data?.message || 'Registration failed';
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message || 'Registration failed';
       message.error(msg);
     } finally {
       setLoading(false);

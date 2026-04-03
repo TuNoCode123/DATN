@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Checkbox, Select, message } from 'antd';
+import { Checkbox, Select, App } from 'antd';
 import {
   Clock,
   Users,
@@ -12,13 +12,14 @@ import {
   Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { CommentSection } from '@/components/comments/comment-section';
 
 interface QuestionFromAPI {
   id: string;
   questionNumber: number;
   orderIndex: number;
   stem: string | null;
-  options: any;
+  options: unknown;
 }
 
 interface QuestionGroupFromAPI {
@@ -26,7 +27,7 @@ interface QuestionGroupFromAPI {
   questionType: string;
   orderIndex: number;
   instructions: string | null;
-  matchingOptions: any;
+  matchingOptions: unknown;
   questions: QuestionFromAPI[];
 }
 
@@ -77,6 +78,7 @@ function getQuestionTypeBadge(type: string): string {
 }
 
 export default function TestDetailPage() {
+  const { message } = App.useApp();
   const params = useParams();
   const router = useRouter();
   const testId = params.id as string;
@@ -120,8 +122,8 @@ export default function TestDetailPage() {
         timeLimitMins: timeLimit > 0 ? timeLimit : undefined,
       });
       router.push(`/tests/${testId}/attempt?attemptId=${attempt.id}`);
-    } catch (err: any) {
-      const msg = err.response?.data?.message || 'Could not start the test';
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message || 'Could not start the test';
       message.error(msg);
     } finally {
       setStarting(false);
@@ -299,8 +301,8 @@ export default function TestDetailPage() {
 
       {/* Discussion */}
       {mode === 'discussion' && (
-        <div className="brutal-card p-8 text-center">
-          <p className="text-slate-500 text-sm">Discussion section coming soon.</p>
+        <div className="brutal-card p-5">
+          <CommentSection testId={testId} />
         </div>
       )}
     </div>
