@@ -32,8 +32,17 @@ RUN pnpm --filter api run build
 RUN pnpm --filter api deploy --prod /app/deploy
 
 # Copy generated Prisma client into deploy
-RUN cp -r /app/node_modules/.pnpm/@prisma+client*/node_modules/.prisma /app/deploy/node_modules/.prisma
-RUN cp -r /app/node_modules/.pnpm/@prisma+client*/node_modules/@prisma/client /app/deploy/node_modules/@prisma/client
+# In pnpm, the generated .prisma/client lives inside the .pnpm store, not at node_modules/.prisma
+RUN PRISMA_GENERATED=$(find /app/node_modules/.pnpm -path '*/.prisma/client/index.js' -exec dirname {} \; | head -1) \
+ && mkdir -p /app/deploy/node_modules/.prisma \
+ && cp -r "$PRISMA_GENERATED" /app/deploy/node_modules/.prisma/client \
+ && echo "Copied generated Prisma client from: $PRISMA_GENERATED"
+
+# Ensure @prisma/client package is properly copied (not a symlink)
+RUN PRISMA_PKG=$(find /app/node_modules/.pnpm -path '*/@prisma/client/package.json' -exec dirname {} \; | head -1) \
+ && rm -rf /app/deploy/node_modules/@prisma/client \
+ && cp -rL "$PRISMA_PKG" /app/deploy/node_modules/@prisma/client \
+ && echo "Copied @prisma/client from: $PRISMA_PKG"
 
 # ── Production stage ─────────────────────────────────────────
 FROM node:20-alpine AS runner
@@ -42,8 +51,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 COPY --from=builder /app/deploy/node_modules ./node_modules
-COPY --from=builder /app/deploy/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/deploy/node_modules/@prisma/client ./node_modules/@prisma/client
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/prisma ./prisma
 
