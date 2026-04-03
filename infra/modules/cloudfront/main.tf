@@ -96,7 +96,10 @@ resource "aws_cloudfront_distribution" "web" {
 
     forwarded_values {
       query_string = false # No query strings for static files
-      headers      = []    # No headers forwarded → enables caching
+      headers      = ["Host"] # Forward Host header so ALB/Next.js receives
+      # the correct hostname (web.neu-study.online) instead of ALB's internal DNS.
+      # Without this, CloudFront sends ALB's DNS name as Host, causing 502 errors.
+      # Cache efficiency is unaffected since we only have one hostname.
 
       cookies {
         forward = "none" # No cookies needed for static files
