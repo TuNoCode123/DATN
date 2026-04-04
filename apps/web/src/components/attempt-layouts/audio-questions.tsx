@@ -2,6 +2,7 @@
 
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Play, Pause, Volume2, VolumeX } from "lucide-react";
+import { RichContent } from "@/components/rich-content";
 import { QuestionGroupRenderer } from "@/components/question-renderers";
 import type { LayoutProps } from "./types";
 
@@ -130,6 +131,15 @@ export function AudioQuestionsLayout({
           />
         </div>
       </div>
+
+      {/* Section instructions */}
+      {section.instructions && (
+        <div className="px-5 py-3 bg-blue-50 border-b border-slate-200 shrink-0">
+          <div className="text-sm text-slate-700 italic leading-relaxed">
+            <RichContent html={section.instructions} />
+          </div>
+        </div>
+      )}
 
       {/* Questions */}
       <div className="flex-1 overflow-y-auto">

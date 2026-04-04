@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { FlashcardQuestionType } from '@prisma/client';
+import { BedrockService } from '../bedrock/bedrock.service';
 
 export interface CardInput {
   word: string;
@@ -62,48 +62,27 @@ For FILL_IN_THE_BLANK type:
 export class AiGeneratorService {
   private readonly logger = new Logger(AiGeneratorService.name);
 
-  constructor(private configService: ConfigService) {}
+  constructor(private bedrock: BedrockService) {}
 
   async generateQuestions(
     cards: CardInput[],
     questionType: FlashcardQuestionType,
     count: number,
   ): Promise<GeneratedQuestion[]> {
-    const apiKey = this.configService.get<string>('ANTHROPIC_API_KEY');
-
-    if (!apiKey) {
-      this.logger.warn('No ANTHROPIC_API_KEY set, using fallback questions');
-      return this.generateFallbackQuestions(cards, questionType, count);
-    }
-
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-6',
-          max_tokens: 4000,
-          temperature: 0.7,
-          system: SYSTEM_PROMPT,
-          messages: [
-            {
-              role: 'user',
-              content: JSON.stringify({ cards, questionType, count }),
-            },
-          ],
-        }),
+      const response = await this.bedrock.messages.create({
+        max_tokens: 4000,
+        temperature: 0.7,
+        system: SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: JSON.stringify({ cards, questionType, count }),
+          },
+        ],
       });
 
-      if (!response.ok) {
-        throw new Error(`AI API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const content = data.content?.[0]?.text;
+      const content = response.content[0]?.text;
       if (!content) throw new Error('Empty AI response');
 
       const questions: GeneratedQuestion[] = JSON.parse(content);

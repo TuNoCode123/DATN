@@ -123,6 +123,9 @@ export class AdminTestsService {
               sectionId: section.id,
               title: p.title,
               contentHtml: p.contentHtml,
+              imageUrl: p.imageUrl,
+              audioUrl: p.audioUrl,
+              imageLayout: p.imageLayout,
               orderIndex: p.orderIndex,
             })),
           });
@@ -153,6 +156,8 @@ export class AdminTestsService {
                 explanation: q.explanation,
                 imageUrl: q.imageUrl,
                 audioUrl: q.audioUrl,
+                imageLayout: q.imageLayout,
+                metadata: q.metadata ?? Prisma.DbNull,
               })),
             });
           }
@@ -234,6 +239,9 @@ export class AdminTestsService {
               sectionId: section.id,
               title: p.title,
               contentHtml: p.contentHtml,
+              imageUrl: p.imageUrl,
+              audioUrl: p.audioUrl,
+              imageLayout: p.imageLayout,
               orderIndex: p.orderIndex,
             })),
           });
@@ -264,6 +272,8 @@ export class AdminTestsService {
                 explanation: q.explanation,
                 imageUrl: q.imageUrl,
                 audioUrl: q.audioUrl,
+                imageLayout: q.imageLayout,
+                metadata: q.metadata ?? Prisma.DbNull,
               })),
             });
           }
@@ -362,6 +372,9 @@ export class AdminTestsService {
               sectionId: newSection.id,
               title: p.title,
               contentHtml: p.contentHtml,
+              imageUrl: p.imageUrl,
+              audioUrl: p.audioUrl,
+              imageLayout: p.imageLayout,
               orderIndex: p.orderIndex,
             })),
           });
@@ -393,6 +406,8 @@ export class AdminTestsService {
                 explanation: q.explanation,
                 imageUrl: q.imageUrl,
                 audioUrl: q.audioUrl,
+                imageLayout: q.imageLayout,
+                metadata: q.metadata ?? Prisma.DbNull,
               })),
             });
           }
@@ -723,6 +738,15 @@ export class AdminTestsService {
         });
       }
 
+      // Temporarily shift orderIndex of surviving sections to avoid unique constraint (testId, orderIndex) collisions
+      const survivingSectionIds = [...existingSectionIds].filter((sid) => incomingSectionIds.has(sid));
+      for (let si = 0; si < survivingSectionIds.length; si++) {
+        await tx.testSection.update({
+          where: { id: survivingSectionIds[si] },
+          data: { orderIndex: 100000 + si },
+        });
+      }
+
       let totalQuestions = 0;
 
       // Process each incoming section
@@ -781,6 +805,15 @@ export class AdminTestsService {
           });
         }
 
+        // Temporarily shift orderIndex of surviving passages to avoid unique constraint (sectionId, orderIndex) collisions
+        const survivingPassageIds = [...existingPassageIds].filter((pid) => incomingPassageIds.has(pid));
+        for (let pi = 0; pi < survivingPassageIds.length; pi++) {
+          await tx.passage.update({
+            where: { id: survivingPassageIds[pi] },
+            data: { orderIndex: 100000 + pi },
+          });
+        }
+
         // Map _tempId → real passage id (for new passages referenced by groups)
         const tempPassageIdMap = new Map<string, string>();
 
@@ -792,6 +825,9 @@ export class AdminTestsService {
               data: {
                 title: passageDto.title ?? null,
                 contentHtml: passageDto.contentHtml,
+                imageUrl: passageDto.imageUrl ?? null,
+                audioUrl: passageDto.audioUrl ?? null,
+                imageLayout: passageDto.imageLayout ?? null,
                 orderIndex: passageDto.orderIndex,
               },
             });
@@ -806,6 +842,9 @@ export class AdminTestsService {
                 sectionId,
                 title: passageDto.title,
                 contentHtml: passageDto.contentHtml,
+                imageUrl: passageDto.imageUrl,
+                audioUrl: passageDto.audioUrl,
+                imageLayout: passageDto.imageLayout,
                 orderIndex: passageDto.orderIndex,
               },
             });
@@ -829,6 +868,15 @@ export class AdminTestsService {
         if (groupIdsToDelete.length > 0) {
           await tx.questionGroup.deleteMany({
             where: { id: { in: groupIdsToDelete } },
+          });
+        }
+
+        // Temporarily shift orderIndex of surviving groups to avoid unique constraint (sectionId, orderIndex) collisions during reorder
+        const survivingGroupIds = [...existingGroupIds].filter((gid) => incomingGroupIds.has(gid));
+        for (let i = 0; i < survivingGroupIds.length; i++) {
+          await tx.questionGroup.update({
+            where: { id: survivingGroupIds[i] },
+            data: { orderIndex: 100000 + i },
           });
         }
 
@@ -896,6 +944,15 @@ export class AdminTestsService {
             });
           }
 
+          // Temporarily shift orderIndex of surviving questions to avoid unique constraint (groupId, orderIndex) collisions
+          const survivingQuestionIds = [...existingQuestionIds].filter((qid) => incomingQuestionIds.has(qid));
+          for (let qi = 0; qi < survivingQuestionIds.length; qi++) {
+            await tx.question.update({
+              where: { id: survivingQuestionIds[qi] },
+              data: { orderIndex: 100000 + qi },
+            });
+          }
+
           // Update existing questions
           for (const qDto of groupDto.questions) {
             if (qDto.id && existingQuestionIds.has(qDto.id)) {
@@ -910,6 +967,8 @@ export class AdminTestsService {
                   explanation: qDto.explanation ?? null,
                   imageUrl: qDto.imageUrl ?? null,
                   audioUrl: qDto.audioUrl ?? null,
+                  imageLayout: qDto.imageLayout ?? null,
+                  metadata: qDto.metadata ?? Prisma.DbNull,
                 },
               });
             }
@@ -929,6 +988,8 @@ export class AdminTestsService {
                 explanation: q.explanation,
                 imageUrl: q.imageUrl,
                 audioUrl: q.audioUrl,
+                imageLayout: q.imageLayout,
+                metadata: q.metadata ?? Prisma.DbNull,
               })),
             });
           }
@@ -1047,6 +1108,46 @@ export class AdminTestsService {
           { title: 'Writing: Respond to Request', skill: 'WRITING' as const, instructions: 'Respond to the written request.' },
           { title: 'Writing: Write an Opinion Essay', skill: 'WRITING' as const, instructions: 'Write an essay expressing your opinion on the given topic.' },
         ],
+      };
+    }
+
+    // ── HSK Templates ──
+    if (examType.startsWith('HSK_')) {
+      const hskLevel = parseInt(examType.replace('HSK_', ''));
+      const hasWriting = hskLevel >= 3;
+
+      const HSK_CONFIG: Record<number, { duration: number; listening: number; reading: number; reorder: number; keyword: number; picture: number }> = {
+        1: { duration: 40, listening: 20, reading: 20, reorder: 0, keyword: 0, picture: 0 },
+        2: { duration: 55, listening: 25, reading: 25, reorder: 0, keyword: 0, picture: 0 },
+        3: { duration: 90, listening: 30, reading: 30, reorder: 10, keyword: 0, picture: 0 },
+        4: { duration: 105, listening: 40, reading: 40, reorder: 10, keyword: 1, picture: 0 },
+        5: { duration: 125, listening: 45, reading: 45, reorder: 8, keyword: 1, picture: 1 },
+        6: { duration: 140, listening: 50, reading: 50, reorder: 0, keyword: 0, picture: 0 },
+      };
+
+      const cfg = HSK_CONFIG[hskLevel] || HSK_CONFIG[1];
+      const sections: { title: string; skill: 'LISTENING' | 'READING' | 'WRITING'; instructions?: string }[] = [
+        { title: '听力 Listening', skill: 'LISTENING', instructions: `HSK ${hskLevel} 听力理解 — ${cfg.listening} questions` },
+        { title: '阅读 Reading', skill: 'READING', instructions: `HSK ${hskLevel} 阅读理解 — ${cfg.reading} questions` },
+      ];
+
+      if (hasWriting) {
+        const writingParts: string[] = [];
+        if (cfg.reorder > 0) writingParts.push(`${cfg.reorder} sentence reorder`);
+        if (cfg.keyword > 0) writingParts.push(`${cfg.keyword} keyword composition`);
+        if (cfg.picture > 0) writingParts.push(`${cfg.picture} picture composition`);
+        sections.push({
+          title: '书写 Writing',
+          skill: 'WRITING',
+          instructions: `HSK ${hskLevel} 书写 — ${writingParts.join(', ')}`,
+        });
+      }
+
+      return {
+        title: `HSK ${hskLevel} (汉语水平考试 ${['一', '二', '三', '四', '五', '六'][hskLevel - 1]}级)`,
+        durationMins: cfg.duration,
+        description: `HSK Level ${hskLevel} — ${hasWriting ? 'Listening + Reading + Writing' : 'Listening + Reading'}`,
+        sections,
       };
     }
 

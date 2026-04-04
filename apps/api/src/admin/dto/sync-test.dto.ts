@@ -34,8 +34,9 @@ export class SyncQuestionDto {
   @IsOptional()
   options?: any;
 
+  @IsOptional()
   @IsString()
-  correctAnswer: string;
+  correctAnswer?: string;
 
   @IsOptional()
   @IsString()
@@ -48,6 +49,13 @@ export class SyncQuestionDto {
   @IsOptional()
   @IsString()
   audioUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  imageLayout?: string;
+
+  @IsOptional()
+  metadata?: any;
 }
 
 export class SyncGroupDto {
@@ -108,6 +116,18 @@ export class SyncPassageDto {
 
   @IsString()
   contentHtml: string;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  imageLayout?: string;
 
   @IsInt()
   @Min(0)

@@ -23,10 +23,20 @@ api.interceptors.request.use((config) => {
 });
 
 // ── Response interceptor: auto-refresh on 401 ──
+// Paths that should never trigger a refresh+redirect cycle
+const AUTH_PATHS = ['/auth/cognito/me', '/auth/cognito/refresh', '/auth/cognito/logout'];
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const requestPath = originalRequest?.url ?? '';
+
+    // Never retry auth endpoints — just let them fail silently
+    if (AUTH_PATHS.some((p) => requestPath.includes(p))) {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       try {
@@ -35,7 +45,10 @@ api.interceptors.response.use(
         });
         return api(originalRequest);
       } catch {
-        window.location.href = '/unauthorized?reason=session_expired';
+        // Only redirect if not already on the unauthorized page
+        if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/unauthorized')) {
+          window.location.href = '/unauthorized?reason=session_expired';
+        }
       }
     }
     return Promise.reject(error);

@@ -50,10 +50,13 @@ export class CognitoJwtStrategy extends PassportStrategy(
       throw new UnauthorizedException('Invalid token type');
     }
 
+    // Role is derived from Cognito groups — single source of truth
+    const role = payload['cognito:groups']?.includes('Admin') ? 'ADMIN' : 'STUDENT';
+
     // Find by cognitoSub first (fast path)
     let user = await this.usersService.findByCognitoSub(payload.sub);
     if (user) {
-      return { id: user.id, email: user.email, displayName: user.displayName, role: user.role };
+      return { id: user.id, email: user.email, displayName: user.displayName, role };
     }
 
     // Access tokens often lack email — extract from id_token cookie instead
@@ -70,7 +73,7 @@ export class CognitoJwtStrategy extends PassportStrategy(
       user = await this.usersService.findByEmail(email);
       if (user) {
         await this.usersService.linkCognitoSub(user.id, payload.sub);
-        return { id: user.id, email: user.email, displayName: user.displayName, role: user.role };
+        return { id: user.id, email: user.email, displayName: user.displayName, role };
       }
     }
 

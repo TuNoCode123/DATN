@@ -7,7 +7,9 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScoringService, SectionResult, Skill } from '../scoring/scoring.service';
+import { HskGradingService } from '../hsk-grading/hsk-grading.service';
 import { AttemptMode, AttemptStatus, Prisma } from '@prisma/client';
+import { matchAnswer } from './answer-matcher';
 
 const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
 
@@ -18,6 +20,7 @@ export class AttemptsService {
   constructor(
     private prisma: PrismaService,
     private scoringService: ScoringService,
+    private hskGradingService: HskGradingService,
   ) {}
 
   async startAttempt(
@@ -116,6 +119,7 @@ export class AttemptsService {
                         options: true,
                         imageUrl: true,
                         audioUrl: true,
+                        metadata: true,
                         correctAnswer: false,
                         explanation: false,
                       },
@@ -230,23 +234,64 @@ export class AttemptsService {
     let correctCount = 0;
     const correctBySkill = new Map<string, number>();
     const totalBySkill = new Map<string, number>();
+    const pendingWritingAnswerIds: string[] = [];
+    const reorderScores: number[] = [];
 
     for (const answer of attempt.answers) {
       const skill = answer.question.group.section.skill;
-      const isCorrect =
-        answer.answerText?.trim().toLowerCase() ===
-        answer.question.correctAnswer.trim().toLowerCase();
-      if (isCorrect) {
-        correctCount++;
-        correctBySkill.set(skill, (correctBySkill.get(skill) || 0) + 1);
-      }
-      // Track total answered per skill
+      const questionType = answer.question.group.questionType;
+
       totalBySkill.set(skill, (totalBySkill.get(skill) || 0) + 1);
 
-      await this.prisma.userAnswer.update({
-        where: { id: answer.id },
-        data: { isCorrect },
-      });
+      if (questionType === 'SENTENCE_REORDER') {
+        // Deterministic: normalize + compare with partial credit
+        const meta = answer.question.metadata as { fragments: string[] };
+        const result = this.hskGradingService.gradeSentenceReorder(
+          answer.answerText,
+          { correctAnswer: answer.question.correctAnswer || '', metadata: meta },
+        );
+        if (result.isCorrect) {
+          correctCount++;
+          correctBySkill.set(skill, (correctBySkill.get(skill) || 0) + 1);
+        }
+        reorderScores.push(result.score);
+        await this.prisma.userAnswer.update({
+          where: { id: answer.id },
+          data: { isCorrect: result.isCorrect },
+        });
+      } else if (
+        questionType === 'KEYWORD_COMPOSITION' ||
+        questionType === 'PICTURE_COMPOSITION'
+      ) {
+        // AI-graded: mark as pending, queue async grading
+        pendingWritingAnswerIds.push(answer.id);
+        await this.prisma.userAnswer.update({
+          where: { id: answer.id },
+          data: { isCorrect: null },
+        });
+      } else {
+        // Smart matching: supports [OR], /, (optional) syntax for fill-in-blank
+        // Also backward-compatible with simple exact match for MCQ, T/F, matching
+        const isCorrect = matchAnswer(
+          answer.answerText,
+          answer.question.correctAnswer,
+        );
+        if (isCorrect) {
+          correctCount++;
+          correctBySkill.set(skill, (correctBySkill.get(skill) || 0) + 1);
+        }
+        await this.prisma.userAnswer.update({
+          where: { id: answer.id },
+          data: { isCorrect },
+        });
+      }
+    }
+
+    // Queue AI grading for writing composition questions
+    if (pendingWritingAnswerIds.length > 0) {
+      this.hskGradingService
+        .queueWritingGrading(attemptId, pendingWritingAnswerIds)
+        .catch((err) => this.logger.error('Failed to queue writing grading', err));
     }
 
     // Count total questions from selected sections
@@ -365,6 +410,20 @@ export class AttemptsService {
     }
 
     return attempt;
+  }
+
+  async findByUserAndTest(userId: string, testId: string) {
+    return this.prisma.userAttempt.findMany({
+      where: { userId, testId, status: AttemptStatus.SUBMITTED },
+      include: {
+        sections: {
+          include: {
+            section: { select: { id: true, title: true, skill: true } },
+          },
+        },
+      },
+      orderBy: { startedAt: 'desc' },
+    });
   }
 
   async findByUser(userId: string) {

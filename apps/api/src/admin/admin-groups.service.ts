@@ -150,6 +150,7 @@ export class AdminGroupsService {
             explanation: dto.explanation,
             imageUrl: dto.imageUrl,
             audioUrl: dto.audioUrl,
+            metadata: dto.metadata ?? Prisma.DbNull,
           },
         }),
       ),
@@ -172,6 +173,7 @@ export class AdminGroupsService {
         ...(dto.explanation !== undefined && { explanation: dto.explanation }),
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
         ...(dto.audioUrl !== undefined && { audioUrl: dto.audioUrl }),
+        ...(dto.metadata !== undefined && { metadata: dto.metadata ?? Prisma.DbNull }),
       },
     });
   }

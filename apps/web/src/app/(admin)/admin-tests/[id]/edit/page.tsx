@@ -4,10 +4,11 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
-  ArrowLeft, Save, Send, Plus, Trash2, Loader2,
+  ArrowLeft, ArrowUp, ArrowDown, Save, Send, Plus, Trash2, Loader2,
   Headphones, BookOpen, Pen, Mic, AlertTriangle,
   Eye, ChevronDown, ChevronRight, ChevronLeft,
   Image, Music, Settings2, FileText, HelpCircle, Info, X,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,6 +20,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import TiptapEditor from '@/components/admin/tiptap-editor';
+import TiptapMiniEditor from '@/components/admin/tiptap-mini-editor';
 import { ConfirmDialog } from '@/components/admin/confirm-dialog';
 import {
   useAdminTest,
@@ -40,6 +42,7 @@ import type {
   ValidationResult,
 } from '@/features/admin/types';
 import { cn } from '@/lib/utils';
+import { getAcceptedForms } from '@/lib/answer-matcher';
 
 // ── Helper: generate temp IDs for new entities ───────
 
@@ -73,9 +76,14 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'MATCHING_SENTENCE_ENDINGS', label: 'Matching Sentence Endings' },
   { value: 'SENTENCE_COMPLETION', label: 'Sentence Completion' },
   { value: 'SUMMARY_COMPLETION', label: 'Summary Completion' },
-  { value: 'NOTE_COMPLETION', label: 'Note / Form Completion' },
+  { value: 'NOTE_COMPLETION', label: 'Note Completion' },
+  { value: 'TABLE_COMPLETION', label: 'Table Completion' },
+  { value: 'FORM_COMPLETION', label: 'Form Completion' },
   { value: 'SHORT_ANSWER', label: 'Short Answer' },
   { value: 'LABELLING', label: 'Labelling' },
+  { value: 'SENTENCE_REORDER', label: 'Sentence Reorder (排列顺序)' },
+  { value: 'KEYWORD_COMPOSITION', label: 'Keyword Composition (看词写作)' },
+  { value: 'PICTURE_COMPOSITION', label: 'Picture Composition (看图写作)' },
 ];
 
 // ── Main Editor Page ─────────────────────────────────
@@ -132,14 +140,25 @@ export default function TestEditorPage() {
   async function handleSaveAll() {
     if (!localTest) return;
 
+    // Auto-assign questionNumbers: sequential across all sections, starting from 1
+    const testWithNumbers = cloneTest(localTest);
+    let qNum = 1;
+    for (const section of testWithNumbers.sections || []) {
+      for (const group of section.questionGroups || []) {
+        for (const q of group.questions || []) {
+          q.questionNumber = qNum++;
+        }
+      }
+    }
+
     // Build the sync payload from local state
     const payload = {
-      title: localTest.title,
-      examType: localTest.examType,
-      durationMins: localTest.durationMins,
-      description: localTest.description,
-      tagIds: localTest.tags?.map((t) => t.tagId) ?? [],
-      sections: (localTest.sections || []).map((section, sIdx) => ({
+      title: testWithNumbers.title,
+      examType: testWithNumbers.examType,
+      durationMins: testWithNumbers.durationMins,
+      description: testWithNumbers.description,
+      tagIds: testWithNumbers.tags?.map((t) => t.tagId) ?? [],
+      sections: (testWithNumbers.sections || []).map((section, sIdx) => ({
         // Only send real IDs (not temp IDs)
         ...(section.id && !section.id.startsWith('_new_') ? { id: section.id } : {}),
         title: section.title,
@@ -153,6 +172,9 @@ export default function TestEditorPage() {
           _tempId: passage.id?.startsWith('_new_') ? passage.id : undefined,
           title: passage.title,
           contentHtml: passage.contentHtml,
+          imageUrl: passage.imageUrl,
+          audioUrl: passage.audioUrl,
+          imageLayout: passage.imageLayout,
           orderIndex: pIdx,
         })),
         questionGroups: (section.questionGroups || []).map((group, gIdx) => ({
@@ -179,6 +201,8 @@ export default function TestEditorPage() {
             explanation: q.explanation,
             imageUrl: q.imageUrl,
             audioUrl: q.audioUrl,
+            imageLayout: q.imageLayout,
+            metadata: q.metadata,
           })),
         })),
       })),
@@ -479,6 +503,9 @@ export default function TestEditorPage() {
             key={activeSection.id}
             section={activeSection}
             examType={localTest.examType}
+            sectionQuestionOffset={sections.slice(0, activeTab).reduce(
+              (sum, s) => sum + (s.questionGroups || []).reduce((gs, g) => gs + (g.questions?.length || 0), 0), 0,
+            )}
             onChange={(updatedSection) => {
               updateLocal((test) => ({
                 ...test,
@@ -658,7 +685,7 @@ const IELTS_READING_GUIDE: Record<string, { title: string; steps: string[] }> = 
       'Add question groups as needed (common types below):',
       '  • MATCHING_HEADINGS — match paragraph headings',
       '  • TRUE_FALSE_NOT_GIVEN — evaluate statements',
-      '  • SENTENCE_COMPLETION / NOTE_COMPLETION — fill in blanks',
+      '  • SENTENCE_COMPLETION / NOTE_COMPLETION / TABLE_COMPLETION — fill in blanks',
       '  • MULTIPLE_CHOICE — choose correct answer',
       '⭐ Link ALL question groups to the passage using the dropdown',
       'Typically 13-14 questions total',
@@ -697,10 +724,11 @@ const IELTS_LISTENING_GUIDE: Record<string, { title: string; steps: string[] }> 
     title: 'Section 1: Social Conversation',
     steps: [
       'Set skill to LISTENING, upload section audio',
-      'Add question groups (typically 10 questions):',
-      '  • NOTE_COMPLETION or SENTENCE_COMPLETION — fill in forms/notes',
-      '  • MULTIPLE_CHOICE — choose correct answer',
-      'No passages needed',
+      'For Form/Table Completion: Add group instructions with the table/form HTML using ___1___, ___2___ for blanks',
+      'Add question group: TABLE_COMPLETION or FORM_COMPLETION, click "Sync from Passage"',
+      'Fill in the correct answer for each blank',
+      'For MCQ: Add a MULTIPLE_CHOICE group (no passage needed)',
+      'Typically 10 questions total',
     ],
   },
   'section 2': {
@@ -891,11 +919,13 @@ function SectionSetupGuide({
 function SectionEditor({
   section,
   examType,
+  sectionQuestionOffset,
   onChange,
   onDelete,
 }: {
   section: AdminTestSection;
   examType: ExamType;
+  sectionQuestionOffset: number;
   onChange: (updated: AdminTestSection) => void;
   onDelete: () => void;
 }) {
@@ -930,8 +960,11 @@ function SectionEditor({
     const newPassage: AdminPassage = {
       id: tempId(),
       sectionId: section.id,
-      title: null,
+      title: `Passage-${crypto.randomUUID().slice(0, 8)}`,
       contentHtml: '<p>Enter passage text here...</p>',
+      imageUrl: null,
+      audioUrl: null,
+      imageLayout: null,
       orderIndex: (section.passages || []).length,
     };
     updateField({ passages: [...(section.passages || []), newPassage] });
@@ -1056,7 +1089,7 @@ function SectionEditor({
         </div>
       )}
 
-      {section.skill === 'READING' && (
+      {(section.skill === 'READING' || section.skill === 'LISTENING') && (
         <Button variant="outline" size="sm" onClick={handleAddPassage}>
           <Plus className="mr-1.5 h-4 w-4" /> Add Passage
         </Button>
@@ -1092,26 +1125,55 @@ function SectionEditor({
           </Card>
         )}
 
-        {section.questionGroups.map((group) => (
-          <QuestionGroupEditor
-            key={group.id}
-            group={group}
-            passages={section.passages || []}
-            onChange={(updated) => {
-              updateField({
-                questionGroups: section.questionGroups.map((g) =>
-                  g.id === group.id ? updated : g,
-                ),
-              });
-            }}
-            onDelete={() => {
-              updateField({
-                questionGroups: section.questionGroups.filter((g) => g.id !== group.id),
-              });
-              toast.success('Group deleted (unsaved)');
-            }}
-          />
-        ))}
+        {section.questionGroups.map((group, gIdx) => {
+          // Compute cumulative question offset: section offset + previous groups in this section
+          const questionNumberOffset = sectionQuestionOffset + section.questionGroups
+            .slice(0, gIdx)
+            .reduce((sum, g) => sum + g.questions.length, 0);
+          // Count how many groups are linked to each passage (informational)
+          const passageGroupCounts = new Map<string, number>();
+          for (const g of section.questionGroups) {
+            if (g.passageId && g.id !== group.id) {
+              passageGroupCounts.set(g.passageId, (passageGroupCounts.get(g.passageId) || 0) + 1);
+            }
+          }
+          return (
+            <QuestionGroupEditor
+              key={group.id}
+              group={group}
+              passages={section.passages || []}
+              passageGroupCounts={passageGroupCounts}
+              questionNumberOffset={questionNumberOffset}
+              isFirst={gIdx === 0}
+              isLast={gIdx === section.questionGroups.length - 1}
+              onChange={(updated) => {
+                updateField({
+                  questionGroups: section.questionGroups.map((g) =>
+                    g.id === group.id ? updated : g,
+                  ),
+                });
+              }}
+              onMoveUp={() => {
+                if (gIdx === 0) return;
+                const groups = [...section.questionGroups];
+                [groups[gIdx - 1], groups[gIdx]] = [groups[gIdx], groups[gIdx - 1]];
+                updateField({ questionGroups: groups.map((g, i) => ({ ...g, orderIndex: i })) });
+              }}
+              onMoveDown={() => {
+                if (gIdx === section.questionGroups.length - 1) return;
+                const groups = [...section.questionGroups];
+                [groups[gIdx], groups[gIdx + 1]] = [groups[gIdx + 1], groups[gIdx]];
+                updateField({ questionGroups: groups.map((g, i) => ({ ...g, orderIndex: i })) });
+              }}
+              onDelete={() => {
+                updateField({
+                  questionGroups: section.questionGroups.filter((g) => g.id !== group.id),
+                });
+                toast.success('Group deleted (unsaved)');
+              }}
+            />
+          );
+        })}
       </div>
 
       <ConfirmDialog
@@ -1178,6 +1240,76 @@ function PassageEditor({
                 placeholder="e.g. Reading Passage 1"
               />
             </div>
+
+            {/* Media uploads */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-teal-50/50 rounded-lg border border-teal-100 mb-3">
+              <div>
+                <FileUpload
+                  value={passage.imageUrl || null}
+                  onChange={(url) => onChange({ ...passage, imageUrl: url || null, imageLayout: url ? (passage.imageLayout || 'vertical') : null })}
+                  accept="image/*"
+                  label="Passage Image"
+                  maxSizeMB={10}
+                />
+                {passage.imageUrl && (
+                  <div className="mt-2">
+                    <Label className="text-xs text-muted-foreground mb-1 block">Image Layout</Label>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`passage-layout-${passage.id}`}
+                          checked={!passage.imageLayout || passage.imageLayout === 'vertical'}
+                          onChange={() => onChange({ ...passage, imageLayout: 'vertical' })}
+                          className="accent-teal-600"
+                        />
+                        Above text
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`passage-layout-${passage.id}`}
+                          checked={passage.imageLayout === 'below-text'}
+                          onChange={() => onChange({ ...passage, imageLayout: 'below-text' })}
+                          className="accent-teal-600"
+                        />
+                        Below text
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`passage-layout-${passage.id}`}
+                          checked={passage.imageLayout === 'beside-left'}
+                          onChange={() => onChange({ ...passage, imageLayout: 'beside-left' })}
+                          className="accent-teal-600"
+                        />
+                        Beside from left
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`passage-layout-${passage.id}`}
+                          checked={passage.imageLayout === 'beside-right'}
+                          onChange={() => onChange({ ...passage, imageLayout: 'beside-right' })}
+                          className="accent-teal-600"
+                        />
+                        Beside from right
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div>
+                <FileUpload
+                  value={passage.audioUrl || null}
+                  onChange={(url) => onChange({ ...passage, audioUrl: url || null })}
+                  accept="audio/*"
+                  label="Passage Audio"
+                  maxSizeMB={50}
+                />
+              </div>
+            </div>
+
             <div className="mt-2">
               <TiptapEditor
                 content={passage.contentHtml}
@@ -1200,23 +1332,95 @@ function PassageEditor({
   );
 }
 
+// ── Parse blank numbers from passage HTML ────────────
+
+function parseBlanksFromHtml(html: string): number[] {
+  const blanks: number[] = [];
+  // Match ___N___ patterns (3+ underscores, number, 3+ underscores)
+  const regex = /_{2,}\s*(\d+)\s*_{2,}/g;
+  let match;
+  while ((match = regex.exec(html)) !== null) {
+    blanks.push(parseInt(match[1], 10));
+  }
+  // Also match {N} style placeholders
+  const regex2 = /\{(\d+)\}/g;
+  while ((match = regex2.exec(html)) !== null) {
+    const num = parseInt(match[1], 10);
+    if (!blanks.includes(num)) blanks.push(num);
+  }
+  return blanks.sort((a, b) => a - b);
+}
+
 // ── Question Group Editor (local state) ──────────────
 
 function QuestionGroupEditor({
   group,
   passages,
+  passageGroupCounts,
+  questionNumberOffset,
+  isFirst,
+  isLast,
   onChange,
+  onMoveUp,
+  onMoveDown,
   onDelete,
 }: {
   group: AdminQuestionGroup;
   passages: AdminPassage[];
+  passageGroupCounts: Map<string, number>;
+  questionNumberOffset: number;
+  isFirst: boolean;
+  isLast: boolean;
   onChange: (updated: AdminQuestionGroup) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   onDelete: () => void;
 }) {
   const [expanded, setExpanded] = useState(true);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const isTableOrForm = group.questionType === 'TABLE_COMPLETION' || group.questionType === 'FORM_COMPLETION';
+  const [showInstructions, setShowInstructions] = useState(!!group.instructions || isTableOrForm);
 
   const qtLabel = QUESTION_TYPES.find((q) => q.value === group.questionType)?.label || group.questionType;
+  const isNoteCompletion = group.questionType === 'NOTE_COMPLETION' || group.questionType === 'TABLE_COMPLETION' || group.questionType === 'FORM_COMPLETION';
+  const linkedPassage = passages.find((p) => p.id === group.passageId);
+
+  function handleSyncFromPassage() {
+    if (!linkedPassage) return;
+    const blankNumbers = parseBlanksFromHtml(linkedPassage.contentHtml);
+    if (blankNumbers.length === 0) {
+      toast.error('No blanks found in passage. Use ___1___, ___2___ or {1}, {2} syntax.');
+      return;
+    }
+
+    // Build new questions list, preserving existing ones by questionNumber
+    const existingByNumber = new Map(
+      group.questions.filter((q) => q.questionNumber > 0).map((q) => [q.questionNumber, q]),
+    );
+
+    const syncedQuestions: AdminQuestion[] = blankNumbers.map((num, idx) => {
+      const existing = existingByNumber.get(num);
+      if (existing) {
+        return { ...existing, orderIndex: idx };
+      }
+      return {
+        id: tempId(),
+        groupId: group.id,
+        questionNumber: num,
+        orderIndex: idx,
+        stem: '',
+        options: null,
+        correctAnswer: '',
+        explanation: null,
+        imageUrl: null,
+        audioUrl: null,
+        imageLayout: null,
+      };
+    });
+
+    onChange({ ...group, questions: syncedQuestions });
+    toast.success(`Synced ${blankNumbers.length} blanks from passage`);
+  }
 
   function handleAddQuestion() {
     const newQ: AdminQuestion = {
@@ -1230,6 +1434,7 @@ function QuestionGroupEditor({
       explanation: null,
       imageUrl: null,
       audioUrl: null,
+      imageLayout: null,
     };
 
     if (group.questionType === 'MULTIPLE_CHOICE') {
@@ -1251,6 +1456,17 @@ function QuestionGroupEditor({
         { label: 'NO', text: 'NO' },
         { label: 'NOT GIVEN', text: 'NOT GIVEN' },
       ];
+    } else if (group.questionType === 'SENTENCE_REORDER') {
+      newQ.metadata = { type: 'SENTENCE_REORDER', fragments: [], hskLevel: 5, charSet: 'simplified' };
+      newQ.correctAnswer = '';
+    } else if (group.questionType === 'KEYWORD_COMPOSITION') {
+      newQ.metadata = { type: 'KEYWORD_COMPOSITION', keywords: [], minChars: 60, maxChars: 100, hskLevel: 5 };
+      newQ.correctAnswer = '';
+      newQ.stem = '请结合下列词语（要全部使用，顺序不分先后），写一篇80字左右的短文。';
+    } else if (group.questionType === 'PICTURE_COMPOSITION') {
+      newQ.metadata = { type: 'PICTURE_COMPOSITION', minChars: 60, maxChars: 100, hskLevel: 5 };
+      newQ.correctAnswer = '';
+      newQ.stem = '请结合这张图片写一篇80字左右的短文。';
     }
 
     onChange({ ...group, questions: [...group.questions, newQ] });
@@ -1290,13 +1506,27 @@ function QuestionGroupEditor({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No passage</SelectItem>
-                {passages.map((p, i) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.title || `Passage ${i + 1}`}
-                  </SelectItem>
-                ))}
+                {passages.map((p, i) => {
+                  const linkedCount = passageGroupCounts.get(p.id) || 0;
+                  return (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.title || `Passage ${i + 1}`}
+                      {linkedCount > 0 && <span className="ml-1.5 text-[10px] text-muted-foreground">({linkedCount} group{linkedCount > 1 ? 's' : ''})</span>}
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
+          )}
+          {!isNoteCompletion && !showInstructions && !group.instructions && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 text-xs gap-1 text-muted-foreground"
+              onClick={() => setShowInstructions(true)}
+            >
+              <FileText className="h-3.5 w-3.5" /> Instructions
+            </Button>
           )}
           <Button
             variant="outline"
@@ -1306,6 +1536,28 @@ function QuestionGroupEditor({
           >
             <Plus className="h-4 w-4" /> Add Question
           </Button>
+          <div className="flex items-center gap-0.5">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              disabled={isFirst}
+              onClick={onMoveUp}
+              title="Move group up"
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+              disabled={isLast}
+              onClick={onMoveDown}
+              title="Move group down"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+          </div>
           <Button
             variant="ghost"
             size="icon"
@@ -1318,10 +1570,30 @@ function QuestionGroupEditor({
       </div>
 
       {/* Group Info */}
-      {expanded && (group.instructions || group.audioUrl || group.imageUrl) && (
-        <div className="px-5 py-3 bg-blue-50/50 border-b space-y-1.5">
-          {group.instructions && (
-            <p className="text-sm text-muted-foreground italic">{group.instructions}</p>
+      {expanded && (group.instructions || group.audioUrl || group.imageUrl || showInstructions) && (
+        <div className="px-5 py-3 bg-blue-50/50 border-b space-y-2">
+          {(showInstructions || group.instructions) && (
+            <div>
+              <Label className="text-xs font-medium text-muted-foreground">
+                Instructions
+                {(group.questionType === 'TABLE_COMPLETION' || group.questionType === 'FORM_COMPLETION') && (
+                  <span className="ml-2 text-[10px] font-normal text-amber-600">
+                    Use the table tool to build your table, then type ___1___, ___2___ etc. for blanks
+                  </span>
+                )}
+              </Label>
+              <div className="mt-1">
+                <TiptapEditor
+                  content={group.instructions || ''}
+                  onChange={(html) => onChange({ ...group, instructions: html || null })}
+                  placeholder={
+                    group.questionType === 'TABLE_COMPLETION' || group.questionType === 'FORM_COMPLETION'
+                      ? 'Build your table here with ___1___, ___2___ for blanks...'
+                      : 'e.g. Write NO MORE THAN TWO WORDS AND/OR A NUMBER for each answer.'
+                  }
+                />
+              </div>
+            </div>
           )}
           {group.audioUrl && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -1336,6 +1608,42 @@ function QuestionGroupEditor({
               <span className="truncate">{group.imageUrl}</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Note/Form Completion: Sync from Passage */}
+      {expanded && isNoteCompletion && (
+        <div className="px-5 py-3 bg-amber-50/50 border-b flex items-center justify-between gap-3">
+          <div className="text-xs text-amber-700">
+            {linkedPassage
+              ? <>Linked to: <strong>{linkedPassage.title || 'Passage'}</strong> — use <code className="bg-amber-100 px-1 rounded">___1___</code> or <code className="bg-amber-100 px-1 rounded">{'{1}'}</code> syntax for blanks</>
+              : 'Link this group to a passage, then use Sync to auto-create questions from blanks.'
+            }
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {!showInstructions && !group.instructions && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1"
+                onClick={() => {
+                  setShowInstructions(true);
+                  onChange({ ...group, instructions: 'Write NO MORE THAN TWO WORDS AND/OR A NUMBER for each answer.' });
+                }}
+              >
+                <FileText className="h-3.5 w-3.5" /> Add Instructions
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1 border-amber-300 text-amber-700 hover:bg-amber-100"
+              onClick={handleSyncFromPassage}
+              disabled={!linkedPassage}
+            >
+              <RefreshCw className="h-3.5 w-3.5" /> Sync from Passage
+            </Button>
+          </div>
         </div>
       )}
 
@@ -1359,6 +1667,7 @@ function QuestionGroupEditor({
                   key={question.id}
                   question={question}
                   questionType={group.questionType}
+                  displayNumber={questionNumberOffset + idx + 1}
                   isLast={idx === group.questions.length - 1}
                   onChange={(updated) => {
                     onChange({
@@ -1398,12 +1707,14 @@ function QuestionGroupEditor({
 function QuestionEditor({
   question,
   questionType,
+  displayNumber,
   isLast,
   onChange,
   onDelete,
 }: {
   question: AdminQuestion;
   questionType: QuestionType;
+  displayNumber: number;
   isLast: boolean;
   onChange: (updated: AdminQuestion) => void;
   onDelete: () => void;
@@ -1416,7 +1727,11 @@ function QuestionEditor({
   const isTFNG = questionType === 'TRUE_FALSE_NOT_GIVEN';
   const isYNNG = questionType === 'YES_NO_NOT_GIVEN';
   const isMatching = questionType.startsWith('MATCHING_');
-  const isCompletion = ['SENTENCE_COMPLETION', 'SUMMARY_COMPLETION', 'NOTE_COMPLETION', 'SHORT_ANSWER'].includes(questionType);
+  const isCompletion = ['SENTENCE_COMPLETION', 'SUMMARY_COMPLETION', 'NOTE_COMPLETION', 'TABLE_COMPLETION', 'FORM_COMPLETION', 'SHORT_ANSWER'].includes(questionType);
+  const isSentenceReorder = questionType === 'SENTENCE_REORDER';
+  const isKeywordComp = questionType === 'KEYWORD_COMPOSITION';
+  const isPictureComp = questionType === 'PICTURE_COMPOSITION';
+  const isHskWriting = isSentenceReorder || isKeywordComp || isPictureComp;
 
   return (
     <div className={cn(
@@ -1426,7 +1741,7 @@ function QuestionEditor({
       <div className="flex items-start gap-4">
         {/* Question Number */}
         <div className="shrink-0 w-10 h-10 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-bold">
-          {question.questionNumber || '?'}
+          {displayNumber}
         </div>
 
         {/* Question Content */}
@@ -1468,8 +1783,44 @@ function QuestionEditor({
                     placeholder={`Option ${opt.label}`}
                     className="h-10 text-sm bg-white"
                   />
+                  {question.options && question.options.length > 2 && (
+                    <button
+                      className="w-7 h-7 rounded-full border border-gray-300 hover:border-red-400 hover:bg-red-50 text-gray-400 hover:text-red-500 flex items-center justify-center text-sm shrink-0 transition-all"
+                      onClick={() => {
+                        const newOpts = (question.options || [])
+                          .filter((_: { label: string; text: string }, idx: number) => idx !== i)
+                          .map((o: { label: string; text: string }, idx: number) => ({ ...o, label: String.fromCharCode(65 + idx) }));
+                        const updated = { ...question, options: newOpts } as AdminQuestion;
+                        // Clear correctAnswer if the removed option was selected, or re-map it
+                        if (question.correctAnswer === opt.label) {
+                          updated.correctAnswer = '';
+                        } else {
+                          const oldIdx = (question.options || []).findIndex((o: { label: string }) => o.label === question.correctAnswer);
+                          if (oldIdx > i) {
+                            updated.correctAnswer = String.fromCharCode(65 + oldIdx - 1);
+                          }
+                        }
+                        onChange(updated);
+                      }}
+                      title="Remove option"
+                    >
+                      ×
+                    </button>
+                  )}
                 </div>
               ))}
+              {question.options.length < 6 && (
+                <button
+                  className="ml-11 px-3 py-1.5 rounded-lg border border-dashed border-gray-300 hover:border-indigo-400 text-xs text-gray-500 hover:text-indigo-600 transition-all"
+                  onClick={() => {
+                    const newLabel = String.fromCharCode(65 + (question.options || []).length);
+                    const newOpts = [...(question.options || []), { label: newLabel, text: '' }];
+                    onChange({ ...question, options: newOpts });
+                  }}
+                >
+                  + Add option
+                </button>
+              )}
             </div>
           )}
 
@@ -1504,15 +1855,163 @@ function QuestionEditor({
                   className="h-11 text-base flex-1 bg-white"
                 />
               )}
-              <div className="flex items-center gap-2 shrink-0">
-                <Label className="text-sm text-muted-foreground whitespace-nowrap font-medium">Answer:</Label>
-                <Input
-                  value={question.correctAnswer}
-                  onChange={(e) => onChange({ ...question, correctAnswer: e.target.value })}
-                  placeholder="Correct answer"
-                  className="h-10 text-sm w-48 bg-white"
+              <div className="shrink-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  <Label className="text-sm text-muted-foreground whitespace-nowrap font-medium">Answer:</Label>
+                  <Input
+                    value={question.correctAnswer}
+                    onChange={(e) => onChange({ ...question, correctAnswer: e.target.value })}
+                    placeholder="e.g. TWO/2 or (THE) BANK [OR] BANK"
+                    className="h-10 text-sm w-72 bg-white font-mono"
+                  />
+                  <details className="relative">
+                    <summary className="cursor-pointer list-none">
+                      <HelpCircle className="w-4 h-4 text-muted-foreground hover:text-primary" />
+                    </summary>
+                    <div className="absolute right-0 top-6 z-50 w-72 rounded-lg border bg-white p-3 shadow-lg text-xs space-y-1.5">
+                      <p className="font-semibold text-sm">Answer syntax</p>
+                      <p><code className="bg-slate-100 px-1 rounded">/</code> alternative forms: <code className="bg-slate-100 px-1 rounded">TWO/2</code></p>
+                      <p><code className="bg-slate-100 px-1 rounded">(text)</code> optional part: <code className="bg-slate-100 px-1 rounded">(THE) BANK</code></p>
+                      <p><code className="bg-slate-100 px-1 rounded">(A/B)</code> optional alternatives: <code className="bg-slate-100 px-1 rounded">10 (A.M./AM)</code></p>
+                      <p><code className="bg-slate-100 px-1 rounded">[OR]</code> different answers: <code className="bg-slate-100 px-1 rounded">CAR [OR] BUS</code></p>
+                      <p className="text-muted-foreground">Case-insensitive. Hyphens = spaces. Dots ignored.</p>
+                    </div>
+                  </details>
+                </div>
+                {question.correctAnswer && (question.correctAnswer.includes('[OR]') || question.correctAnswer.includes('/') || question.correctAnswer.includes('(')) && (
+                  <div className="flex flex-wrap gap-1 ml-[3.5rem]">
+                    {getAcceptedForms(question.correctAnswer).map((form) => (
+                      <span key={form} className="inline-block px-1.5 py-0.5 text-[11px] bg-emerald-50 text-emerald-700 border border-emerald-200 rounded">
+                        {form}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* HSK Sentence Reorder */}
+          {isSentenceReorder && (
+            <div className="space-y-3 p-4 bg-red-50/50 rounded-lg border border-red-200">
+              <div>
+                <Label className="text-sm font-medium">Fragments (one per line)</Label>
+                <Textarea
+                  value={((question.metadata as Record<string, unknown>)?.fragments as string[] || []).join('\n')}
+                  onChange={(e) => {
+                    const fragments = e.target.value.split('\n').filter(Boolean);
+                    onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), fragments } });
+                  }}
+                  placeholder="结果将在&#10;公布&#10;月底&#10;录取"
+                  rows={4}
+                  className="text-sm bg-white mt-1"
                 />
               </div>
+              <div>
+                <Label className="text-sm font-medium">Correct Sentence</Label>
+                <Input
+                  value={question.correctAnswer || ''}
+                  onChange={(e) => onChange({ ...question, correctAnswer: e.target.value })}
+                  placeholder="录取结果将在月底公布"
+                  className="h-10 text-sm bg-white mt-1"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <Label className="text-sm font-medium">HSK Level</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={6}
+                    value={((question.metadata as Record<string, unknown>)?.hskLevel as number) || 5}
+                    onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), hskLevel: parseInt(e.target.value) || 5 } })}
+                    className="h-10 w-20 text-sm bg-white mt-1"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* HSK Keyword Composition */}
+          {isKeywordComp && (
+            <div className="space-y-3 p-4 bg-red-50/50 rounded-lg border border-red-200">
+              <div>
+                <Label className="text-sm font-medium">Prompt (stem)</Label>
+                <Textarea
+                  value={question.stem || ''}
+                  onChange={(e) => onChange({ ...question, stem: e.target.value })}
+                  placeholder="请结合下列词语（要全部使用，顺序不分先后），写一篇80字左右的短文。"
+                  rows={2}
+                  className="text-sm bg-white mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Keywords (comma-separated)</Label>
+                <Input
+                  value={((question.metadata as Record<string, unknown>)?.keywords as string[] || []).join(', ')}
+                  onChange={(e) => {
+                    const keywords = e.target.value.split(/[,，]/).map(k => k.trim()).filter(Boolean);
+                    onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), keywords } });
+                  }}
+                  placeholder="博物馆, 保存, 讲解员, 丰富, 值得"
+                  className="h-10 text-sm bg-white mt-1"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Min Chars</Label>
+                  <Input type="number" min={0} value={((question.metadata as Record<string, unknown>)?.minChars as number) || 60} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), minChars: parseInt(e.target.value) || 60 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Max Chars</Label>
+                  <Input type="number" min={0} value={((question.metadata as Record<string, unknown>)?.maxChars as number) || 100} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), maxChars: parseInt(e.target.value) || 100 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">HSK Level</Label>
+                  <Input type="number" min={1} max={6} value={((question.metadata as Record<string, unknown>)?.hskLevel as number) || 5} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), hskLevel: parseInt(e.target.value) || 5 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+              </div>
+              <p className="text-xs text-amber-600 font-medium">⚠ No correctAnswer — this question is AI-graded</p>
+            </div>
+          )}
+
+          {/* HSK Picture Composition */}
+          {isPictureComp && (
+            <div className="space-y-3 p-4 bg-red-50/50 rounded-lg border border-red-200">
+              <div>
+                <Label className="text-sm font-medium">Prompt (stem)</Label>
+                <Textarea
+                  value={question.stem || ''}
+                  onChange={(e) => onChange({ ...question, stem: e.target.value })}
+                  placeholder="请结合这张图片写一篇80字左右的短文。"
+                  rows={2}
+                  className="text-sm bg-white mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Image Alt Text</Label>
+                <Input
+                  value={((question.metadata as Record<string, unknown>)?.imageAlt as string) || ''}
+                  onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), imageAlt: e.target.value } })}
+                  placeholder="Description of the image for AI context"
+                  className="h-10 text-sm bg-white mt-1"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Min Chars</Label>
+                  <Input type="number" min={0} value={((question.metadata as Record<string, unknown>)?.minChars as number) || 60} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), minChars: parseInt(e.target.value) || 60 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Max Chars</Label>
+                  <Input type="number" min={0} value={((question.metadata as Record<string, unknown>)?.maxChars as number) || 100} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), maxChars: parseInt(e.target.value) || 100 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">HSK Level</Label>
+                  <Input type="number" min={1} max={6} value={((question.metadata as Record<string, unknown>)?.hskLevel as number) || 5} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), hskLevel: parseInt(e.target.value) || 5 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+              </div>
+              <p className="text-xs text-amber-600 font-medium">⚠ No correctAnswer — this question is AI-graded</p>
             </div>
           )}
 
@@ -1551,11 +2050,58 @@ function QuestionEditor({
               <div>
                 <FileUpload
                   value={question.imageUrl || null}
-                  onChange={(url) => onChange({ ...question, imageUrl: url || null })}
+                  onChange={(url) => onChange({ ...question, imageUrl: url || null, imageLayout: url ? (question.imageLayout || 'vertical') : null })}
                   accept="image/*"
                   label="Question Image"
                   maxSizeMB={10}
                 />
+                {question.imageUrl && (
+                  <div className="mt-2">
+                    <Label className="text-xs text-muted-foreground mb-1 block">Image Layout</Label>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`question-layout-${question.id}`}
+                          checked={!question.imageLayout || question.imageLayout === 'vertical'}
+                          onChange={() => onChange({ ...question, imageLayout: 'vertical' })}
+                          className="accent-indigo-600"
+                        />
+                        Above text
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`question-layout-${question.id}`}
+                          checked={question.imageLayout === 'below-text'}
+                          onChange={() => onChange({ ...question, imageLayout: 'below-text' })}
+                          className="accent-indigo-600"
+                        />
+                        Below text
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`question-layout-${question.id}`}
+                          checked={question.imageLayout === 'beside-left'}
+                          onChange={() => onChange({ ...question, imageLayout: 'beside-left' })}
+                          className="accent-indigo-600"
+                        />
+                        Beside left
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`question-layout-${question.id}`}
+                          checked={question.imageLayout === 'beside-right'}
+                          onChange={() => onChange({ ...question, imageLayout: 'beside-right' })}
+                          className="accent-indigo-600"
+                        />
+                        Beside right
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <FileUpload
@@ -1572,12 +2118,13 @@ function QuestionEditor({
           {/* Explanation */}
           {showExplanation && (
             <div className="p-4 bg-slate-50 rounded-lg border">
-              <Textarea
-                value={question.explanation || ''}
-                onChange={(e) => onChange({ ...question, explanation: e.target.value || null })}
+              <TiptapMiniEditor
+                content={question.explanation || ''}
+                onChange={(html) => {
+                  const isEmpty = html === '<p></p>' || html === '';
+                  onChange({ ...question, explanation: isEmpty ? null : html });
+                }}
                 placeholder="Explanation (shown after submission)..."
-                className="text-sm bg-white"
-                rows={3}
               />
             </div>
           )}
@@ -1600,7 +2147,7 @@ function QuestionEditor({
         open={deleteConfirm}
         onOpenChange={setDeleteConfirm}
         title="Delete Question"
-        description={`Delete question #${question.questionNumber || '?'}?`}
+        description={`Delete question #${displayNumber}?`}
         onConfirm={onDelete}
         variant="danger"
       />

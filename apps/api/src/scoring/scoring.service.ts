@@ -1,12 +1,29 @@
 import { Injectable } from '@nestjs/common';
 
 export type Skill = 'LISTENING' | 'READING' | 'WRITING' | 'SPEAKING';
-export type ExamType = 'IELTS_ACADEMIC' | 'IELTS_GENERAL' | 'TOEIC_LR' | 'TOEIC_SW';
+export type ExamType =
+  | 'IELTS_ACADEMIC'
+  | 'IELTS_GENERAL'
+  | 'TOEIC_LR'
+  | 'TOEIC_SW'
+  | 'HSK_1'
+  | 'HSK_2'
+  | 'HSK_3'
+  | 'HSK_4'
+  | 'HSK_5'
+  | 'HSK_6';
 
 export interface SectionResult {
   skill: Skill;
   correct: number;
   total: number;
+  writingScore?: number;
+}
+
+interface HskScoreResult {
+  scaledScore: number;
+  sectionScores: Record<string, number>;
+  passed: boolean;
 }
 
 interface IeltsSectionScore {
@@ -241,12 +258,26 @@ export class ScoringService {
     const isIelts =
       examType === 'IELTS_ACADEMIC' || examType === 'IELTS_GENERAL';
     const isToeic = examType === 'TOEIC_LR' || examType === 'TOEIC_SW';
+    const isHsk = examType.startsWith('HSK_');
 
     if (isIelts) {
       return this.calculateIeltsAttemptScores(examType as ExamType, sections);
     }
     if (isToeic) {
       return this.calculateToeicAttemptScores(sections);
+    }
+    if (isHsk) {
+      const hskResult = this.calculateHskScores(sections, examType as ExamType);
+      return {
+        bandScore: null,
+        scaledScore: hskResult.scaledScore,
+        sectionScores: Object.fromEntries(
+          Object.entries(hskResult.sectionScores).map(([k, v]) => [
+            k.toLowerCase(),
+            { correct: 0, total: 0, scaled: v },
+          ]),
+        ),
+      };
     }
 
     // Fallback
@@ -314,6 +345,44 @@ export class ScoringService {
       bandScore: null,
       scaledScore: totalScaled,
       sectionScores,
+    };
+  }
+
+  /**
+   * Calculate HSK scores. Each skill is scaled to 0–100.
+   * HSK 1-2: 200 total (Listening + Reading). HSK 3-6: 300 total (+ Writing).
+   * Pass at 60% of total.
+   */
+  calculateHskScores(
+    sectionResults: SectionResult[],
+    examType: ExamType,
+  ): HskScoreResult {
+    const hskLevel = parseInt(examType.replace('HSK_', ''));
+    const hasWriting = hskLevel >= 3;
+    const sectionScores: Record<string, number> = {};
+
+    for (const section of sectionResults) {
+      if (section.skill === 'WRITING') {
+        sectionScores['WRITING'] = section.writingScore ?? 0;
+      } else {
+        sectionScores[section.skill] =
+          section.total > 0
+            ? Math.round((section.correct / section.total) * 100)
+            : 0;
+      }
+    }
+
+    const totalMax = hasWriting ? 300 : 200;
+    const passScore = totalMax * 0.6;
+    const scaledScore = Object.values(sectionScores).reduce(
+      (sum, s) => sum + s,
+      0,
+    );
+
+    return {
+      scaledScore,
+      sectionScores,
+      passed: scaledScore >= passScore,
     };
   }
 }
