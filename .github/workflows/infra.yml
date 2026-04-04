@@ -45,6 +45,11 @@ jobs:
 
       - name: Terraform Plan
         id: plan
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_cognito_user_pool_id: ${{ secrets.COGNITO_USER_POOL_ID }}
+          TF_VAR_cognito_frontend_client_id: ${{ secrets.COGNITO_FRONTEND_CLIENT_ID }}
+          TF_VAR_cognito_domain: ${{ secrets.COGNITO_DOMAIN }}
         run: terraform plan -no-color -out=tfplan
 
       - name: Comment PR with Plan
@@ -63,4 +68,9 @@ jobs:
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        env:
+          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          TF_VAR_cognito_user_pool_id: ${{ secrets.COGNITO_USER_POOL_ID }}
+          TF_VAR_cognito_frontend_client_id: ${{ secrets.COGNITO_FRONTEND_CLIENT_ID }}
+          TF_VAR_cognito_domain: ${{ secrets.COGNITO_DOMAIN }}
         run: terraform apply -auto-approve tfplan

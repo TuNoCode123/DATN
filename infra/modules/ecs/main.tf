@@ -424,17 +424,20 @@ resource "aws_ecs_task_definition" "api" {
       { name = "PORT", value = "4000" },
       # DATABASE_URL: full connection string for PostgreSQL
       # Format: postgresql://username:password@host:port/database
+      # urlencode() the password so special chars (#, @, etc.) don't break URL parsing
       {
         name  = "DATABASE_URL"
-        value = "postgresql://${var.db_username}:${var.db_password}@${var.rds_endpoint}/${var.db_name}"
+        value = "postgresql://${urlencode(var.db_username)}:${urlencode(var.db_password)}@${var.rds_endpoint}/${var.db_name}"
       },
       # REDIS_URL: connection string for ElastiCache Redis
       { name = "REDIS_URL", value = "redis://${var.redis_endpoint}" },
       # Frontend URL for CORS (Cross-Origin Resource Sharing)
       { name = "FRONTEND_URL", value = "https://web.${var.domain_name}" },
       # Cognito configuration (if using Cognito auth)
+      { name = "AWS_REGION", value = var.aws_region },
       { name = "COGNITO_USER_POOL_ID", value = var.cognito_user_pool_id },
-      { name = "COGNITO_CLIENT_ID", value = var.cognito_client_id },
+      { name = "COGNITO_FRONTEND_CLIENT_ID", value = var.cognito_frontend_client_id },
+      { name = "COGNITO_DOMAIN", value = var.cognito_domain },
     ]
 
     # Health check: ECS runs this command periodically to check container health
@@ -613,7 +616,7 @@ resource "aws_ecs_task_definition" "api_migrate" {
       { name = "NODE_ENV", value = "production" },
       {
         name  = "DATABASE_URL"
-        value = "postgresql://${var.db_username}:${var.db_password}@${var.rds_endpoint}/${var.db_name}"
+        value = "postgresql://${urlencode(var.db_username)}:${urlencode(var.db_password)}@${var.rds_endpoint}/${var.db_name}"
       },
     ]
 

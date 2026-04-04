@@ -264,8 +264,10 @@ module "ecs" {
   db_password    = var.db_password
 
   # Cognito config (optional, for auth integration)
-  cognito_user_pool_id = var.cognito_user_pool_id
-  cognito_client_id    = var.cognito_client_id
+  cognito_user_pool_id       = var.cognito_user_pool_id
+  cognito_client_id          = var.cognito_client_id
+  cognito_frontend_client_id = var.cognito_frontend_client_id
+  cognito_domain             = var.cognito_domain
 }
 
 # -----------------------------------------------------------------------------

@@ -24,4 +24,5 @@ infra/*.tfplan
 infra/plan.json
 infra/plan.out
 infra/terraform.tfvars
+infra/envs/*.tfvars
 infra/.terraform.lock.hcl

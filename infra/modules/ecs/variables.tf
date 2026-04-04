@@ -111,3 +111,15 @@ variable "cognito_client_id" {
   type        = string
   default     = ""
 }
+
+variable "cognito_frontend_client_id" {
+  description = "Cognito Frontend App Client ID (public, used by API for token exchange)"
+  type        = string
+  default     = ""
+}
+
+variable "cognito_domain" {
+  description = "Cognito Hosted UI domain (e.g., ielts-ai-prd.auth.ap-southeast-2.amazoncognito.com)"
+  type        = string
+  default     = ""
+}
