@@ -294,6 +294,9 @@ module "ecs" {
   cognito_client_id          = module.cognito.backend_client_id
   cognito_frontend_client_id = module.cognito.frontend_client_id
   cognito_domain             = module.cognito.cognito_domain
+
+  # S3 bucket name for presigned URLs
+  s3_bucket_name = module.s3.uploads_bucket_name
 }
 
 # -----------------------------------------------------------------------------

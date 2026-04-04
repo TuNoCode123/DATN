@@ -123,3 +123,9 @@ variable "cognito_domain" {
   type        = string
   default     = ""
 }
+
+# S3
+variable "s3_bucket_name" {
+  description = "S3 uploads bucket name (passed as S3_BUCKET_NAME env var to API)"
+  type        = string
+}

@@ -438,6 +438,8 @@ resource "aws_ecs_task_definition" "api" {
       { name = "COGNITO_USER_POOL_ID", value = var.cognito_user_pool_id },
       { name = "COGNITO_FRONTEND_CLIENT_ID", value = var.cognito_frontend_client_id },
       { name = "COGNITO_DOMAIN", value = var.cognito_domain },
+      # S3 bucket name for file uploads (presigned URLs)
+      { name = "S3_BUCKET_NAME", value = var.s3_bucket_name },
     ]
 
     # Health check: ECS runs this command periodically to check container health
@@ -492,8 +494,13 @@ resource "aws_ecs_task_definition" "web" {
     environment = [
       { name = "NODE_ENV", value = "production" },
       { name = "PORT", value = "3000" },
-      # Next.js needs to know where the API is for server-side rendering (SSR)
-      # During SSR, the server makes API calls directly (not through the browser)
+      # Next.js needs these for server-side rendering (SSR).
+      # NEXT_PUBLIC_* are also baked at Docker build time, but runtime values
+      # are needed for SSR API calls and server components.
+      { name = "NEXT_PUBLIC_API_URL", value = "https://api.${var.domain_name}/api" },
+      { name = "NEXT_PUBLIC_WS_URL", value = "https://api.${var.domain_name}" },
+      { name = "NEXT_PUBLIC_COGNITO_DOMAIN", value = var.cognito_domain },
+      { name = "NEXT_PUBLIC_COGNITO_CLIENT_ID", value = var.cognito_frontend_client_id },
     ]
 
     healthCheck = {
