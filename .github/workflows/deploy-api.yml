@@ -10,6 +10,7 @@ name: Deploy API
 
 # Trigger: run when these files change on the main branch
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
