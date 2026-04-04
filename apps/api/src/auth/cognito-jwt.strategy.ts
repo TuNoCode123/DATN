@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { Strategy } from 'passport-jwt';
 import { passportJwtSecret } from 'jwks-rsa';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
+import * as jwt from 'jsonwebtoken';
 import { UsersService } from '../users/users.service';
 
 /** Extract access token from httpOnly cookie instead of Authorization header */
@@ -26,6 +27,7 @@ export class CognitoJwtStrategy extends PassportStrategy(
     super({
       jwtFromRequest: fromCookie,
       ignoreExpiration: false,
+      passReqToCallback: true,
       secretOrKeyProvider: passportJwtSecret({
         cache: true,
         rateLimit: true,
@@ -37,7 +39,7 @@ export class CognitoJwtStrategy extends PassportStrategy(
     });
   }
 
-  async validate(payload: {
+  async validate(req: Request, payload: {
     sub: string;
     email?: string;
     username?: string;
@@ -45,15 +47,23 @@ export class CognitoJwtStrategy extends PassportStrategy(
     token_use: string;
   }) {
     if (payload.token_use !== 'access') {
-      throw new Error('Invalid token type');
+      throw new UnauthorizedException('Invalid token type');
     }
 
-    const email = payload.email ?? payload.username ?? '';
-
-    // Find by cognitoSub first, then try linking by email (migration path)
+    // Find by cognitoSub first (fast path)
     let user = await this.usersService.findByCognitoSub(payload.sub);
     if (user) {
       return { id: user.id, email: user.email, displayName: user.displayName, role: user.role };
+    }
+
+    // Access tokens often lack email — extract from id_token cookie instead
+    let email = payload.email ?? '';
+    if (!email) {
+      const idToken = req?.cookies?.['id_token'];
+      if (idToken) {
+        const idPayload = jwt.decode(idToken) as { email?: string } | null;
+        email = idPayload?.email ?? '';
+      }
     }
 
     if (email) {
@@ -66,6 +76,6 @@ export class CognitoJwtStrategy extends PassportStrategy(
 
     // User not found — do NOT auto-create here. Only the initial login
     // flow (POST /auth/cognito/session) should create new users.
-    throw new Error('User not found');
+    throw new UnauthorizedException('User not found');
   }
 }

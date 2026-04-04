@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(pnpm add:*)",
+      "Bash(find \"G:/ĐATN/apps/web/src/app/\\(auth\\)\" -type f)",
+      "Bash(npx tsc:*)",
+      "Bash(npx prisma:*)",
+      "Bash(npx --prefix \"G:/ĐATN/apps/web\" tsc --noEmit --project \"G:/ĐATN/apps/web/tsconfig.json\")",
+      "Bash(cd:*)",
+      "Bash(find G:ĐATNinfracognito -type f -name *.ts -o -name *.js -o -name *.json)",
+      "Bash(find \"G:\\\\ĐATN\\\\apps\\\\web\\\\src\\\\app\\\\\\(learner\\)\" -type f -name \"page.tsx\")",
+      "Bash(find G:ĐATNinfra -type f \\\\\\(-name *.ts -o -name *.js -o -name *.py -o -name *.json -o -name *.yaml -o -name *.yml \\\\\\))",
+      "Bash(find /g/ĐATN -type f -name *lambda* -o -name *trigger*)",
+      "Bash(find /g/ĐATN/apps/api/prisma -name migration* -o -name *migration*)",
+      "Bash(find /g/ĐATN/docs -type f \\\\\\(-name *.md -o -name *.txt \\\\\\))",
+      "Bash(grep -r \"cognitoSub\\\\|linkCognito\" /g/ĐATN/apps/api/src --include=*.ts)",
+      "Bash(find /g/ĐATN/apps/api -type f -name *migration* -o -name *lambda*)",
+      "Bash(xargs ls:*)",
+      "Bash(find /g/ĐATN/apps/api -name *gateway* -o -name *websocket*)",
+      "Bash(grep:*)",
+      "Bash(find /g/ĐATN -name .env* -type f)",
+      "Bash(npx next:*)",
+      "Bash(chmod +x \"G:/ĐATN/scripts/stop-infra.sh\" \"G:/ĐATN/scripts/start-infra.sh\")",
+      "Bash(curl -s https://ifconfig.me)",
+      "Bash(curl -s https://api.ipify.org)"
+    ]
+  }
+}
