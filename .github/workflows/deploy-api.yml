@@ -84,7 +84,51 @@ jobs:
           container-name: api           # Must match container name in task definition
           image: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
-      # Step 8: Deploy new task definition to ECS (rolling update)
+      # Step 8: Run Prisma database migrations BEFORE deploying new code
+      # Prisma migrate deploy is safe to run against the old code — it only
+      # applies pending migration files and never generates new ones.
+      - name: Run database migrations
+        run: |
+          # Update the migrate task definition to use the new image
+          aws ecs describe-task-definition \
+            --task-definition ielts-ai-api-migrate \
+            --query taskDefinition \
+            > migrate-task-def.json
+
+          # Register updated migrate task with new image
+          NEW_IMAGE="${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          UPDATED_DEF=$(jq --arg IMG "$NEW_IMAGE" \
+            '.containerDefinitions[0].image = $IMG | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, volumes, placementConstraints, requiresCompatibilities}' \
+            migrate-task-def.json)
+          echo "$UPDATED_DEF" > migrate-task-def-updated.json
+          MIGRATE_TD_ARN=$(aws ecs register-task-definition \
+            --cli-input-json file://migrate-task-def-updated.json \
+            --query 'taskDefinition.taskDefinitionArn' \
+            --output text)
+
+          # Run migration with the new image
+          TASK_ARN=$(aws ecs run-task \
+            --cluster $ECS_CLUSTER \
+            --task-definition "$MIGRATE_TD_ARN" \
+            --launch-type EC2 \
+            --query 'tasks[0].taskArn' \
+            --output text)
+          echo "Migration task: $TASK_ARN"
+          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
+
+          # Check exit code
+          EXIT_CODE=$(aws ecs describe-tasks \
+            --cluster $ECS_CLUSTER \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].containers[0].exitCode' \
+            --output text)
+          if [ "$EXIT_CODE" != "0" ]; then
+            echo "::error::Migration failed with exit code $EXIT_CODE"
+            exit 1
+          fi
+          echo "Migration completed successfully"
+
+      # Step 9: Deploy new task definition to ECS (rolling update)
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v2
         with:
@@ -92,16 +136,3 @@ jobs:
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true  # Wait until new tasks pass health checks
-
-      # Step 9: Run Prisma database migrations as a one-off ECS task
-      - name: Run database migrations
-        run: |
-          TASK_ARN=$(aws ecs run-task \
-            --cluster $ECS_CLUSTER \
-            --task-definition ielts-ai-api-migrate \
-            --launch-type EC2 \
-            --query 'tasks[0].taskArn' \
-            --output text)
-          echo "Migration task: $TASK_ARN"
-          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
-          echo "Migration completed successfully"
