@@ -41,6 +41,7 @@ export class UploadService {
         accessKeyId: this.config.get<string>('AWS_ACCESS_KEY_ID', ''),
         secretAccessKey: this.config.get<string>('AWS_SECRET_ACCESS_KEY', ''),
       },
+      requestChecksumCalculation: 'WHEN_REQUIRED',
     });
   }
 
