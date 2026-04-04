@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
@@ -90,5 +90,18 @@ export class ChatUploadService {
     const fileUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
 
     return { uploadUrl, fileUrl, key, maxSizeMB };
+  }
+
+  /**
+   * Convert a raw S3 URL to a presigned GET URL so the browser can access it.
+   * Returns the original URL if it doesn't belong to this bucket.
+   */
+  async signUrl(rawUrl: string, expiresIn = 3600): Promise<string> {
+    const prefix = `https://${this.bucket}.s3.${this.region}.amazonaws.com/`;
+    if (!rawUrl.startsWith(prefix)) return rawUrl;
+
+    const key = rawUrl.slice(prefix.length);
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    return getSignedUrl(this.s3, command, { expiresIn });
   }
 }

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChatUploadService } from './chat-upload.service';
 import { ConversationType, MessageType, MemberRole } from '@prisma/client';
 import { CreateConversationDto } from './dto/create-conversation.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
@@ -13,7 +14,10 @@ const userSelect = { id: true, displayName: true, avatarUrl: true };
 
 @Injectable()
 export class ChatService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private chatUpload: ChatUploadService,
+  ) {}
 
   // ─── Membership ───────────────────────────────────────
 
@@ -331,7 +335,7 @@ export class ChatService {
           data: { lastMessageSeq: { increment: 1 }, updatedAt: new Date() },
         });
 
-        return tx.message.create({
+        const msg = await tx.message.create({
           data: {
             conversationId,
             senderId,
@@ -351,13 +355,16 @@ export class ChatService {
             reactions: true,
           },
         });
+
+        return this.signAttachment(msg);
       });
     } catch (error: any) {
       if (error.code === 'P2002' && error.meta?.target?.includes('clientId')) {
-        return this.prisma.message.findFirst({
+        const existing = await this.prisma.message.findFirst({
           where: { conversationId, clientId },
           include: { sender: { select: userSelect }, reactions: true },
         });
+        return existing ? this.signAttachment(existing) : existing;
       }
       throw error;
     }
@@ -404,24 +411,27 @@ export class ChatService {
     const hasMore = messages.length > limit;
     if (hasMore) messages.pop();
 
-    const data = messages.map(msg => {
-      // Redact content for deletedForAll messages
-      if (msg.deletedForAll) {
-        return {
+    const data = await Promise.all(
+      messages.map(async (msg) => {
+        // Redact content for deletedForAll messages
+        if (msg.deletedForAll) {
+          return {
+            ...msg,
+            content: '',
+            attachmentUrl: null,
+            attachmentName: null,
+            attachmentSize: null,
+            attachmentType: null,
+            reactions: [],
+          };
+        }
+        const signed = await this.signAttachment({
           ...msg,
-          content: '',
-          attachmentUrl: null,
-          attachmentName: null,
-          attachmentSize: null,
-          attachmentType: null,
-          reactions: [],
-        };
-      }
-      return {
-        ...msg,
-        reactions: this.groupReactions(msg.reactions, userId),
-      };
-    });
+          reactions: this.groupReactions(msg.reactions, userId),
+        });
+        return signed;
+      }),
+    );
 
     return { data, hasMore };
   }
@@ -580,6 +590,14 @@ export class ChatService {
       orderBy: { createdAt: 'asc' },
     });
     return this.groupReactions(reactions, currentUserId);
+  }
+
+  /** Sign attachmentUrl on a message (mutates in place, returns same ref) */
+  private async signAttachment<T extends { attachmentUrl?: string | null }>(msg: T): Promise<T> {
+    if (msg.attachmentUrl) {
+      msg.attachmentUrl = await this.chatUpload.signUrl(msg.attachmentUrl);
+    }
+    return msg;
   }
 
   private groupReactions(
