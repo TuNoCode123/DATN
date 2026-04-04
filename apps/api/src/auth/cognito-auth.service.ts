@@ -38,7 +38,8 @@ export class CognitoAuthService {
     this.clientId = this.configService.get<string>(
       'COGNITO_FRONTEND_CLIENT_ID',
     )!;
-    this.cognitoDomain = this.configService.get<string>('COGNITO_DOMAIN')!;
+    const rawDomain = this.configService.get<string>('COGNITO_DOMAIN')!;
+    this.cognitoDomain = rawDomain.replace(/^https?:\/\//, '');
 
     this.jwksClient = jwksRsa({
       jwksUri: `https://cognito-idp.${this.region}.amazonaws.com/${this.userPoolId}/.well-known/jwks.json`,
