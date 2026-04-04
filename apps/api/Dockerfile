@@ -47,7 +47,19 @@ RUN PRISMA_PKG=$(find /app/node_modules/.pnpm -path '*/@prisma/client/package.js
 # Copy prisma CLI (devDep) into deploy so we can run migrations at startup
 RUN PRISMA_CLI=$(find /app/node_modules/.pnpm -path '*/prisma/package.json' ! -path '*/@prisma/*' -exec dirname {} \; | head -1) \
  && cp -rL "$PRISMA_CLI" /app/deploy/node_modules/prisma \
+ && mkdir -p /app/deploy/node_modules/.bin \
+ && ln -sf ../prisma/build/index.js /app/deploy/node_modules/.bin/prisma \
  && echo "Copied prisma CLI from: $PRISMA_CLI"
+
+# Copy Prisma engine binaries needed for migrations
+RUN PRISMA_ENGINES=$(find /app/node_modules/.pnpm -path '*/@prisma/engines/package.json' -exec dirname {} \; | head -1) \
+ && if [ -n "$PRISMA_ENGINES" ]; then \
+      mkdir -p /app/deploy/node_modules/@prisma/engines && \
+      cp -rL "$PRISMA_ENGINES"/* /app/deploy/node_modules/@prisma/engines/ && \
+      echo "Copied @prisma/engines from: $PRISMA_ENGINES"; \
+    else \
+      echo "WARNING: @prisma/engines not found, migration engine may be bundled in prisma CLI"; \
+    fi
 
 # ── Production stage ─────────────────────────────────────────
 FROM node:20-alpine AS runner
@@ -61,8 +73,9 @@ ENV CHECKPOINT_DISABLE=1
 COPY --from=builder /app/deploy/node_modules ./node_modules
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/prisma ./prisma
+COPY --from=builder /app/apps/api/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
 
 EXPOSE 4000
 
-# Run migrations then start the app
-CMD ["sh", "-c", "npx prisma migrate deploy --schema ./prisma/schema.prisma && node dist/main"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
