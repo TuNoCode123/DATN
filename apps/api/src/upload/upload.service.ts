@@ -35,12 +35,16 @@ export class UploadService {
     this.region = this.config.get<string>('AWS_REGION', 'ap-southeast-2');
     this.bucket = this.config.get<string>('S3_BUCKET_NAME', '');
 
+    const accessKeyId = this.config.get<string>('AWS_ACCESS_KEY_ID', '');
+    const secretAccessKey = this.config.get<string>('AWS_SECRET_ACCESS_KEY', '');
+
     this.s3 = new S3Client({
       region: this.region,
-      credentials: {
-        accessKeyId: this.config.get<string>('AWS_ACCESS_KEY_ID', ''),
-        secretAccessKey: this.config.get<string>('AWS_SECRET_ACCESS_KEY', ''),
-      },
+      // Only set explicit credentials if provided (local dev).
+      // In ECS, omit so the SDK uses the IAM task role automatically.
+      ...(accessKeyId && secretAccessKey
+        ? { credentials: { accessKeyId, secretAccessKey } }
+        : {}),
       requestChecksumCalculation: 'WHEN_REQUIRED',
     });
   }
