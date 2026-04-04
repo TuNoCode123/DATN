@@ -95,3 +95,36 @@ output "uploads_bucket_name" {
   description = "S3 bucket for user file uploads"
   value       = module.s3.uploads_bucket_name
 }
+
+# -----------------------------------------------------------------------------
+# Cognito
+# -----------------------------------------------------------------------------
+output "cognito_user_pool_id" {
+  description = "Cognito User Pool ID"
+  value       = module.cognito.user_pool_id
+}
+
+output "cognito_frontend_client_id" {
+  description = "Cognito Frontend App Client ID (public, PKCE)"
+  value       = module.cognito.frontend_client_id
+}
+
+output "cognito_backend_client_id" {
+  description = "Cognito Backend App Client ID (confidential)"
+  value       = module.cognito.backend_client_id
+}
+
+output "cognito_domain" {
+  description = "Cognito Hosted UI domain URL"
+  value       = module.cognito.cognito_domain
+}
+
+output "cognito_issuer" {
+  description = "Cognito token issuer URL (for JWT verification)"
+  value       = module.cognito.issuer
+}
+
+output "cognito_jwks_uri" {
+  description = "Cognito JWKS URI (for JWT verification)"
+  value       = module.cognito.jwks_uri
+}

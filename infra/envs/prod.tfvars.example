@@ -1,0 +1,44 @@
+# =============================================================================
+# PROD Environment — terraform.tfvars
+# =============================================================================
+# Copy to prod.tfvars: cp prod.tfvars.example prod.tfvars
+# Usage: terraform plan -var-file=envs/prod.tfvars
+# =============================================================================
+
+# General
+project_name = "ielts-ai"
+environment  = "prod"
+aws_region   = "ap-southeast-2"
+
+# Domain
+domain_name = "neu-study.online"
+
+# Network
+my_ip = "YOUR_PUBLIC_IP/32"
+
+# Database
+db_name           = "ielts_platform"
+db_username       = "ielts_user"
+db_password       = "CHANGE_ME_TO_A_STRONG_PASSWORD"
+db_instance_class = "db.t3.micro"
+
+# Redis
+redis_node_type = "cache.t3.micro"
+
+# ECS
+ecs_instance_type = "t3.medium"
+key_name          = "ielts-ai-key"
+
+# GitHub (CI/CD)
+github_org  = "royden"
+github_repo = "ielts-ai-platform"
+
+# Cognito
+frontend_url          = "https://web.neu-study.online"
+cognito_domain_prefix = "ielts-ai-prd"
+google_client_id      = "YOUR_GOOGLE_CLIENT_ID"
+google_client_secret  = "YOUR_GOOGLE_CLIENT_SECRET"
+mfa_configuration     = "OPTIONAL"
+
+# Lambda
+pre_signup_lambda_zip = "./modules/cognito/lambda/pre-signup/pre-signup.zip"

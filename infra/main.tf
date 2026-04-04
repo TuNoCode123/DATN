@@ -223,7 +223,33 @@ module "alb" {
 }
 
 # -----------------------------------------------------------------------------
-# 9. ECS — Container orchestration (the biggest module)
+# 9. Cognito — User authentication (User Pool, Google social login, Lambda)
+# -----------------------------------------------------------------------------
+# Creates:
+#   - Cognito User Pool (email-based sign-in, optional MFA)
+#   - Google social identity provider
+#   - Frontend app client (public, PKCE for SPA)
+#   - Backend app client (confidential, machine-to-machine)
+#   - User groups (Admin, Student)
+#   - Pre-Sign-Up Lambda for account linking
+module "cognito" {
+  source                = "./modules/cognito"
+  project_name          = var.project_name
+  environment           = var.environment
+  aws_region            = var.aws_region
+  frontend_url          = var.frontend_url
+  cognito_domain_prefix = var.cognito_domain_prefix
+  google_client_id      = var.google_client_id
+  google_client_secret  = var.google_client_secret
+  mfa_configuration     = var.mfa_configuration
+  pre_signup_lambda_zip = var.pre_signup_lambda_zip
+}
+
+# -----------------------------------------------------------------------------
+# 10. ECS — Container orchestration (the biggest module)
+# -----------------------------------------------------------------------------
+# NOTE: Cognito values (user_pool_id, client IDs, domain) are automatically
+# wired from module.cognito outputs — no manual secrets needed.
 # -----------------------------------------------------------------------------
 # ECS = Elastic Container Service — runs Docker containers on EC2 instances.
 # Creates:
@@ -263,15 +289,15 @@ module "ecs" {
   db_username    = var.db_username
   db_password    = var.db_password
 
-  # Cognito config (optional, for auth integration)
-  cognito_user_pool_id       = var.cognito_user_pool_id
-  cognito_client_id          = var.cognito_client_id
-  cognito_frontend_client_id = var.cognito_frontend_client_id
-  cognito_domain             = var.cognito_domain
+  # Cognito config — wired from the cognito module outputs
+  cognito_user_pool_id       = module.cognito.user_pool_id
+  cognito_client_id          = module.cognito.backend_client_id
+  cognito_frontend_client_id = module.cognito.frontend_client_id
+  cognito_domain             = module.cognito.cognito_domain
 }
 
 # -----------------------------------------------------------------------------
-# 10. S3 — File storage buckets
+# 11. S3 — File storage buckets
 # -----------------------------------------------------------------------------
 # Creates S3 buckets for:
 #   - User uploads (audio recordings, images) — accessed via presigned URLs
@@ -283,7 +309,7 @@ module "s3" {
 }
 
 # -----------------------------------------------------------------------------
-# 11. CloudFront — CDN for the web frontend
+# 12. CloudFront — CDN for the web frontend
 # -----------------------------------------------------------------------------
 # CloudFront is a Content Delivery Network (CDN) — caches content at edge
 # locations worldwide for faster loading.
@@ -300,7 +326,7 @@ module "cloudfront" {
 }
 
 # -----------------------------------------------------------------------------
-# 12. DNS Records — Route 53 A records pointing to ALB and CloudFront
+# 13. DNS Records — Route 53 A records pointing to ALB and CloudFront
 # -----------------------------------------------------------------------------
 # Creates alias records:
 #   api.neu-study.online → ALB (direct, for WebSocket compatibility)
@@ -323,7 +349,7 @@ module "dns_records" {
 }
 
 # -----------------------------------------------------------------------------
-# 13. IAM — GitHub Actions OIDC role for CI/CD
+# 14. IAM — GitHub Actions OIDC role for CI/CD
 # -----------------------------------------------------------------------------
 # Creates an IAM role that GitHub Actions can assume via OIDC (no access keys!).
 # This role has permissions to:

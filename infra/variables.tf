@@ -162,28 +162,42 @@ variable "github_repo" {
 # Cognito (external, not managed by this stack)
 # -----------------------------------------------------------------------------
 
-variable "cognito_user_pool_id" {
-  description = "Cognito User Pool ID (managed separately in apps/api/infra/cognito/)"
+# -----------------------------------------------------------------------------
+# Cognito (managed by modules/cognito within this stack)
+# -----------------------------------------------------------------------------
+
+variable "frontend_url" {
+  description = "Frontend application URL for OAuth callback/logout URLs"
   type        = string
-  default     = ""
-  # Cognito has its own Terraform config. We just reference its ID here
-  # so ECS task definitions can pass it as an environment variable.
+  # e.g., "https://web.neu-study.online"
 }
 
-variable "cognito_client_id" {
-  description = "Cognito App Client ID"
+variable "cognito_domain_prefix" {
+  description = "Cognito hosted UI domain prefix (must be globally unique)"
   type        = string
-  default     = ""
+  # e.g., "ielts-ai-prd" → ielts-ai-prd.auth.ap-southeast-2.amazoncognito.com
 }
 
-variable "cognito_frontend_client_id" {
-  description = "Cognito Frontend App Client ID (public, for token exchange)"
+variable "google_client_id" {
+  description = "Google OAuth2 Client ID"
   type        = string
-  default     = ""
+  sensitive   = true
 }
 
-variable "cognito_domain" {
-  description = "Cognito Hosted UI domain (e.g., ielts-ai-prd.auth.ap-southeast-2.amazoncognito.com)"
+variable "google_client_secret" {
+  description = "Google OAuth2 Client Secret"
+  type        = string
+  sensitive   = true
+}
+
+variable "mfa_configuration" {
+  description = "MFA configuration: OFF, ON, or OPTIONAL"
+  type        = string
+  default     = "OPTIONAL"
+}
+
+variable "pre_signup_lambda_zip" {
+  description = "Path to the pre-signup Lambda deployment zip"
   type        = string
   default     = ""
 }
