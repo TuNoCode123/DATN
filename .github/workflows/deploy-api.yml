@@ -98,7 +98,7 @@ jobs:
           # Register updated migrate task with new image
           NEW_IMAGE="${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
           UPDATED_DEF=$(jq --arg IMG "$NEW_IMAGE" \
-            '.containerDefinitions[0].image = $IMG | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, volumes, placementConstraints, requiresCompatibilities}' \
+            '.containerDefinitions[0].image = $IMG | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, volumes, placementConstraints, requiresCompatibilities} | with_entries(select(.value != null))' \
             migrate-task-def.json)
           echo "$UPDATED_DEF" > migrate-task-def-updated.json
           MIGRATE_TD_ARN=$(aws ecs register-task-definition \
