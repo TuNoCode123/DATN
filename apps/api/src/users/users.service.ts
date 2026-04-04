@@ -26,6 +26,7 @@ export class UsersService {
     });
   }
 
+
   async search(query: string, limit = 10) {
     return this.prisma.user.findMany({
       where: {

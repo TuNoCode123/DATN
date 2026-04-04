@@ -6,6 +6,8 @@ export interface QuestionFromAPI {
   options: unknown;
   imageUrl?: string | null;
   audioUrl?: string | null;
+  imageLayout?: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface QuestionGroupFromAPI {
@@ -24,6 +26,9 @@ export interface PassageFromAPI {
   id: string;
   title: string | null;
   contentHtml: string;
+  imageUrl?: string | null;
+  audioUrl?: string | null;
+  imageLayout?: string | null;
   orderIndex: number;
 }
 

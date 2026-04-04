@@ -28,6 +28,7 @@ interface McqRendererProps {
     options: unknown;
     imageUrl?: string | null;
     audioUrl?: string | null;
+    imageLayout?: string | null;
   };
   selectedAnswer: string | null;
   onAnswer: (questionId: string, answer: string) => void;
@@ -54,19 +55,51 @@ export function McqRenderer({
         )}
       </div>
       {/* Question-level media */}
-      {(question.imageUrl || question.audioUrl) && (
-        <div className="ml-9 mb-3 flex flex-col gap-2">
-          {question.audioUrl && (
-            <audio controls src={question.audioUrl} preload="metadata" className="w-full max-w-sm" />
-          )}
-          {question.imageUrl && (
-            <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-sm">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={question.imageUrl} alt={`Question ${question.questionNumber}`} className="max-w-full h-auto object-contain" />
-            </div>
-          )}
+      {question.audioUrl && (
+        <div className="ml-9 mb-3">
+          <audio controls src={question.audioUrl} preload="metadata" className="w-full max-w-sm" />
         </div>
       )}
+      {question.imageUrl && (question.imageLayout === 'horizontal' || question.imageLayout === 'beside-left' || question.imageLayout === 'beside-right') ? (
+        <div className={`ml-9 mb-3 flex gap-3 ${question.imageLayout === 'beside-right' ? 'flex-row-reverse' : ''}`}>
+          <div className="w-2/5 shrink-0 rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={question.imageUrl} alt={`Question ${question.questionNumber}`} className="w-full max-w-[250px] max-h-[250px] h-auto object-contain" />
+          </div>
+          <div className="w-3/5 flex flex-col gap-1.5">
+            {normalizeMcqOptions(question.options).map((opt) => (
+              <label
+                key={opt.label}
+                className={`flex items-start gap-2 cursor-pointer group rounded-lg px-2 py-1.5 transition-colors ${
+                  selectedAnswer === opt.label ? "bg-primary/10" : "hover:bg-slate-50"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name={`q${question.id}`}
+                  value={opt.label}
+                  checked={selectedAnswer === opt.label}
+                  onChange={() => onAnswer(question.id, opt.label)}
+                  className="accent-primary mt-0.5"
+                />
+                <span className="text-sm text-slate-700 group-hover:text-foreground">
+                  <strong className="mr-1">{opt.label}.</strong>
+                  <RichContent html={opt.text} className="inline" />
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <>
+          {question.imageUrl && question.imageLayout !== 'below-text' && (
+            <div className="ml-9 mb-3">
+              <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={question.imageUrl} alt={`Question ${question.questionNumber}`} className="max-w-[250px] max-h-[250px] h-auto object-contain" />
+              </div>
+            </div>
+          )}
       <div className="ml-9 flex flex-col gap-1.5">
         {options.map((opt) => (
           <label
@@ -92,6 +125,16 @@ export function McqRenderer({
           </label>
         ))}
       </div>
+          {question.imageUrl && question.imageLayout === 'below-text' && (
+            <div className="ml-9 mt-3">
+              <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-sm">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={question.imageUrl} alt={`Question ${question.questionNumber}`} className="max-w-[250px] max-h-[250px] h-auto object-contain" />
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

@@ -31,8 +31,9 @@ export class CreateQuestionDto {
   @IsOptional()
   options?: any; // JSON array: [{label: "A", text: "..."}, ...]
 
+  @IsOptional()
   @IsString()
-  correctAnswer: string;
+  correctAnswer?: string;
 
   @IsOptional()
   @IsString()
@@ -45,6 +46,13 @@ export class CreateQuestionDto {
   @IsOptional()
   @IsString()
   audioUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  imageLayout?: string;
+
+  @IsOptional()
+  metadata?: any;
 }
 
 export class CreateQuestionGroupDto {
@@ -83,6 +91,18 @@ export class CreatePassageDto {
 
   @IsString()
   contentHtml: string;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  imageLayout?: string;
 
   @IsInt()
   @Min(0)

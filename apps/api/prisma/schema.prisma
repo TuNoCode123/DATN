@@ -21,6 +21,12 @@ enum ExamType {
   IELTS_GENERAL
   TOEIC_LR
   TOEIC_SW
+  HSK_1
+  HSK_2
+  HSK_3
+  HSK_4
+  HSK_5
+  HSK_6
 }
 
 enum SectionSkill {
@@ -44,6 +50,8 @@ enum QuestionType {
   SENTENCE_COMPLETION
   SUMMARY_COMPLETION
   NOTE_COMPLETION
+  TABLE_COMPLETION
+  FORM_COMPLETION
   SHORT_ANSWER
   LABELLING
 
@@ -56,6 +64,11 @@ enum QuestionType {
   WRITE_SENTENCES
   RESPOND_WRITTEN_REQUEST
   WRITE_OPINION_ESSAY
+
+  // HSK Writing
+  SENTENCE_REORDER
+  KEYWORD_COMPOSITION
+  PICTURE_COMPOSITION
 }
 
 enum AttemptMode {
@@ -195,10 +208,13 @@ model TestSection {
 }
 
 model Passage {
-  id          String @id @default(cuid())
+  id          String  @id @default(cuid())
   sectionId   String
   title       String?
   contentHtml String
+  imageUrl    String?
+  audioUrl    String?
+  imageLayout String?
   orderIndex  Int
 
   section        TestSection     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
@@ -234,10 +250,12 @@ model Question {
   orderIndex     Int
   stem           String?
   options        Json?
-  correctAnswer  String
+  correctAnswer  String?
   explanation    String?
   imageUrl       String?
   audioUrl       String?
+  imageLayout    String?
+  metadata       Json?
 
   group   QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   answers UserAnswer[]
@@ -291,11 +309,48 @@ model UserAnswer {
   answerText String?
   isCorrect  Boolean?
 
-  attempt  UserAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  attempt    UserAttempt          @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question   Question             @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  evaluation WritingEvaluation?
 
   @@unique([attemptId, questionId])
   @@map("user_answers")
+}
+
+model WritingEvaluation {
+  id            String   @id @default(cuid())
+  answerId      String   @unique
+  examType      String
+  hskLevel      Int?
+  grammarScore  Float
+  vocabScore    Float
+  contentScore  Float
+  overallScore  Float
+  feedback      String
+  vocabAnalysis Json?
+  grammarErrors Json?
+  modelUsed     String
+  createdAt     DateTime @default(now())
+
+  answer UserAnswer @relation(fields: [answerId], references: [id], onDelete: Cascade)
+
+  @@map("writing_evaluations")
+}
+
+model HskVocabulary {
+  id           String  @id @default(cuid())
+  level        Int
+  simplified   String
+  traditional  String
+  pinyin       String
+  meaningEn    String
+  meaningVi    String?
+  partOfSpeech String?
+
+  @@unique([level, simplified])
+  @@index([level])
+  @@index([simplified])
+  @@map("hsk_vocabulary")
 }
 
 model Comment {

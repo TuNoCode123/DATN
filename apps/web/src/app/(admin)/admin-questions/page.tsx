@@ -27,7 +27,9 @@ const questionTypeLabels: Record<string, string> = {
   MATCHING_SENTENCE_ENDINGS: "Sentence End",
   SENTENCE_COMPLETION: "Sentence",
   SUMMARY_COMPLETION: "Summary",
-  NOTE_COMPLETION: "Note/Form",
+  NOTE_COMPLETION: "Note",
+  TABLE_COMPLETION: "Table",
+  FORM_COMPLETION: "Form",
   SHORT_ANSWER: "Short Answer",
   LABELLING: "Labelling",
 };

@@ -43,6 +43,54 @@ const EXAM_TYPES = [
     activeColor: 'bg-rose-100 border-rose-500 ring-2 ring-rose-200',
     needsSkill: false,
   },
+  {
+    value: 'HSK_1' as ExamType,
+    label: 'HSK 1 (汉语水平考试 一级)',
+    description: 'Chinese Proficiency Test Level 1 — Listening + Reading, 150 words',
+    color: 'bg-red-50 border-red-200 hover:border-red-400',
+    activeColor: 'bg-red-100 border-red-500 ring-2 ring-red-200',
+    needsSkill: false,
+  },
+  {
+    value: 'HSK_2' as ExamType,
+    label: 'HSK 2 (汉语水平考试 二级)',
+    description: 'Chinese Proficiency Test Level 2 — Listening + Reading, 300 words',
+    color: 'bg-red-50 border-red-200 hover:border-red-400',
+    activeColor: 'bg-red-100 border-red-500 ring-2 ring-red-200',
+    needsSkill: false,
+  },
+  {
+    value: 'HSK_3' as ExamType,
+    label: 'HSK 3 (汉语水平考试 三级)',
+    description: 'Chinese Proficiency Test Level 3 — Listening + Reading + Writing, 600 words',
+    color: 'bg-red-50 border-red-200 hover:border-red-400',
+    activeColor: 'bg-red-100 border-red-500 ring-2 ring-red-200',
+    needsSkill: false,
+  },
+  {
+    value: 'HSK_4' as ExamType,
+    label: 'HSK 4 (汉语水平考试 四级)',
+    description: 'Chinese Proficiency Test Level 4 — Listening + Reading + Writing, 1200 words',
+    color: 'bg-red-50 border-red-200 hover:border-red-400',
+    activeColor: 'bg-red-100 border-red-500 ring-2 ring-red-200',
+    needsSkill: false,
+  },
+  {
+    value: 'HSK_5' as ExamType,
+    label: 'HSK 5 (汉语水平考试 五级)',
+    description: 'Chinese Proficiency Test Level 5 — Listening + Reading + Writing, 2500 words',
+    color: 'bg-red-50 border-red-200 hover:border-red-400',
+    activeColor: 'bg-red-100 border-red-500 ring-2 ring-red-200',
+    needsSkill: false,
+  },
+  {
+    value: 'HSK_6' as ExamType,
+    label: 'HSK 6 (汉语水平考试 六级)',
+    description: 'Chinese Proficiency Test Level 6 — Listening + Reading + Writing, 5000 words',
+    color: 'bg-red-50 border-red-200 hover:border-red-400',
+    activeColor: 'bg-red-100 border-red-500 ring-2 ring-red-200',
+    needsSkill: false,
+  },
 ];
 
 const SKILLS = [
@@ -63,6 +111,12 @@ const TEMPLATE_INFO: Record<string, { sections: string[]; duration: number; ques
   'IELTS_GENERAL:SPEAKING': { sections: ['Part 1: Introduction', 'Part 2: Long Turn', 'Part 3: Discussion'], duration: 15, questions: '3 parts' },
   'TOEIC_LR': { sections: ['Part 1: Photographs', 'Part 2: Question-Response', 'Part 3: Conversations', 'Part 4: Talks', 'Part 5: Incomplete Sentences', 'Part 6: Text Completion', 'Part 7: Reading Comprehension'], duration: 120, questions: '200 questions' },
   'TOEIC_SW': { sections: ['Speaking: Read Aloud', 'Speaking: Describe a Picture', 'Speaking: Respond to Questions', 'Speaking: Propose a Solution', 'Speaking: Express an Opinion', 'Writing: Write Sentences', 'Writing: Respond to Request', 'Writing: Write an Opinion Essay'], duration: 80, questions: '19 questions' },
+  'HSK_1': { sections: ['听力 Listening', '阅读 Reading'], duration: 40, questions: '40 questions' },
+  'HSK_2': { sections: ['听力 Listening', '阅读 Reading'], duration: 55, questions: '50 questions' },
+  'HSK_3': { sections: ['听力 Listening', '阅读 Reading', '书写 Writing'], duration: 90, questions: '70 questions' },
+  'HSK_4': { sections: ['听力 Listening', '阅读 Reading', '书写 Writing'], duration: 105, questions: '95 questions' },
+  'HSK_5': { sections: ['听力 Listening', '阅读 Reading', '书写 Writing'], duration: 125, questions: '100 questions' },
+  'HSK_6': { sections: ['听力 Listening', '阅读 Reading', '书写 Writing'], duration: 140, questions: '101 questions' },
 };
 
 export default function NewTestWizardPage() {

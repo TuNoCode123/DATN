@@ -94,10 +94,19 @@ function formatTime(seconds: number): string {
 function getQuestionTypeLabel(type: string): string {
   const map: Record<string, string> = {
     MULTIPLE_CHOICE: "Multiple Choice",
-    NOTE_FORM_COMPLETION: "Note/Form Completion",
+    TRUE_FALSE_NOT_GIVEN: "True/False/Not Given",
+    YES_NO_NOT_GIVEN: "Yes/No/Not Given",
+    NOTE_COMPLETION: "Note Completion",
     TABLE_COMPLETION: "Table Completion",
+    FORM_COMPLETION: "Form Completion",
+    SENTENCE_COMPLETION: "Sentence Completion",
     SUMMARY_COMPLETION: "Summary Completion",
-    MATCHING: "Matching",
+    SHORT_ANSWER: "Short Answer",
+    LABELLING: "Labelling",
+    MATCHING_HEADINGS: "Matching Headings",
+    MATCHING_INFORMATION: "Matching Information",
+    MATCHING_FEATURES: "Matching Features",
+    MATCHING_SENTENCE_ENDINGS: "Matching Sentence Endings",
   };
   return map[type] || type;
 }
@@ -218,15 +227,27 @@ function QuestionDetailModal({
             <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white font-bold text-xs shrink-0 mt-0.5">
               {question.questionNumber}
             </span>
-            {question.stem && (
+            {question.stem ? (
               <div
                 className="text-sm text-slate-700 leading-relaxed rich-content"
                 dangerouslySetInnerHTML={{ __html: question.stem }}
               />
-            )}
+            ) : options.length === 0 ? (
+              <div
+                className={`px-3 py-2 rounded border-2 text-sm min-w-[120px] ${
+                  status === "correct"
+                    ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                    : status === "wrong"
+                      ? "border-red-300 bg-red-50 text-red-600"
+                      : "border-slate-200 bg-slate-50 text-slate-400 italic"
+                }`}
+              >
+                {userAnswer || "Chưa trả lời"}
+              </div>
+            ) : null}
           </div>
 
-        {/* Options */}
+        {/* Options (MCQ) */}
         {options.length > 0 && (
           <div className="space-y-0.5 pl-10 mt-1">
             {options.map((opt) => {
@@ -269,7 +290,25 @@ function QuestionDetailModal({
             })}
           </div>
         )}
+
+        {/* Fill-in-the-blank with stem: show answer below */}
+        {options.length === 0 && question.stem && (
+          <div className="pl-10 mt-3">
+            <div
+              className={`px-3 py-2 rounded border-2 text-sm min-w-[120px] ${
+                status === "correct"
+                  ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                  : status === "wrong"
+                    ? "border-red-300 bg-red-50 text-red-600"
+                    : "border-slate-200 bg-slate-50 text-slate-400 italic"
+              }`}
+            >
+              {userAnswer || "Chưa trả lời"}
+            </div>
+          </div>
+        )}
         </div>
+
 
         {/* Correct answer display */}
         <div className="text-sm pl-10">
@@ -534,7 +573,7 @@ function ResultContent() {
       {sections.map((section) => (
         <div key={section.id} className="mb-6">
           <h4 className="font-bold text-foreground mb-3 text-sm">{section.title}</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
+          <div className="sm:columns-2 gap-x-8 space-y-3">
             {section.questionGroups
               .sort((a, b) => a.orderIndex - b.orderIndex)
               .flatMap((g) =>
@@ -548,16 +587,19 @@ function ResultContent() {
                 const userAnswer = ans?.answerText || "";
 
                 return (
-                  <div key={q.id} className="flex items-center gap-2 text-sm">
+                  <div key={q.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm break-inside-avoid">
                     <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-primary text-white font-bold text-xs shrink-0">
                       {q.questionNumber}
                     </span>
-                    <span className="flex items-center gap-1.5 flex-wrap min-w-0">
-                      <span className="font-bold text-foreground">
-                        {q.correctAnswer}:
-                      </span>
+                    <span className="font-bold text-foreground">
+                      {q.correctAnswer}:
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
                       {status === "skipped" ? (
-                        <span className="text-slate-400 italic">chưa trả lời</span>
+                        <>
+                          <span className="text-slate-400 italic">chưa trả lời</span>
+                          <Minus className="w-4 h-4 text-slate-300 shrink-0" />
+                        </>
                       ) : status === "correct" ? (
                         <>
                           <span className="text-emerald-600 font-medium">{userAnswer}</span>
@@ -570,12 +612,9 @@ function ResultContent() {
                         </>
                       )}
                     </span>
-                    {status === "skipped" ? (
-                      <Minus className="w-4 h-4 text-slate-300 shrink-0" />
-                    ) : null}
                     <button
                       onClick={() => setSelectedQuestion({ question: q, group: g, section })}
-                      className="text-primary hover:underline text-xs font-medium ml-auto cursor-pointer whitespace-nowrap"
+                      className="text-primary hover:underline text-xs font-medium cursor-pointer whitespace-nowrap"
                     >
                       [Chi tiết]
                     </button>

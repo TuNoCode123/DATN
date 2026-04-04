@@ -7,6 +7,18 @@ export class CreatePassageBodyDto {
 
   @IsString()
   contentHtml: string;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  imageLayout?: string;
 }
 
 export class UpdatePassageDto {
@@ -17,4 +29,16 @@ export class UpdatePassageDto {
   @IsOptional()
   @IsString()
   contentHtml?: string;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  audioUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  imageLayout?: string;
 }

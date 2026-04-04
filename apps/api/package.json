@@ -6,7 +6,7 @@
   "scripts": {
     "build": "nest build",
     "start": "nest start",
-    "dev": "nest start --watch",
+    "dev": "prisma generate && nest start --watch",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
@@ -14,7 +14,11 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:seed": "ts-node prisma/seed.ts",
+    "db:seed:ielts": "ts-node prisma/seed.ts --only ielts",
+    "db:seed:toeic": "ts-node prisma/seed.ts --only toeic",
+    "db:seed:hsk": "ts-node prisma/seed.ts --only hsk",
     "db:studio": "prisma studio",
+    "create:admin": "ts-node scripts/create-admin.ts",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage"
@@ -27,6 +31,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@aws-sdk/client-bedrock-runtime": "^3.1024.0",
+    "@aws-sdk/client-cognito-identity-provider": "^3.1024.0",
     "@aws-sdk/client-s3": "^3.1016.0",
     "@aws-sdk/s3-request-presigner": "^3.1016.0",
     "@nestjs/common": "^11.1.15",
@@ -44,15 +50,16 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
+    "dotenv": "^17.4.0",
     "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.3",
     "jwks-rsa": "^4.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
+    "prisma": "^5.22.0",
     "redis": "^5.11.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
-    "prisma": "^5.22.0",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {

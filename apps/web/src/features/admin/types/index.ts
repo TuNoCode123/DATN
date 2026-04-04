@@ -6,7 +6,13 @@ export type ExamType =
   | 'IELTS_ACADEMIC'
   | 'IELTS_GENERAL'
   | 'TOEIC_LR'
-  | 'TOEIC_SW';
+  | 'TOEIC_SW'
+  | 'HSK_1'
+  | 'HSK_2'
+  | 'HSK_3'
+  | 'HSK_4'
+  | 'HSK_5'
+  | 'HSK_6';
 
 export type SectionSkill = 'LISTENING' | 'READING' | 'WRITING' | 'SPEAKING';
 
@@ -21,6 +27,8 @@ export type QuestionType =
   | 'SENTENCE_COMPLETION'
   | 'SUMMARY_COMPLETION'
   | 'NOTE_COMPLETION'
+  | 'TABLE_COMPLETION'
+  | 'FORM_COMPLETION'
   | 'SHORT_ANSWER'
   | 'LABELLING'
   | 'READ_ALOUD'
@@ -30,7 +38,10 @@ export type QuestionType =
   | 'EXPRESS_OPINION'
   | 'WRITE_SENTENCES'
   | 'RESPOND_WRITTEN_REQUEST'
-  | 'WRITE_OPINION_ESSAY';
+  | 'WRITE_OPINION_ESSAY'
+  | 'SENTENCE_REORDER'
+  | 'KEYWORD_COMPOSITION'
+  | 'PICTURE_COMPOSITION';
 
 export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED';
 
@@ -66,6 +77,9 @@ export interface AdminPassage {
   sectionId: string;
   title: string | null;
   contentHtml: string;
+  imageUrl: string | null;
+  audioUrl: string | null;
+  imageLayout: string | null;
   orderIndex: number;
 }
 
@@ -80,6 +94,8 @@ export interface AdminQuestion {
   explanation: string | null;
   imageUrl: string | null;
   audioUrl: string | null;
+  imageLayout: string | null;
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface AdminQuestionGroup {

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Checkbox, Select, App } from 'antd';
+import Link from 'next/link';
 import {
   Clock,
   Users,
@@ -12,7 +13,20 @@ import {
   Loader2,
 } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/lib/auth-store';
 import { CommentSection } from '@/components/comments/comment-section';
+
+interface AttemptHistoryItem {
+  id: string;
+  mode: 'PRACTICE' | 'FULL_TEST';
+  startedAt: string;
+  submittedAt: string | null;
+  totalQuestions: number | null;
+  correctCount: number | null;
+  sections: {
+    section: { id: string; title: string; skill: string };
+  }[];
+}
 
 interface QuestionFromAPI {
   id: string;
@@ -88,12 +102,23 @@ export default function TestDetailPage() {
   const [timeLimit, setTimeLimit] = useState(0);
   const [starting, setStarting] = useState(false);
 
+  const { user } = useAuthStore();
+
   const { data: test, isLoading } = useQuery({
     queryKey: ['test', testId],
     queryFn: async () => {
       const { data } = await api.get(`/tests/${testId}`);
       return data as TestFromAPI;
     },
+  });
+
+  const { data: attemptHistory } = useQuery({
+    queryKey: ['test-attempts', testId],
+    queryFn: async () => {
+      const { data } = await api.get(`/attempts/by-test/${testId}`);
+      return data as AttemptHistoryItem[];
+    },
+    enabled: !!user,
   });
 
   const toggleSection = (sectionId: string) => {
@@ -178,6 +203,81 @@ export default function TestDetailPage() {
         Note: To get scaled scores (e.g. 990 for TOEIC or 9.0 for IELTS),
         please select FULL TEST mode.
       </p>
+
+      {/* Attempt history */}
+      {attemptHistory && attemptHistory.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-base font-bold text-foreground mb-3">Your results:</h2>
+          <div className="brutal-card overflow-hidden">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b-2 border-foreground bg-slate-50">
+                  <th className="text-left px-4 py-2.5 font-semibold">Date</th>
+                  <th className="text-left px-4 py-2.5 font-semibold">Result</th>
+                  <th className="text-left px-4 py-2.5 font-semibold">Duration</th>
+                  <th className="text-left px-4 py-2.5 font-semibold"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {attemptHistory.map((attempt) => {
+                  const date = new Date(attempt.startedAt);
+                  const dateStr = date.toLocaleDateString('en-GB', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                  });
+
+                  // Calculate duration
+                  let durationStr = '-';
+                  if (attempt.submittedAt) {
+                    const diffMs = new Date(attempt.submittedAt).getTime() - date.getTime();
+                    const totalSecs = Math.floor(diffMs / 1000);
+                    const hrs = Math.floor(totalSecs / 3600);
+                    const mins = Math.floor((totalSecs % 3600) / 60);
+                    const secs = totalSecs % 60;
+                    durationStr = `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+                  }
+
+                  return (
+                    <tr key={attempt.id} className="border-b border-slate-200 last:border-b-0">
+                      <td className="px-4 py-3">
+                        <div>{dateStr}</div>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          <span className={`text-xs px-2 py-0.5 rounded font-semibold text-white ${
+                            attempt.mode === 'FULL_TEST' ? 'bg-blue-500' : 'bg-orange-400'
+                          }`}>
+                            {attempt.mode === 'FULL_TEST' ? 'Full Test' : 'Practice'}
+                          </span>
+                          {attempt.sections.map((s) => (
+                            <span
+                              key={s.section.id}
+                              className="text-xs px-2 py-0.5 rounded font-semibold text-white bg-orange-500"
+                            >
+                              {s.section.title}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-medium">
+                        {attempt.correctCount ?? 0}/{attempt.totalQuestions ?? 0}
+                      </td>
+                      <td className="px-4 py-3">{durationStr}</td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/tests/${testId}/result?attemptId=${attempt.id}`}
+                          className="text-blue-600 hover:underline font-medium"
+                        >
+                          View details
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Mode tabs */}
       <div className="flex gap-1 mb-6 bg-slate-100 rounded-xl p-1">

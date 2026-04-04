@@ -14,6 +14,9 @@ import { UploadModule } from './upload/upload.module';
 import { ChatModule } from './chat/chat.module';
 import { FlashcardsModule } from './flashcards/flashcards.module';
 import { HealthModule } from './health/health.module';
+import { BedrockModule } from './bedrock/bedrock.module';
+import { HskGradingModule } from './hsk-grading/hsk-grading.module';
+import { HskVocabularyModule } from './hsk-vocabulary/hsk-vocabulary.module';
 
 @Module({
   imports: [
@@ -22,6 +25,7 @@ import { HealthModule } from './health/health.module';
     PrismaModule,
     HealthModule,
     RedisModule,
+    BedrockModule,
     AuthModule,
     UsersModule,
     TestsModule,
@@ -32,6 +36,8 @@ import { HealthModule } from './health/health.module';
     UploadModule,
     ChatModule,
     FlashcardsModule,
+    HskGradingModule,
+    HskVocabularyModule,
   ],
 })
 export class AppModule {}

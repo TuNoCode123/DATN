@@ -17,6 +17,7 @@ import { CognitoJwtAuthGuard } from './cognito-jwt-auth.guard';
 import { CsrfGuard } from './guards/csrf.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
 import { setAuthCookies, clearAuthCookies } from './cookie.utils';
+import * as jwt from 'jsonwebtoken';
 
 @Controller('auth/cognito')
 export class CognitoAuthController {
@@ -43,13 +44,17 @@ export class CognitoAuthController {
       tokens.id_token,
     );
 
+    // Role derived from Cognito groups in the access token
+    const accessPayload = jwt.decode(tokens.access_token) as { 'cognito:groups'?: string[] } | null;
+    const role = accessPayload?.['cognito:groups']?.includes('Admin') ? 'ADMIN' : 'STUDENT';
+
     setAuthCookies(res, tokens.access_token, tokens.refresh_token, tokens.id_token);
 
     return {
       id: user.id,
       email: user.email,
       displayName: user.displayName,
-      role: user.role,
+      role,
       linkedExisting: !!(user as any).linkedExisting,
     };
   }
@@ -86,6 +91,10 @@ export class CognitoAuthController {
       throw new UnauthorizedException('User no longer exists');
     }
 
+    // Role derived from Cognito groups in the access token
+    const accessPayload = jwt.decode(tokens.access_token) as { 'cognito:groups'?: string[] } | null;
+    const role = accessPayload?.['cognito:groups']?.includes('Admin') ? 'ADMIN' : 'STUDENT';
+
     // Cognito refresh doesn't return a new refresh_token — reuse existing
     setAuthCookies(res, tokens.access_token, refreshToken, tokens.id_token);
 
@@ -93,7 +102,7 @@ export class CognitoAuthController {
       id: user.id,
       email: user.email,
       displayName: user.displayName,
-      role: user.role,
+      role,
     };
   }
 

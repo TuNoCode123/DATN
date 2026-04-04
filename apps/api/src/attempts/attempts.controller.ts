@@ -88,6 +88,14 @@ export class AttemptsController {
     return this.attemptsService.submitAttempt(attemptId, userId);
   }
 
+  @Get('by-test/:testId')
+  findByTest(
+    @Param('testId') testId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.attemptsService.findByUserAndTest(userId, testId);
+  }
+
   @Get()
   findMine(@CurrentUser('id') userId: string) {
     return this.attemptsService.findByUser(userId);

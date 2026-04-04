@@ -14,8 +14,9 @@ export class CreateQuestionBodyDto {
   @IsOptional()
   options?: any;
 
+  @IsOptional()
   @IsString()
-  correctAnswer: string;
+  correctAnswer?: string;
 
   @IsOptional()
   @IsString()
@@ -28,6 +29,13 @@ export class CreateQuestionBodyDto {
   @IsOptional()
   @IsString()
   audioUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  imageLayout?: string;
+
+  @IsOptional()
+  metadata?: any;
 }
 
 export class BulkCreateQuestionsDto {
@@ -60,6 +68,13 @@ export class UpdateQuestionDto {
   @IsOptional()
   @IsString()
   audioUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  imageLayout?: string;
+
+  @IsOptional()
+  metadata?: any;
 }
 
 export class BulkDeleteDto {
