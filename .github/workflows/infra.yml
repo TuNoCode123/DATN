@@ -3,10 +3,11 @@ name: Infrastructure
 on:
   push:
     branches: [main]
-    paths: ['infra/**']
+    paths: ['infra/**', '.github/workflows/infra.yml']
   pull_request:
     branches: [main]
-    paths: ['infra/**']
+    paths: ['infra/**', '.github/workflows/infra.yml']
+  workflow_dispatch:
 
 env:
   AWS_REGION: ap-southeast-2        # Sydney (must match Terraform provider config)
