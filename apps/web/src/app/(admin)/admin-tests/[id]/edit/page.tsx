@@ -174,7 +174,10 @@ export default function TestEditorPage() {
           contentHtml: passage.contentHtml,
           imageUrl: passage.imageUrl,
           audioUrl: passage.audioUrl,
+          transcript: passage.transcript,
           imageLayout: passage.imageLayout,
+          imageSize: passage.imageSize,
+          images: passage.images?.filter((img) => img.url) || null,
           orderIndex: pIdx,
         })),
         questionGroups: (section.questionGroups || []).map((group, gIdx) => ({
@@ -191,6 +194,7 @@ export default function TestEditorPage() {
           matchingOptions: group.matchingOptions,
           audioUrl: group.audioUrl,
           imageUrl: group.imageUrl,
+          imageSize: group.imageSize,
           questions: (group.questions || []).map((q, qIdx) => ({
             ...(q.id && !q.id.startsWith('_new_') ? { id: q.id } : {}),
             questionNumber: q.questionNumber,
@@ -201,7 +205,9 @@ export default function TestEditorPage() {
             explanation: q.explanation,
             imageUrl: q.imageUrl,
             audioUrl: q.audioUrl,
+            transcript: q.transcript,
             imageLayout: q.imageLayout,
+            imageSize: q.imageSize,
             metadata: q.metadata,
           })),
         })),
@@ -932,6 +938,7 @@ function SectionEditor({
   const [showSettings, setShowSettings] = useState(false);
   const [showGuide, setShowGuide] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [addGroupKey, setAddGroupKey] = useState(0);
 
   const skillCfg = SKILL_CONFIG[section.skill];
 
@@ -950,9 +957,11 @@ function SectionEditor({
       matchingOptions: null,
       audioUrl: null,
       imageUrl: null,
+      imageSize: null,
       questions: [],
     };
     updateField({ questionGroups: [...section.questionGroups, newGroup] });
+    setAddGroupKey((k) => k + 1);
     toast.success('Question group added (unsaved)');
   }
 
@@ -961,10 +970,12 @@ function SectionEditor({
       id: tempId(),
       sectionId: section.id,
       title: `Passage-${crypto.randomUUID().slice(0, 8)}`,
-      contentHtml: '<p>Enter passage text here...</p>',
+      contentHtml: '',
       imageUrl: null,
       audioUrl: null,
+      transcript: null,
       imageLayout: null,
+      imageSize: null,
       orderIndex: (section.passages || []).length,
     };
     updateField({ passages: [...(section.passages || []), newPassage] });
@@ -1099,7 +1110,7 @@ function SectionEditor({
       <div className="space-y-5">
         <div className="flex items-center justify-between">
           <h4 className="text-sm font-semibold text-foreground">Question Groups</h4>
-          <Select onValueChange={(val) => handleAddGroup(val as QuestionType)}>
+          <Select key={addGroupKey} onValueChange={(val) => handleAddGroup(val as QuestionType)}>
             <SelectTrigger className="w-64 h-9 text-sm bg-white">
               <SelectValue placeholder="+ Add Question Group" />
             </SelectTrigger>
@@ -1201,6 +1212,54 @@ function PassageEditor({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(!!passage.transcript);
+  const [showContent, setShowContent] = useState(true);
+
+  const isMultiImage = Array.isArray(passage.images);
+
+  const handleSetSingleImage = () => {
+    if (!isMultiImage) return;
+    // Switch back to single image mode — keep first image if any
+    const firstImage = passage.images?.[0];
+    onChange({
+      ...passage,
+      images: null,
+      imageUrl: firstImage?.url || null,
+      imageLayout: firstImage?.layout || null,
+      imageSize: firstImage?.size || 'medium',
+    });
+  };
+
+  const handleSetMultiImage = () => {
+    if (isMultiImage) return;
+    // Switch to multi-image mode — move existing single image if any
+    const initialImages = passage.imageUrl
+      ? [{ url: passage.imageUrl, layout: passage.imageLayout || undefined, size: passage.imageSize || 'medium' }]
+      : [];
+    onChange({
+      ...passage,
+      images: initialImages,
+      imageUrl: null,
+      imageLayout: null,
+      imageSize: null,
+    });
+  };
+
+  const handleAddImage = () => {
+    // Add an empty slot — will be filled by FileUpload
+    onChange({ ...passage, images: [...(passage.images || []), { url: '', size: 'medium' }] });
+  };
+
+  const handleUpdateImage = (index: number, updates: Partial<{ url: string; layout?: string; size?: string }>) => {
+    const updated = [...(passage.images || [])];
+    updated[index] = { ...updated[index], ...updates };
+    onChange({ ...passage, images: updated });
+  };
+
+  const handleRemoveImage = (index: number) => {
+    const updated = (passage.images || []).filter((_, i) => i !== index);
+    onChange({ ...passage, images: updated.length > 0 ? updated : null });
+  };
 
   return (
     <Card className="bg-white border-teal-200">
@@ -1241,80 +1300,241 @@ function PassageEditor({
               />
             </div>
 
+            {/* Image mode toggle */}
+            <div className="flex items-center gap-2 mb-3">
+              <Label className="text-xs text-muted-foreground">Image Mode:</Label>
+              <button
+                type="button"
+                onClick={handleSetSingleImage}
+                className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                  !isMultiImage
+                    ? 'bg-teal-100 border-teal-300 text-teal-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Single
+              </button>
+              <button
+                type="button"
+                onClick={handleSetMultiImage}
+                className={`px-2.5 py-1 text-xs rounded-md border transition-colors ${
+                  isMultiImage
+                    ? 'bg-teal-100 border-teal-300 text-teal-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                Multiple
+              </button>
+            </div>
+
             {/* Media uploads */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-teal-50/50 rounded-lg border border-teal-100 mb-3">
-              <div>
-                <FileUpload
-                  value={passage.imageUrl || null}
-                  onChange={(url) => onChange({ ...passage, imageUrl: url || null, imageLayout: url ? (passage.imageLayout || 'vertical') : null })}
-                  accept="image/*"
-                  label="Passage Image"
-                  maxSizeMB={10}
-                />
-                {passage.imageUrl && (
-                  <div className="mt-2">
-                    <Label className="text-xs text-muted-foreground mb-1 block">Image Layout</Label>
-                    <div className="flex flex-wrap gap-3">
-                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`passage-layout-${passage.id}`}
-                          checked={!passage.imageLayout || passage.imageLayout === 'vertical'}
-                          onChange={() => onChange({ ...passage, imageLayout: 'vertical' })}
-                          className="accent-teal-600"
-                        />
-                        Above text
-                      </label>
-                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`passage-layout-${passage.id}`}
-                          checked={passage.imageLayout === 'below-text'}
-                          onChange={() => onChange({ ...passage, imageLayout: 'below-text' })}
-                          className="accent-teal-600"
-                        />
-                        Below text
-                      </label>
-                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`passage-layout-${passage.id}`}
-                          checked={passage.imageLayout === 'beside-left'}
-                          onChange={() => onChange({ ...passage, imageLayout: 'beside-left' })}
-                          className="accent-teal-600"
-                        />
-                        Beside from left
-                      </label>
-                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
-                        <input
-                          type="radio"
-                          name={`passage-layout-${passage.id}`}
-                          checked={passage.imageLayout === 'beside-right'}
-                          onChange={() => onChange({ ...passage, imageLayout: 'beside-right' })}
-                          className="accent-teal-600"
-                        />
-                        Beside from right
-                      </label>
+            <div className="p-4 bg-teal-50/50 rounded-lg border border-teal-100 mb-3">
+              {isMultiImage ? (
+                /* Multi-image mode */
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-medium">Passage Images ({passage.images?.length || 0})</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={handleAddImage}
+                    >
+                      <Plus className="h-3 w-3 mr-1" /> Add Image
+                    </Button>
+                  </div>
+                  {(passage.images || []).map((img, idx) => (
+                    <div key={idx} className="p-3 bg-white rounded-md border border-teal-100 relative">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-slate-500">Image {idx + 1}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-red-400 hover:text-red-600 hover:bg-red-50"
+                          onClick={() => handleRemoveImage(idx)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <FileUpload
+                        value={img.url || null}
+                        onChange={(url) => handleUpdateImage(idx, { url: url || '' })}
+                        accept="image/*"
+                        label=""
+                        maxSizeMB={10}
+                      />
+                      {img.url && (
+                        <div className="mt-2">
+                          <Label className="text-xs text-muted-foreground mb-1 block">Size</Label>
+                          <div className="flex flex-wrap gap-3">
+                            {(['small', 'medium', 'large', 'extra-large'] as const).map((sz) => (
+                              <label key={sz} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`passage-multi-size-${passage.id}-${idx}`}
+                                  checked={img.size === sz || (!img.size && sz === 'medium')}
+                                  onChange={() => handleUpdateImage(idx, { size: sz })}
+                                  className="accent-teal-600"
+                                />
+                                {sz.charAt(0).toUpperCase() + sz.slice(1).replace('-', ' ')}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
+                  ))}
+                </div>
+              ) : (
+                /* Single-image mode (original) */
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <FileUpload
+                      value={passage.imageUrl || null}
+                      onChange={(url) => onChange({ ...passage, imageUrl: url || null, imageLayout: url ? (passage.imageLayout || 'vertical') : null, imageSize: url ? (passage.imageSize || 'medium') : null })}
+                      accept="image/*"
+                      label="Passage Image"
+                      maxSizeMB={10}
+                    />
+                    {passage.imageUrl && (
+                      <>
+                      <div className="mt-2">
+                        <Label className="text-xs text-muted-foreground mb-1 block">Image Layout</Label>
+                        <div className="flex flex-wrap gap-3">
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`passage-layout-${passage.id}`}
+                              checked={!passage.imageLayout || passage.imageLayout === 'vertical'}
+                              onChange={() => onChange({ ...passage, imageLayout: 'vertical' })}
+                              className="accent-teal-600"
+                            />
+                            Above text
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`passage-layout-${passage.id}`}
+                              checked={passage.imageLayout === 'below-text'}
+                              onChange={() => onChange({ ...passage, imageLayout: 'below-text' })}
+                              className="accent-teal-600"
+                            />
+                            Below text
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`passage-layout-${passage.id}`}
+                              checked={passage.imageLayout === 'beside-left'}
+                              onChange={() => onChange({ ...passage, imageLayout: 'beside-left' })}
+                              className="accent-teal-600"
+                            />
+                            Beside from left
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input
+                              type="radio"
+                              name={`passage-layout-${passage.id}`}
+                              checked={passage.imageLayout === 'beside-right'}
+                              onChange={() => onChange({ ...passage, imageLayout: 'beside-right' })}
+                              className="accent-teal-600"
+                            />
+                            Beside from right
+                          </label>
+                        </div>
+                      </div>
+                      <div className="mt-2">
+                        <Label className="text-xs text-muted-foreground mb-1 block">Image Size</Label>
+                        <div className="flex flex-wrap gap-3">
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input type="radio" name={`passage-size-${passage.id}`} checked={passage.imageSize === 'small'} onChange={() => onChange({ ...passage, imageSize: 'small' })} className="accent-teal-600" />
+                            Small
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input type="radio" name={`passage-size-${passage.id}`} checked={!passage.imageSize || passage.imageSize === 'medium'} onChange={() => onChange({ ...passage, imageSize: 'medium' })} className="accent-teal-600" />
+                            Medium
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input type="radio" name={`passage-size-${passage.id}`} checked={passage.imageSize === 'large'} onChange={() => onChange({ ...passage, imageSize: 'large' })} className="accent-teal-600" />
+                            Large
+                          </label>
+                          <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                            <input type="radio" name={`passage-size-${passage.id}`} checked={passage.imageSize === 'extra-large'} onChange={() => onChange({ ...passage, imageSize: 'extra-large' })} className="accent-teal-600" />
+                            Extra Large
+                          </label>
+                        </div>
+                      </div>
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <FileUpload
+                      value={passage.audioUrl || null}
+                      onChange={(url) => onChange({ ...passage, audioUrl: url || null })}
+                      accept="audio/*"
+                      label="Passage Audio"
+                      maxSizeMB={50}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Audio upload — always available regardless of image mode */}
+              {isMultiImage && (
+                <div className="mt-4 pt-4 border-t border-teal-100">
+                  <FileUpload
+                    value={passage.audioUrl || null}
+                    onChange={(url) => onChange({ ...passage, audioUrl: url || null })}
+                    accept="audio/*"
+                    label="Passage Audio"
+                    maxSizeMB={50}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Transcript editor — shown when passage has audio */}
+            {passage.audioUrl && (
+              <div className="mt-3 border rounded-md border-slate-200 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowTranscript(!showTranscript)}
+                  className="flex items-center gap-1.5 w-full px-3 py-2 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  {showTranscript ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  Audio Transcript
+                </button>
+                {showTranscript && (
+                  <div className="p-2 border-t border-slate-200">
+                    <TiptapEditor
+                      content={passage.transcript || ''}
+                      onChange={(html) => onChange({ ...passage, transcript: html })}
+                    />
                   </div>
                 )}
               </div>
-              <div>
-                <FileUpload
-                  value={passage.audioUrl || null}
-                  onChange={(url) => onChange({ ...passage, audioUrl: url || null })}
-                  accept="audio/*"
-                  label="Passage Audio"
-                  maxSizeMB={50}
-                />
-              </div>
-            </div>
+            )}
 
-            <div className="mt-2">
-              <TiptapEditor
-                content={passage.contentHtml}
-                onChange={(html) => onChange({ ...passage, contentHtml: html })}
-              />
+            <div className="mt-2 border rounded-md border-slate-200 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowContent(!showContent)}
+                className="flex items-center gap-1.5 w-full px-3 py-2 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                {showContent ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                Passage Content
+              </button>
+              {showContent && (
+                <div className="p-2 border-t border-slate-200">
+                  <TiptapEditor
+                    content={passage.contentHtml}
+                    onChange={(html) => onChange({ ...passage, contentHtml: html })}
+                    placeholder="Enter passage text here..."
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1414,7 +1634,9 @@ function QuestionGroupEditor({
         explanation: null,
         imageUrl: null,
         audioUrl: null,
+        transcript: null,
         imageLayout: null,
+        imageSize: null,
       };
     });
 
@@ -1434,7 +1656,9 @@ function QuestionGroupEditor({
       explanation: null,
       imageUrl: null,
       audioUrl: null,
+      transcript: null,
       imageLayout: null,
+      imageSize: null,
     };
 
     if (group.questionType === 'MULTIPLE_CHOICE') {
@@ -1721,6 +1945,7 @@ function QuestionEditor({
 }) {
   const [showExplanation, setShowExplanation] = useState(false);
   const [showMedia, setShowMedia] = useState(!!(question.imageUrl || question.audioUrl));
+  const [showTranscript, setShowTranscript] = useState(!!question.transcript);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   const isMCQ = questionType === 'MULTIPLE_CHOICE';
@@ -2045,17 +2270,18 @@ function QuestionEditor({
           </div>
 
           {/* Media fields */}
-          {showMedia && (
+          {showMedia && (<>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-50 rounded-lg border">
               <div>
                 <FileUpload
                   value={question.imageUrl || null}
-                  onChange={(url) => onChange({ ...question, imageUrl: url || null, imageLayout: url ? (question.imageLayout || 'vertical') : null })}
+                  onChange={(url) => onChange({ ...question, imageUrl: url || null, imageLayout: url ? (question.imageLayout || 'vertical') : null, imageSize: url ? (question.imageSize || 'medium') : null })}
                   accept="image/*"
                   label="Question Image"
                   maxSizeMB={10}
                 />
                 {question.imageUrl && (
+                  <>
                   <div className="mt-2">
                     <Label className="text-xs text-muted-foreground mb-1 block">Image Layout</Label>
                     <div className="flex flex-wrap gap-3">
@@ -2101,6 +2327,28 @@ function QuestionEditor({
                       </label>
                     </div>
                   </div>
+                  <div className="mt-2">
+                    <Label className="text-xs text-muted-foreground mb-1 block">Image Size</Label>
+                    <div className="flex flex-wrap gap-3">
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input type="radio" name={`question-size-${question.id}`} checked={question.imageSize === 'small'} onChange={() => onChange({ ...question, imageSize: 'small' })} className="accent-indigo-600" />
+                        Small
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input type="radio" name={`question-size-${question.id}`} checked={!question.imageSize || question.imageSize === 'medium'} onChange={() => onChange({ ...question, imageSize: 'medium' })} className="accent-indigo-600" />
+                        Medium
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input type="radio" name={`question-size-${question.id}`} checked={question.imageSize === 'large'} onChange={() => onChange({ ...question, imageSize: 'large' })} className="accent-indigo-600" />
+                        Large
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input type="radio" name={`question-size-${question.id}`} checked={question.imageSize === 'extra-large'} onChange={() => onChange({ ...question, imageSize: 'extra-large' })} className="accent-indigo-600" />
+                        Extra Large
+                      </label>
+                    </div>
+                  </div>
+                  </>
                 )}
               </div>
               <div>
@@ -2113,7 +2361,32 @@ function QuestionEditor({
                 />
               </div>
             </div>
-          )}
+            {/* Transcript editor — shown when question has audio */}
+            {question.audioUrl && (
+              <div className="mt-3 border rounded-md border-slate-200 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowTranscript(!showTranscript)}
+                  className="flex items-center gap-1.5 w-full px-3 py-2 text-xs font-medium text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  {showTranscript ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                  Audio Transcript
+                </button>
+                {showTranscript && (
+                  <div className="p-2 border-t border-slate-200">
+                    <TiptapMiniEditor
+                      content={question.transcript || ''}
+                      onChange={(html) => {
+                        const isEmpty = html === '<p></p>' || html === '';
+                        onChange({ ...question, transcript: isEmpty ? null : html });
+                      }}
+                      placeholder="Audio transcript text..."
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </>)}
 
           {/* Explanation */}
           {showExplanation && (

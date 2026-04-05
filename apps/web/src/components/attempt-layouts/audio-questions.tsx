@@ -89,10 +89,10 @@ export function AudioQuestionsLayout({
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="md:flex-1 flex flex-col md:overflow-hidden">
       {/* Audio player */}
       {section.audioUrl && <audio ref={audioRef} src={section.audioUrl} preload="metadata" />}
-      <div className="flex items-center gap-3 px-5 border-b border-slate-200 bg-white shrink-0 h-12">
+      <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 border-b border-slate-200 bg-white shrink-0 h-12 min-w-0">
         <button
           onClick={togglePlay}
           className="text-slate-600 hover:text-primary flex items-center cursor-pointer"
@@ -123,7 +123,7 @@ export function AudioQuestionsLayout({
         <button onClick={toggleMute} className="cursor-pointer text-slate-500 hover:text-primary">
           {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
         </button>
-        <div className="relative cursor-pointer shrink-0 h-1.5" style={{ width: 64 }} onClick={changeVolume}>
+        <div className="relative cursor-pointer shrink-0 h-1.5 hidden md:block" style={{ width: 64 }} onClick={changeVolume}>
           <div className="absolute inset-0 rounded-full bg-slate-200" />
           <div
             className="absolute left-0 top-0 h-full rounded-full bg-primary"
@@ -142,7 +142,7 @@ export function AudioQuestionsLayout({
       )}
 
       {/* Questions */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="md:flex-1 md:overflow-y-auto">
         <div className="max-w-3xl">
           {sortedGroups.map((group, gi) => (
             <div key={group.id}>

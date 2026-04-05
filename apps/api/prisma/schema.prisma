@@ -214,7 +214,10 @@ model Passage {
   contentHtml String
   imageUrl    String?
   audioUrl    String?
+  transcript  String?
   imageLayout String?
+  imageSize   String?
+  images      Json?
   orderIndex  Int
 
   section        TestSection     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
@@ -234,6 +237,7 @@ model QuestionGroup {
   matchingOptions Json?
   audioUrl        String?
   imageUrl        String?
+  imageSize       String?
 
   section   TestSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   passage   Passage?    @relation(fields: [passageId], references: [id], onDelete: SetNull)
@@ -254,7 +258,9 @@ model Question {
   explanation    String?
   imageUrl       String?
   audioUrl       String?
+  transcript     String?
   imageLayout    String?
+  imageSize      String?
   metadata       Json?
 
   group   QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)

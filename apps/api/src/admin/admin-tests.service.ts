@@ -126,6 +126,8 @@ export class AdminTestsService {
               imageUrl: p.imageUrl,
               audioUrl: p.audioUrl,
               imageLayout: p.imageLayout,
+              imageSize: p.imageSize,
+              images: p.images ?? Prisma.DbNull,
               orderIndex: p.orderIndex,
             })),
           });
@@ -141,6 +143,7 @@ export class AdminTestsService {
               matchingOptions: groupDto.matchingOptions ?? Prisma.DbNull,
               audioUrl: groupDto.audioUrl,
               imageUrl: groupDto.imageUrl,
+              imageSize: groupDto.imageSize,
             },
           });
 
@@ -157,6 +160,7 @@ export class AdminTestsService {
                 imageUrl: q.imageUrl,
                 audioUrl: q.audioUrl,
                 imageLayout: q.imageLayout,
+                imageSize: q.imageSize,
                 metadata: q.metadata ?? Prisma.DbNull,
               })),
             });
@@ -242,6 +246,8 @@ export class AdminTestsService {
               imageUrl: p.imageUrl,
               audioUrl: p.audioUrl,
               imageLayout: p.imageLayout,
+              imageSize: p.imageSize,
+              images: p.images ?? Prisma.DbNull,
               orderIndex: p.orderIndex,
             })),
           });
@@ -257,6 +263,7 @@ export class AdminTestsService {
               matchingOptions: groupDto.matchingOptions ?? Prisma.DbNull,
               audioUrl: groupDto.audioUrl,
               imageUrl: groupDto.imageUrl,
+              imageSize: groupDto.imageSize,
             },
           });
 
@@ -273,6 +280,7 @@ export class AdminTestsService {
                 imageUrl: q.imageUrl,
                 audioUrl: q.audioUrl,
                 imageLayout: q.imageLayout,
+                imageSize: q.imageSize,
                 metadata: q.metadata ?? Prisma.DbNull,
               })),
             });
@@ -375,6 +383,8 @@ export class AdminTestsService {
               imageUrl: p.imageUrl,
               audioUrl: p.audioUrl,
               imageLayout: p.imageLayout,
+              imageSize: p.imageSize,
+              images: p.images ?? Prisma.DbNull,
               orderIndex: p.orderIndex,
             })),
           });
@@ -391,6 +401,7 @@ export class AdminTestsService {
               matchingOptions: group.matchingOptions ?? Prisma.DbNull,
               audioUrl: group.audioUrl,
               imageUrl: group.imageUrl,
+              imageSize: group.imageSize,
             },
           });
 
@@ -407,6 +418,7 @@ export class AdminTestsService {
                 imageUrl: q.imageUrl,
                 audioUrl: q.audioUrl,
                 imageLayout: q.imageLayout,
+                imageSize: q.imageSize,
                 metadata: q.metadata ?? Prisma.DbNull,
               })),
             });
@@ -827,7 +839,10 @@ export class AdminTestsService {
                 contentHtml: passageDto.contentHtml,
                 imageUrl: passageDto.imageUrl ?? null,
                 audioUrl: passageDto.audioUrl ?? null,
+                transcript: passageDto.transcript ?? null,
                 imageLayout: passageDto.imageLayout ?? null,
+                imageSize: passageDto.imageSize ?? null,
+                images: passageDto.images ?? Prisma.DbNull,
                 orderIndex: passageDto.orderIndex,
               },
             });
@@ -844,7 +859,10 @@ export class AdminTestsService {
                 contentHtml: passageDto.contentHtml,
                 imageUrl: passageDto.imageUrl,
                 audioUrl: passageDto.audioUrl,
+                transcript: passageDto.transcript,
                 imageLayout: passageDto.imageLayout,
+                imageSize: passageDto.imageSize,
+                images: passageDto.images ?? Prisma.DbNull,
                 orderIndex: passageDto.orderIndex,
               },
             });
@@ -903,6 +921,7 @@ export class AdminTestsService {
                 matchingOptions: groupDto.matchingOptions ?? Prisma.DbNull,
                 audioUrl: groupDto.audioUrl ?? null,
                 imageUrl: groupDto.imageUrl ?? null,
+                imageSize: groupDto.imageSize ?? null,
               },
             });
           } else {
@@ -967,7 +986,9 @@ export class AdminTestsService {
                   explanation: qDto.explanation ?? null,
                   imageUrl: qDto.imageUrl ?? null,
                   audioUrl: qDto.audioUrl ?? null,
+                  transcript: qDto.transcript ?? null,
                   imageLayout: qDto.imageLayout ?? null,
+                  imageSize: qDto.imageSize ?? null,
                   metadata: qDto.metadata ?? Prisma.DbNull,
                 },
               });
@@ -988,7 +1009,9 @@ export class AdminTestsService {
                 explanation: q.explanation,
                 imageUrl: q.imageUrl,
                 audioUrl: q.audioUrl,
+                transcript: q.transcript,
                 imageLayout: q.imageLayout,
+                imageSize: q.imageSize,
                 metadata: q.metadata ?? Prisma.DbNull,
               })),
             });

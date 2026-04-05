@@ -1,4 +1,18 @@
-import { IsString, IsOptional } from 'class-validator';
+import { IsString, IsOptional, IsArray, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
+
+export class PassageImageDto {
+  @IsString()
+  url: string;
+
+  @IsOptional()
+  @IsString()
+  layout?: string;
+
+  @IsOptional()
+  @IsString()
+  size?: string;
+}
 
 export class CreatePassageBodyDto {
   @IsOptional()
@@ -18,7 +32,21 @@ export class CreatePassageBodyDto {
 
   @IsOptional()
   @IsString()
+  transcript?: string;
+
+  @IsOptional()
+  @IsString()
   imageLayout?: string;
+
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PassageImageDto)
+  images?: PassageImageDto[];
 }
 
 export class UpdatePassageDto {
@@ -40,5 +68,19 @@ export class UpdatePassageDto {
 
   @IsOptional()
   @IsString()
+  transcript?: string;
+
+  @IsOptional()
+  @IsString()
   imageLayout?: string;
+
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => PassageImageDto)
+  images?: PassageImageDto[];
 }

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import { RichContent } from '@/components/rich-content';
+import { AudioPlayer } from '@/components/ui/audio-player';
+import { getImageSizeClasses, getImageContainerClass } from '@/lib/image-size';
 
 interface QuestionFromAPI {
   id: string;
@@ -22,6 +24,7 @@ interface QuestionGroupFromAPI {
   matchingOptions: unknown;
   audioUrl?: string | null;
   imageUrl?: string | null;
+  imageSize?: string | null;
   questions: QuestionFromAPI[];
 }
 
@@ -162,16 +165,16 @@ export function TableCompletionRenderer({
   const processedHtml = processTableBlanks(instructionsHtml, questionMap, answers);
 
   return (
-    <div className="px-6 py-5" ref={containerRef}>
+    <div className="px-3 md:px-6 py-5 overflow-x-auto" ref={containerRef}>
       {group.audioUrl && (
         <div className="mb-3">
-          <audio controls src={group.audioUrl} preload="metadata" className="w-full max-w-md" />
+          <AudioPlayer src={group.audioUrl} />
         </div>
       )}
       {group.imageUrl && (
-        <div className="mb-3 inline-block max-w-md rounded-xl border-2 border-slate-200 overflow-hidden bg-slate-50">
+        <div className={`mb-3 inline-block max-w-full rounded-xl border-2 border-slate-200 overflow-hidden bg-slate-50 ${getImageContainerClass(group.imageSize)}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={group.imageUrl} alt="Question group" className="max-w-[250px] max-h-[250px] h-auto object-contain" />
+          <img src={group.imageUrl} alt="Question group" className={`${getImageSizeClasses(group.imageSize)} w-full h-auto object-contain`} />
         </div>
       )}
       <div className="table-completion-container">
