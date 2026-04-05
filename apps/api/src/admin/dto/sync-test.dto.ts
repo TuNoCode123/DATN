@@ -52,7 +52,15 @@ export class SyncQuestionDto {
 
   @IsOptional()
   @IsString()
+  transcript?: string;
+
+  @IsOptional()
+  @IsString()
   imageLayout?: string;
+
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
 
   @IsOptional()
   metadata?: any;
@@ -94,6 +102,10 @@ export class SyncGroupDto {
   @IsString()
   imageUrl?: string;
 
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => SyncQuestionDto)
@@ -127,7 +139,19 @@ export class SyncPassageDto {
 
   @IsOptional()
   @IsString()
+  transcript?: string;
+
+  @IsOptional()
+  @IsString()
   imageLayout?: string;
+
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
+
+  @IsOptional()
+  @IsArray()
+  images?: Array<{ url: string; layout?: string; size?: string }>;
 
   @IsInt()
   @Min(0)

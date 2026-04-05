@@ -14,7 +14,7 @@ export function QuestionsOnlyLayout({
   );
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="md:flex-1 md:overflow-y-auto">
       {section.instructions && (
         <div className="px-5 py-3 bg-blue-50 border-b border-slate-200">
           <div className="text-sm text-slate-700 italic leading-relaxed">

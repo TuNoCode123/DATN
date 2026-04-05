@@ -103,6 +103,22 @@ enum DeckVisibility {
   PRIVATE
 }
 
+enum CreditReason {
+  SIGNUP_BONUS
+  DAILY_BONUS
+  PRONUNCIATION_SESSION
+  POLLY_TTS
+  AI_GRADING
+  ADMIN_TOPUP
+  ADMIN_DEDUCT
+}
+
+enum DifficultyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
 enum FlashcardQuestionType {
   MULTIPLE_CHOICE
   TYPING
@@ -139,6 +155,8 @@ model User {
   decks               Deck[]
   cardProgress        UserCardProgress[]
   studySessions       StudySession[]
+  credit              UserCredit?
+  pronunciationSessions PronunciationSession[]
 
   @@map("users")
 }
@@ -214,7 +232,10 @@ model Passage {
   contentHtml String
   imageUrl    String?
   audioUrl    String?
+  transcript  String?
   imageLayout String?
+  imageSize   String?
+  images      Json?
   orderIndex  Int
 
   section        TestSection     @relation(fields: [sectionId], references: [id], onDelete: Cascade)
@@ -234,6 +255,7 @@ model QuestionGroup {
   matchingOptions Json?
   audioUrl        String?
   imageUrl        String?
+  imageSize       String?
 
   section   TestSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   passage   Passage?    @relation(fields: [passageId], references: [id], onDelete: SetNull)
@@ -254,7 +276,9 @@ model Question {
   explanation    String?
   imageUrl       String?
   audioUrl       String?
+  transcript     String?
   imageLayout    String?
+  imageSize      String?
   metadata       Json?
 
   group   QuestionGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
@@ -576,4 +600,94 @@ model StudySessionAnswer {
 
   @@index([sessionId])
   @@map("study_session_answers")
+}
+
+// ─── Credit Models ──────────────────────────────────────
+
+model UserCredit {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  balance   Int      @default(100)
+  updatedAt DateTime @updatedAt
+
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions CreditTransaction[]
+
+  @@map("user_credits")
+}
+
+model CreditTransaction {
+  id           String       @id @default(cuid())
+  creditId     String
+  amount       Int
+  balanceAfter Int
+  reason       CreditReason
+  referenceId  String?
+  metadata     Json?
+  createdAt    DateTime     @default(now())
+
+  credit UserCredit @relation(fields: [creditId], references: [id], onDelete: Cascade)
+
+  @@index([creditId, createdAt])
+  @@map("credit_transactions")
+}
+
+// ─── Pronunciation Models ───────────────────────────────
+
+model PronunciationTopic {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  description String?
+  difficulty  DifficultyLevel @default(INTERMEDIATE)
+  tags        String[]        @default([])
+  isPublished Boolean         @default(false)
+  orderIndex  Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  sessions PronunciationSession[]
+
+  @@index([isPublished, difficulty])
+  @@map("pronunciation_topics")
+}
+
+model PronunciationSession {
+  id          String              @id @default(cuid())
+  userId      String
+  topicId     String
+  topicName   String              // denormalized for history display
+  difficulty  DifficultyLevel
+  sentences   String[]            // the generated sentences for this session
+  avgScore    Float?              // average overall score (computed on completion)
+  totalDone   Int                 @default(0)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  user    User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic   PronunciationTopic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  results PronunciationResult[]
+
+  @@index([userId, createdAt])
+  @@map("pronunciation_sessions")
+}
+
+model PronunciationResult {
+  id              String   @id @default(cuid())
+  sessionId       String
+  sentenceIndex   Int      // index into session.sentences
+  targetSentence  String
+  spokenText      String
+  overallScore    Float
+  pronunciationScore Float
+  accuracyScore   Float
+  fluencyScore    Float
+  completenessScore Float
+  feedback        String
+  assessment      Json     // full PronunciationAssessment JSON
+  createdAt       DateTime @default(now())
+
+  session PronunciationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, sentenceIndex])
+  @@map("pronunciation_results")
 }

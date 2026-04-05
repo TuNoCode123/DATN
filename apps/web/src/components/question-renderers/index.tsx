@@ -1,6 +1,9 @@
 'use client';
 
 import { RichContent } from '@/components/rich-content';
+import { AudioPlayer } from '@/components/ui/audio-player';
+import { TranscriptSection } from '@/components/ui/transcript-section';
+import { getImageSizeClasses, getImageContainerClass } from '@/lib/image-size';
 import { McqRenderer } from './mcq-renderer';
 import { SentenceReorderRenderer } from './sentence-reorder-renderer';
 import { KeywordCompositionRenderer } from './keyword-composition-renderer';
@@ -15,7 +18,9 @@ interface QuestionFromAPI {
   options: unknown;
   imageUrl?: string | null;
   audioUrl?: string | null;
+  transcript?: string | null;
   imageLayout?: string | null;
+  imageSize?: string | null;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -27,6 +32,7 @@ interface QuestionGroupFromAPI {
   matchingOptions: unknown;
   audioUrl?: string | null;
   imageUrl?: string | null;
+  imageSize?: string | null;
   questions: QuestionFromAPI[];
 }
 
@@ -44,23 +50,20 @@ function GroupMedia({ group }: { group: QuestionGroupFromAPI }) {
   const hasImage = !!group.imageUrl;
   if (!hasAudio && !hasImage) return null;
 
+  const sizeClasses = getImageSizeClasses(group.imageSize);
+
   return (
-    <div className="mb-4 flex flex-col gap-3">
+    <div className="mb-4 ml-4 md:ml-9 flex flex-col gap-3">
       {hasAudio && (
-        <audio
-          controls
-          src={group.audioUrl!}
-          preload="metadata"
-          className="w-full max-w-md"
-        />
+        <AudioPlayer src={group.audioUrl!} />
       )}
       {hasImage && (
-        <div className="rounded-xl border-2 border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-md">
+        <div className={`rounded-xl border-2 border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-full ${getImageContainerClass(group.imageSize)}`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={group.imageUrl!}
             alt="Question group image"
-            className="max-w-[250px] max-h-[250px] h-auto object-contain"
+            className={`${sizeClasses} w-full h-auto object-contain`}
           />
         </div>
       )}
@@ -175,7 +178,7 @@ export function QuestionGroupRenderer({
               <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full font-semibold text-xs shrink-0 border transition-colors mt-0.5 ${
                 focusedBlank === q.questionNumber
                   ? 'bg-blue-500 text-white border-blue-500'
-                  : 'bg-blue-50 text-blue-600 border-blue-200'
+                  : 'bg-amber-100 text-amber-700 border-amber-200'
               }`}>
                 {q.questionNumber}
               </span>
@@ -205,7 +208,7 @@ export function QuestionGroupRenderer({
               <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full font-semibold text-xs shrink-0 border transition-colors ${
                 focusedBlank === q.questionNumber
                   ? 'bg-blue-500 text-white border-blue-500'
-                  : 'bg-blue-50 text-blue-600 border-blue-200'
+                  : 'bg-amber-100 text-amber-700 border-amber-200'
               }`}>
                 {q.questionNumber}
               </span>

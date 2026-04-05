@@ -2,6 +2,9 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { RichContent } from "@/components/rich-content";
+import { AudioPlayer } from "@/components/ui/audio-player";
+import { TranscriptSection } from "@/components/ui/transcript-section";
+import { getImageSizeClasses } from "@/lib/image-size";
 import { QuestionGroupRenderer } from "@/components/question-renderers";
 import type { LayoutProps, PassageFromAPI, QuestionGroupFromAPI } from "./types";
 
@@ -24,7 +27,7 @@ function processPassageBlanks(html: string): string {
   return result;
 }
 
-/** Renders passage media: audio always on top, then image with layout config */
+/** Renders passage media: audio always on top, then image(s) with layout config */
 function PassageMedia({
   passage,
   highlightEnabled,
@@ -39,10 +42,12 @@ function PassageMedia({
   onBlankClick?: (blankNum: number) => void;
 }) {
   const hasAudio = !!passage.audioUrl;
+  const hasMultipleImages = Array.isArray(passage.images) && passage.images.length > 0;
   const hasImage = !!passage.imageUrl;
   const layout = passage.imageLayout || 'vertical';
   const isBeside = layout === 'horizontal' || layout === 'beside-left' || layout === 'beside-right';
   const isBelowText = layout === 'below-text';
+  const sizeClasses = getImageSizeClasses(passage.imageSize);
 
   const contentHtml = processBlanks
     ? processPassageBlanks(passage.contentHtml)
@@ -63,6 +68,44 @@ function PassageMedia({
     processBlanks ? 'passage-blanks-container' : ''
   } ${focusedBlank ? `blank-focused-${focusedBlank}` : ''}`;
 
+  // Check if there's actual text content (not just empty/placeholder)
+  const rawText = passage.contentHtml.replace(/<[^>]*>/g, '').trim();
+  const hasTextContent = rawText.length > 0 && !rawText.startsWith('Enter passage text here');
+
+  // Multi-image mode: render all images stacked vertically
+  if (hasMultipleImages) {
+    return (
+      <>
+        {hasAudio && (
+          <div className="mb-3">
+            <AudioPlayer src={passage.audioUrl!} />
+            {passage.transcript && (
+              <TranscriptSection html={passage.transcript} className="mt-2" />
+            )}
+          </div>
+        )}
+        <div className="space-y-3">
+          {passage.images!.map((img, idx) => (
+            <div key={idx}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={img.url}
+                alt={`${passage.title || 'Passage'} - image ${idx + 1}`}
+                className={`${getImageSizeClasses(img.size)} w-full h-auto rounded-lg object-contain`}
+              />
+            </div>
+          ))}
+        </div>
+        {hasTextContent && (
+          // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+          <div className="mt-3" onClick={handleContentClick}>
+            <RichContent html={contentHtml} className={contentClassName} />
+          </div>
+        )}
+      </>
+    );
+  }
+
   if (!hasAudio && !hasImage) {
     return (
       <>
@@ -79,22 +122,25 @@ function PassageMedia({
       {/* Audio always at the very top */}
       {hasAudio && (
         <div className="mb-3">
-          <audio controls src={passage.audioUrl!} preload="metadata" className="w-full max-w-md" />
+          <AudioPlayer src={passage.audioUrl!} />
+          {passage.transcript && (
+            <TranscriptSection html={passage.transcript} className="mt-2" />
+          )}
         </div>
       )}
 
-      {/* Beside layout: image + text side by side */}
+      {/* Beside layout: image + text side by side (stacks on mobile) */}
       {hasImage && isBeside ? (
-        <div className={`flex gap-4 mb-3 ${layout === 'beside-right' ? 'flex-row-reverse' : ''}`}>
-          <div className="w-2/5 shrink-0">
+        <div className={`flex flex-col md:flex-row gap-4 mb-3 ${layout === 'beside-right' ? 'md:flex-row-reverse' : ''}`}>
+          <div className="w-full md:w-2/5 md:shrink-0">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={passage.imageUrl!}
               alt={passage.title || 'Passage illustration'}
-              className="w-full h-auto rounded-lg object-contain"
+              className="max-w-full w-full h-auto rounded-lg object-contain"
             />
           </div>
-          <div className="w-3/5 min-w-0">
+          <div className="w-full md:w-3/5 min-w-0">
             {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
             <div onClick={handleContentClick}>
               <RichContent html={contentHtml} className={contentClassName} />
@@ -115,7 +161,7 @@ function PassageMedia({
                 <img
                   src={passage.imageUrl!}
                   alt={passage.title || 'Passage illustration'}
-                  className="max-w-[250px] max-h-[250px] h-auto rounded-lg object-contain"
+                  className={`${sizeClasses} w-full h-auto rounded-lg object-contain`}
                 />
               </div>
             </>
@@ -128,7 +174,7 @@ function PassageMedia({
                   <img
                     src={passage.imageUrl!}
                     alt={passage.title || 'Passage illustration'}
-                    className="max-w-[250px] max-h-[250px] h-auto rounded-lg object-contain"
+                    className={`${sizeClasses} w-full h-auto rounded-lg object-contain`}
                   />
                 </div>
               )}
@@ -144,16 +190,25 @@ function PassageMedia({
   );
 }
 
-/** Check if a passage has meaningful content to display */
-function hasPassageContent(passage: PassageFromAPI): boolean {
-  const hasAudio = !!passage.audioUrl;
-  const hasImage = !!passage.imageUrl;
+/** Check if a passage has meaningful visual content (text or image) to display in a side panel */
+function hasPassageVisualContent(passage: PassageFromAPI): boolean {
+  const hasMultipleImages = Array.isArray(passage.images) && passage.images.length > 0;
+  const hasImage = !!passage.imageUrl || hasMultipleImages;
+  // Check for inline images in HTML (e.g. <img src="...">)
+  const hasInlineImage = /<img\s/i.test(passage.contentHtml);
+  // Check for HTML tables
+  const hasTable = /<table[\s>]/i.test(passage.contentHtml);
   // Strip HTML tags and whitespace to check for actual text
   const textContent = passage.contentHtml
     .replace(/<[^>]*>/g, '')
     .trim();
   const hasText = textContent.length > 0 && !textContent.startsWith('Enter passage text here');
-  return hasAudio || hasImage || hasText;
+  return hasImage || hasInlineImage || hasTable || hasText;
+}
+
+/** Check if a passage has any content at all (including audio) */
+function hasPassageContent(passage: PassageFromAPI): boolean {
+  return !!passage.audioUrl || hasPassageVisualContent(passage);
 }
 
 /**
@@ -250,7 +305,7 @@ export function PassageQuestionsLayout({
   };
 
   return (
-    <div className="flex-1 overflow-y-auto scrollbar-hide">
+    <div className="md:flex-1 md:overflow-y-auto scrollbar-hide">
       {section.instructions && (
         <div className="px-6 py-3 bg-blue-50 border-b border-slate-200">
           <div className="text-sm text-slate-700 italic leading-relaxed">
@@ -260,12 +315,28 @@ export function PassageQuestionsLayout({
       )}
       {sortedPassages.map((passage) => {
         const linkedGroups = groupsByPassage.get(passage.id) || [];
-        const showPassage = hasPassageContent(passage);
+        const hasVisual = hasPassageVisualContent(passage);
+        const hasAudio = !!passage.audioUrl;
 
-        // No passage content → render questions full-width
-        if (!showPassage) {
+        // No visual content → render audio (if any) on top, passage content (if any), questions full-width below
+        if (!hasVisual) {
+          const rawText = passage.contentHtml.replace(/<[^>]*>/g, '').trim();
+          const showContent = rawText.length > 0 && !rawText.startsWith('Enter passage text here');
           return (
             <div key={passage.id} className="border-b border-slate-200">
+              {hasAudio && (
+                <div className="px-6 pt-5 pb-2 min-w-0">
+                  <AudioPlayer src={passage.audioUrl!} />
+                  {passage.transcript && (
+                    <TranscriptSection html={passage.transcript} className="mt-2" />
+                  )}
+                </div>
+              )}
+              {showContent && (
+                <div className="px-6 py-3 prose prose-sm max-w-none">
+                  <RichContent html={passage.contentHtml} className="text-foreground text-sm leading-[1.75]" />
+                </div>
+              )}
               <div className="max-w-3xl">
                 {linkedGroups.map((group, gi) => (
                   <div key={group.id}>
@@ -288,15 +359,14 @@ export function PassageQuestionsLayout({
         return (
           <div
             key={passage.id}
-            className="flex border-b border-slate-200"
+            className="flex flex-col md:flex-row border-b border-slate-200 md:h-[calc(100vh-120px)]"
           >
-            {/* Left: passage — flows with outer scroll */}
+            {/* Left: passage — independent scroll */}
             <div
-              className="border-r border-slate-200"
-              style={{ width: "70%" }}
+              className="border-b md:border-b-0 md:border-r border-slate-200 md:overflow-y-auto scrollbar-hide w-full md:w-[70%]"
             >
               <div
-                className={`px-6 py-5 prose prose-sm max-w-none ${
+                className={`px-4 md:px-6 py-5 prose prose-sm max-w-none ${
                   highlightEnabled ? "selection:bg-yellow-200" : ""
                 }`}
                 style={passageStyle}
@@ -311,12 +381,11 @@ export function PassageQuestionsLayout({
               </div>
             </div>
 
-            {/* Right: questions — sticky with independent scroll */}
-            <div style={{ width: "30%" }}>
-              <div className="sticky top-0 overflow-y-auto scrollbar-hide" style={{ maxHeight: "calc(100vh - 120px)" }}>
+            {/* Right: questions — independent scroll */}
+            <div className="md:overflow-y-auto scrollbar-hide w-full md:w-[30%]">
               {linkedGroups.length > 0 ? (
                 linkedGroups.map((group, gi) => (
-                  <div key={group.id} className="overflow-x-auto">
+                  <div key={group.id} className="min-w-0">
                     {gi > 0 && <hr className="border-slate-200" />}
                     <QuestionGroupRenderer
                       group={group}
@@ -333,7 +402,6 @@ export function PassageQuestionsLayout({
                   No questions linked to this passage.
                 </div>
               )}
-              </div>
             </div>
           </div>
         );
@@ -374,10 +442,11 @@ function LegacyLayout({
   highlightEnabled?: boolean;
   sectionInstructions?: string | null;
 }) {
-  const anyPassageHasContent = passages.some(hasPassageContent);
+  const anyPassageHasVisualContent = passages.some(hasPassageVisualContent);
+  const audioOnlyPassages = passages.filter(p => !!p.audioUrl && !hasPassageVisualContent(p));
 
   return (
-    <div className="flex flex-col flex-1 overflow-hidden">
+    <div className="flex flex-col md:flex-1 md:overflow-hidden">
       {sectionInstructions && (
         <div className="px-6 py-3 bg-blue-50 border-b border-slate-200 shrink-0">
           <div className="text-sm text-slate-700 italic leading-relaxed">
@@ -386,15 +455,14 @@ function LegacyLayout({
         </div>
       )}
 
-      {anyPassageHasContent ? (
+      {anyPassageHasVisualContent ? (
         /* Split layout: passage left, questions right */
-        <div className="flex flex-1 overflow-hidden">
+        <div className="flex flex-col md:flex-row md:flex-1 md:overflow-hidden">
           <div
-            className="overflow-y-auto border-r border-slate-200"
-            style={{ width: "70%" }}
+            className="md:overflow-y-auto border-b md:border-b-0 md:border-r border-slate-200 w-full md:w-[70%]"
           >
             <div
-              className={`px-6 py-5 prose prose-sm max-w-none ${
+              className={`px-4 md:px-6 py-5 prose prose-sm max-w-none ${
                 highlightEnabled ? "selection:bg-yellow-200" : ""
               }`}
               style={{
@@ -409,9 +477,9 @@ function LegacyLayout({
               ))}
             </div>
           </div>
-          <div className="overflow-y-auto" style={{ width: "30%" }}>
+          <div className="md:overflow-y-auto w-full md:w-[30%]">
             {groups.map((group, gi) => (
-              <div key={group.id} className="overflow-x-auto">
+              <div key={group.id} className="min-w-0">
                 {gi > 0 && <hr className="border-slate-200" />}
                 <QuestionGroupRenderer
                   group={group}
@@ -423,8 +491,25 @@ function LegacyLayout({
           </div>
         </div>
       ) : (
-        /* No passage content: questions full-width */
+        /* No visual passage content: audio on top (if any), questions full-width */
         <div className="flex-1 overflow-y-auto">
+          {audioOnlyPassages.map((passage) => {
+            const rawText = passage.contentHtml.replace(/<[^>]*>/g, '').trim();
+            const showContent = rawText.length > 0 && !rawText.startsWith('Enter passage text here');
+            return (
+              <div key={passage.id} className="px-6 pt-5 pb-2 min-w-0">
+                <AudioPlayer src={passage.audioUrl!} />
+                {passage.transcript && (
+                  <TranscriptSection html={passage.transcript} className="mt-2" />
+                )}
+                {showContent && (
+                  <div className="mt-3 prose prose-sm max-w-none">
+                    <RichContent html={passage.contentHtml} className="text-foreground text-sm leading-[1.75]" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
           <div className="max-w-3xl">
             {groups.map((group, gi) => (
               <div key={group.id}>

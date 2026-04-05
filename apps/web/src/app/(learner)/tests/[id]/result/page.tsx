@@ -15,8 +15,9 @@ import {
   Minus,
   ChevronDown,
   ChevronUp,
-  Volume2,
 } from "lucide-react";
+import { AudioPlayer } from "@/components/ui/audio-player";
+import { TranscriptSection } from "@/components/ui/transcript-section";
 import { api } from "@/lib/api";
 import {
   Dialog,
@@ -36,6 +37,7 @@ interface QuestionFromAPI {
   options: unknown;
   imageUrl: string | null;
   audioUrl: string | null;
+  transcript: string | null;
 }
 interface QuestionGroupFromAPI {
   id: string;
@@ -51,6 +53,10 @@ interface PassageFromAPI {
   id: string;
   title: string | null;
   contentHtml: string;
+  imageUrl: string | null;
+  audioUrl: string | null;
+  transcript: string | null;
+  images?: Array<{ url: string; layout?: string; size?: string }> | null;
   orderIndex: number;
 }
 interface SectionFromAPI {
@@ -158,10 +164,21 @@ function QuestionDetailModal({
 }: QuestionDetailProps) {
   const [showExplanation, setShowExplanation] = useState(false);
 
-  // Resolve audio/image: question-level first, then group-level
-  const audioUrl = question.audioUrl || group.audioUrl;
-  const imageUrl = question.imageUrl || group.imageUrl;
+  // Resolve audio/image: question-level first, then group-level, then passage-level
   const passage = group.passage;
+  const audioUrl = question.audioUrl || group.audioUrl || passage?.audioUrl;
+  const hasMultiImages = passage?.images && Array.isArray(passage.images) && passage.images.length > 0;
+  const imageUrl = question.imageUrl || group.imageUrl || (!hasMultiImages ? passage?.imageUrl : null);
+  const transcript = question.transcript || passage?.transcript;
+
+  // Check if passage has meaningful content (not just placeholder text)
+  const hasPassageContent = (() => {
+    if (!passage?.contentHtml) return false;
+    const stripped = passage.contentHtml.replace(/<[^>]*>/g, "").trim();
+    if (!stripped) return false;
+    if (/^enter passage text here/i.test(stripped)) return false;
+    return true;
+  })();
 
   // Parse options (could be array of strings or array of {label, text})
   const options: { label: string; text: string }[] = (() => {
@@ -181,7 +198,7 @@ function QuestionDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg font-bold">
             Chi tiết câu #{question.questionNumber}
@@ -194,45 +211,80 @@ function QuestionDetailModal({
 
         {/* Audio Player */}
         {audioUrl && (
-          <div className="flex items-center gap-2">
-            <Volume2 className="w-4 h-4 text-slate-500 shrink-0" />
-            <audio controls className="w-full h-10" preload="metadata">
-              <source src={audioUrl} />
-            </audio>
+          <AudioPlayer src={audioUrl} />
+        )}
+
+        {/* Image + Passage title + Transcript in same scrollable block */}
+        {(imageUrl || hasMultiImages || hasPassageContent || transcript || group.instructions) && (
+          <div className="border border-slate-200 rounded-lg p-4 max-h-96 overflow-y-auto text-sm text-slate-700 leading-relaxed">
+            {/* Multiple images */}
+            {hasMultiImages && passage!.images!.map((img, idx) => (
+              <div key={idx} className="rounded-lg overflow-hidden mb-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={img.url}
+                  alt={`Question ${question.questionNumber} - image ${idx + 1}`}
+                  className="w-full object-contain max-h-80"
+                />
+              </div>
+            ))}
+            {/* Single image */}
+            {imageUrl && (
+              <div className="rounded-lg overflow-hidden mb-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrl}
+                  alt={`Question ${question.questionNumber}`}
+                  className="w-full object-contain max-h-80"
+                />
+              </div>
+            )}
+
+            {/* Passage title + content */}
+            {hasPassageContent && (
+              <>
+                {passage!.title && (
+                  <p className="font-semibold text-slate-900 mb-2">{passage!.title}</p>
+                )}
+                <div className="rich-content" dangerouslySetInnerHTML={{ __html: passage!.contentHtml }} />
+              </>
+            )}
+
+            {/* Transcript dropdown below image & passage */}
+            {transcript && (
+              <TranscriptSection html={transcript} className={imageUrl || hasPassageContent ? "mt-3" : ""} />
+            )}
+
+            {/* Group instructions */}
+            {group.instructions && (
+              <div className={`border border-amber-200 bg-amber-50 rounded-lg p-3 ${imageUrl || hasPassageContent || transcript ? "mt-4" : ""}`}>
+                <p className="font-semibold text-amber-800 mb-1 text-xs uppercase tracking-wide">Hướng dẫn</p>
+                <div className="rich-content" dangerouslySetInnerHTML={{ __html: group.instructions }} />
+              </div>
+            )}
           </div>
         )}
 
-        {/* Passage (prioritized) or Image */}
-        {passage ? (
-          <div className="text-sm text-slate-700 leading-relaxed max-h-60 overflow-y-auto border border-slate-200 rounded-lg p-4">
-            {passage.title && (
-              <p className="font-semibold text-slate-900 mb-2">{passage.title}</p>
-            )}
-            <div className="rich-content" dangerouslySetInnerHTML={{ __html: passage.contentHtml }} />
-          </div>
-        ) : imageUrl ? (
-          <div className="rounded-lg overflow-hidden border border-slate-200">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageUrl}
-              alt={`Question ${question.questionNumber}`}
-              className="w-full object-contain max-h-80"
-            />
-          </div>
-        ) : null}
-
         {/* Question number + stem + options */}
         <div>
-          <div className="flex items-start gap-3">
-            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white font-bold text-xs shrink-0 mt-0.5">
-              {question.questionNumber}
-            </span>
-            {question.stem ? (
+          {question.stem && (
+            <div className="flex items-start gap-3 mb-2">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white font-bold text-xs shrink-0 mt-0.5">
+                {question.questionNumber}
+              </span>
               <div
                 className="text-sm text-slate-700 leading-relaxed rich-content"
                 dangerouslySetInnerHTML={{ __html: question.stem }}
               />
-            ) : options.length === 0 ? (
+            </div>
+          )}
+
+          {/* No stem + no options: fill-in-blank inline */}
+          {!question.stem && options.length === 0 && (
+            <div className="flex items-center gap-3">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white font-bold text-xs shrink-0">
+                {question.questionNumber}
+              </span>
               <div
                 className={`px-3 py-2 rounded border-2 text-sm min-w-[120px] ${
                   status === "correct"
@@ -244,56 +296,63 @@ function QuestionDetailModal({
               >
                 {userAnswer || "Chưa trả lời"}
               </div>
-            ) : null}
-          </div>
+            </div>
+          )}
 
-        {/* Options (MCQ) */}
+        {/* Options (MCQ) - question number aligned beside options */}
         {options.length > 0 && (
-          <div className="space-y-0.5 pl-10 mt-1">
-            {options.map((opt) => {
-              const isUserChoice = userAnswer?.toUpperCase() === opt.label.toUpperCase();
-              const isCorrectOption = question.correctAnswer.toUpperCase() === opt.label.toUpperCase();
+          <div className="flex items-start gap-3">
+            {!question.stem && (
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-primary text-white font-bold text-xs shrink-0 mt-1.5">
+                {question.questionNumber}
+              </span>
+            )}
+            <div className={`space-y-0.5 flex-1 ${question.stem ? 'ml-10' : ''}`}>
+              {options.map((opt) => {
+                const isUserChoice = userAnswer?.toUpperCase() === opt.label.toUpperCase();
+                const isCorrectOption = question.correctAnswer.toUpperCase() === opt.label.toUpperCase();
 
-              return (
-                <label
-                  key={opt.label}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    isCorrectOption
-                      ? "bg-emerald-50 border border-emerald-300"
-                      : isUserChoice
-                        ? "bg-red-50 border border-red-300"
-                        : "hover:bg-slate-50"
-                  }`}
-                >
-                  <span
-                    className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 text-xs font-bold shrink-0 ${
+                return (
+                  <label
+                    key={opt.label}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                       isCorrectOption
-                        ? "border-emerald-500 bg-emerald-500 text-white"
+                        ? "bg-emerald-50 border border-emerald-300"
                         : isUserChoice
-                          ? "border-red-400 bg-red-400 text-white"
-                          : "border-slate-300 text-slate-500"
+                          ? "bg-red-50 border border-red-300"
+                          : "hover:bg-slate-50"
                     }`}
                   >
-                    {isUserChoice || isCorrectOption ? (
-                      isCorrectOption ? (
-                        <Check className="w-3 h-3" />
-                      ) : (
-                        <XIcon className="w-3 h-3" />
-                      )
-                    ) : null}
-                  </span>
-                  <span className={`${isCorrectOption ? "font-semibold text-emerald-700" : isUserChoice ? "text-red-600 line-through" : "text-slate-700"}`}>
-                    {opt.label}. {opt.text}
-                  </span>
-                </label>
-              );
-            })}
+                    <span
+                      className={`inline-flex items-center justify-center w-5 h-5 rounded-full border-2 text-xs font-bold shrink-0 ${
+                        isCorrectOption
+                          ? "border-emerald-500 bg-emerald-500 text-white"
+                          : isUserChoice
+                            ? "border-red-400 bg-red-400 text-white"
+                            : "border-slate-300 text-slate-500"
+                      }`}
+                    >
+                      {isUserChoice || isCorrectOption ? (
+                        isCorrectOption ? (
+                          <Check className="w-3 h-3" />
+                        ) : (
+                          <XIcon className="w-3 h-3" />
+                        )
+                      ) : null}
+                    </span>
+                    <span className={`${isCorrectOption ? "font-semibold text-emerald-700" : isUserChoice ? "text-red-600 line-through" : "text-slate-700"}`}>
+                      {opt.label}.{opt.text && opt.text !== opt.label ? ` ${opt.text}` : ''}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
           </div>
         )}
 
         {/* Fill-in-the-blank with stem: show answer below */}
         {options.length === 0 && question.stem && (
-          <div className="pl-10 mt-3">
+          <div className="mt-3">
             <div
               className={`px-3 py-2 rounded border-2 text-sm min-w-[120px] ${
                 status === "correct"
@@ -311,7 +370,7 @@ function QuestionDetailModal({
 
 
         {/* Correct answer display */}
-        <div className="text-sm pl-10">
+        <div className="text-sm">
           <span className="text-slate-500">Đáp án đúng:</span>
           <span className="font-bold text-primary ml-1">{question.correctAnswer}</span>
           {userAnswer && status !== "correct" && (
@@ -352,7 +411,7 @@ function QuestionDetailModal({
             </button>
             {showExplanation && (
               <div
-                className="mt-2 text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-3 border border-slate-200 rich-content"
+                className="mt-2 text-sm text-slate-700 leading-relaxed bg-slate-50 rounded-lg p-3 border border-slate-200 rich-content max-h-48 overflow-y-auto"
                 dangerouslySetInnerHTML={{ __html: question.explanation }}
               />
             )}
