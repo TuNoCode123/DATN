@@ -124,6 +124,7 @@ export class AdminSectionsService {
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
         ...(dto.contentHtml !== undefined && { contentHtml: dto.contentHtml }),
+        ...(dto.transcript !== undefined && { transcript: dto.transcript }),
       },
     });
   }

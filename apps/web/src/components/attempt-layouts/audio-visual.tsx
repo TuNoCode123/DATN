@@ -50,7 +50,7 @@ function AudioPlayerBar({
   const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="flex items-center gap-3 px-5 bg-white shrink-0 h-12">
+    <div className="flex items-center gap-2 md:gap-3 px-3 md:px-5 bg-white shrink-0 h-12 min-w-0">
       <button
         onClick={onTogglePlay}
         className="text-slate-600 hover:text-primary flex items-center cursor-pointer"
@@ -80,7 +80,7 @@ function AudioPlayerBar({
         {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
       </button>
       <div
-        className="relative cursor-pointer shrink-0 h-1.5"
+        className="relative cursor-pointer shrink-0 h-1.5 hidden md:block"
         style={{ width: 64 }}
         onClick={onChangeVolume}
       >
@@ -190,7 +190,7 @@ export function AudioVisualLayout({
   });
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    <div className="md:flex-1 flex flex-col md:overflow-hidden">
       {/* Hidden audio element */}
       {section.audioUrl && (
         <audio ref={audioRef} src={section.audioUrl} preload="metadata" />
@@ -211,7 +211,7 @@ export function AudioVisualLayout({
       )}
 
       {/* Main content: image + compact questions */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="md:flex-1 md:overflow-y-auto">
         {questionsWithMedia.map((q, idx) => {
           // Only render group image once per group (when it changes)
           const showGroupImage =
@@ -222,25 +222,29 @@ export function AudioVisualLayout({
             <div key={q.id} id={`question-${q.id}`}>
               {/* Group image — large, taking full width */}
               {showGroupImage && q.groupImageUrl && (
-                <div className="flex justify-center bg-white px-5 pt-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={q.groupImageUrl}
-                    alt={`Question ${q.questionNumber}`}
-                    className="max-w-full max-h-[60vh] object-contain"
-                  />
+                <div className="bg-white px-3 md:px-5 pt-4">
+                  <div className="flex justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={q.groupImageUrl}
+                      alt={`Question ${q.questionNumber}`}
+                      className="max-w-full max-h-[60vh] h-auto object-contain"
+                    />
+                  </div>
                 </div>
               )}
 
               {/* Question-level image */}
               {q.imageUrl && (
-                <div className="flex justify-center bg-white px-5 pt-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={q.imageUrl}
-                    alt={`Question ${q.questionNumber}`}
-                    className="max-w-full max-h-[60vh] object-contain"
-                  />
+                <div className="bg-white px-3 md:px-5 pt-4">
+                  <div className="flex justify-center">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={q.imageUrl}
+                      alt={`Question ${q.questionNumber}`}
+                      className="max-w-full max-h-[60vh] h-auto object-contain"
+                    />
+                  </div>
                 </div>
               )}
 

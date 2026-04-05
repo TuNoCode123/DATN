@@ -40,27 +40,24 @@ export function QuestionNavigator({
 
   return (
     <div
-      className="flex flex-col bg-white shrink-0 border-l-2 border-border-strong"
-      style={{ width: 200 }}
+      className="flex flex-col bg-white shrink-0 border-l-2 border-border-strong w-[200px]"
     >
-      {/* Timer */}
-      <div className="px-4 pt-4 pb-3">
-        <div className="text-slate-500 text-xs font-medium mb-1">
-          {timeLeft !== null ? "Time Remaining:" : "No Time Limit"}
-        </div>
-        {timeLeft !== null && (
-          <div className="font-extrabold text-foreground tabular-nums text-3xl">
-            {formatTime(timeLeft)}
+      {/* Timer + Submit */}
+      <div className="flex flex-col items-stretch px-4 pt-4">
+        <div className="mb-3">
+          <div className="text-slate-500 text-xs font-medium mb-1">
+            {timeLeft !== null ? "Time Remaining:" : "No Time Limit"}
           </div>
-        )}
-      </div>
-
-      {/* Submit button */}
-      <div className="px-4 pb-3">
+          {timeLeft !== null && (
+            <div className="font-extrabold text-foreground tabular-nums text-3xl">
+              {formatTime(timeLeft)}
+            </div>
+          )}
+        </div>
         <button
           onClick={onSubmit}
           disabled={submitting}
-          className="w-full brutal-btn bg-foreground text-white py-2.5 text-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+          className="brutal-btn bg-foreground text-white py-2.5 w-full text-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
         >
           {submitting ? (
             <Loader2 className="w-4 h-4 animate-spin" />

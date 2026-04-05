@@ -1,6 +1,7 @@
 'use client';
 
 import { CharacterCounter } from '@/components/hsk/CharacterCounter';
+import { getImageMaxHeight } from '@/lib/image-size';
 
 interface PictureCompositionMeta {
   type: string;
@@ -15,6 +16,7 @@ interface Question {
   questionNumber: number;
   stem: string | null;
   imageUrl?: string | null;
+  imageSize?: string | null;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -51,7 +53,7 @@ export function PictureCompositionRenderer({
               className="px-6 py-5"
             >
             <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-600 font-semibold text-xs shrink-0 border border-blue-200">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold text-xs shrink-0 border border-amber-200">
                 {question.questionNumber}
               </span>
             </div>
@@ -70,7 +72,7 @@ export function PictureCompositionRenderer({
                 <img
                   src={question.imageUrl}
                   alt={meta.imageAlt || '写作图片'}
-                  className="max-h-60 rounded-lg border-2 border-slate-200 object-contain"
+                  className={`${getImageMaxHeight(question.imageSize)} max-w-full w-full h-auto rounded-lg border-2 border-slate-200 object-contain`}
                 />
               </div>
             )}

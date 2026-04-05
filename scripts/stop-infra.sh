@@ -35,7 +35,7 @@ RDS_ID="ielts-ai-postgres"
 REDIS_ID="ielts-ai-redis"
 REGION="ap-southeast-2"
 # Update this after first deploy (find in AWS Console → CloudFront → Distributions)
-CF_DIST_ID="YOUR_DISTRIBUTION_ID"
+CF_DIST_ID="ESI3BXA57SDA4"
 
 echo "=== Stopping IELTS AI Infrastructure ==="
 echo "This will reduce costs from ~\$110/mo to ~\$1/mo"
@@ -53,7 +53,30 @@ aws autoscaling update-auto-scaling-group \
   --auto-scaling-group-name $ASG \
   --min-size 0 --max-size 0 --desired-capacity 0 \
   --region $REGION
-echo "  ✓ ASG scaled to 0 (EC2 instances will terminate)"
+echo "  ✓ ASG scaled to 0"
+
+# ── Step 2b: Complete lifecycle hooks for any stuck instances ──────────────
+echo "→ [2b] Completing ECS draining lifecycle hooks for terminating instances..."
+INSTANCE_IDS=$(aws autoscaling describe-auto-scaling-instances \
+  --query "AutoScalingInstances[?AutoScalingGroupName=='${ASG}' && LifecycleState=='Terminating:Wait'].InstanceId" \
+  --output text --region $REGION)
+
+if [ -n "$INSTANCE_IDS" ] && [ "$INSTANCE_IDS" != "None" ]; then
+  for IID in $INSTANCE_IDS; do
+    echo "  Completing lifecycle action for $IID..."
+    aws autoscaling complete-lifecycle-action \
+      --lifecycle-hook-name ecs-managed-draining-termination-hook \
+      --auto-scaling-group-name $ASG \
+      --instance-id $IID \
+      --lifecycle-action-result CONTINUE \
+      --region $REGION 2>/dev/null || true
+  done
+  echo "  Waiting 15s for instances to terminate..."
+  sleep 15
+  echo "  ✓ Lifecycle hooks completed"
+else
+  echo "  (no instances stuck in Terminating:Wait)"
+fi
 
 # ── Step 3: Stop RDS instance ──────────────────────────────────────────────
 echo "→ [3/7] Stopping RDS..."

@@ -90,7 +90,7 @@ export class AttemptsService {
       },
       include: {
         sections: { include: { section: true } },
-        test: { select: { id: true, title: true, durationMins: true } },
+        test: { select: { id: true, title: true, durationMins: true, examType: true } },
       },
     });
   }
@@ -99,7 +99,7 @@ export class AttemptsService {
     const attempt = await this.prisma.userAttempt.findUnique({
       where: { id: attemptId },
       include: {
-        test: { select: { id: true, title: true, durationMins: true } },
+        test: { select: { id: true, title: true, durationMins: true, examType: true } },
         sections: {
           include: {
             section: {
@@ -119,6 +119,9 @@ export class AttemptsService {
                         options: true,
                         imageUrl: true,
                         audioUrl: true,
+                        transcript: true,
+                        imageLayout: true,
+                        imageSize: true,
                         metadata: true,
                         correctAnswer: false,
                         explanation: false,
