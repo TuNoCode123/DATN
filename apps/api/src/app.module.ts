@@ -17,6 +17,8 @@ import { HealthModule } from './health/health.module';
 import { BedrockModule } from './bedrock/bedrock.module';
 import { HskGradingModule } from './hsk-grading/hsk-grading.module';
 import { HskVocabularyModule } from './hsk-vocabulary/hsk-vocabulary.module';
+import { CreditsModule } from './credits/credits.module';
+import { PronunciationModule } from './pronunciation/pronunciation.module';
 
 @Module({
   imports: [
@@ -38,6 +40,8 @@ import { HskVocabularyModule } from './hsk-vocabulary/hsk-vocabulary.module';
     FlashcardsModule,
     HskGradingModule,
     HskVocabularyModule,
+    CreditsModule,
+    PronunciationModule,
   ],
 })
 export class AppModule {}

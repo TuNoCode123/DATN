@@ -228,3 +228,53 @@ export const adminAnalyticsApi = {
   getRecentActivity: () =>
     api.get('/admin/analytics/recent-activity').then((r) => r.data),
 };
+
+// ── Pronunciation Topics ──────────────────────────────
+
+export const adminPronunciationTopicsApi = {
+  getAll: (params?: {
+    search?: string;
+    difficulty?: string;
+    isPublished?: boolean;
+    page?: number;
+    limit?: number;
+  }) =>
+    api.get('/admin/pronunciation-topics', { params }).then((r) => r.data),
+  getById: (id: string) =>
+    api.get(`/admin/pronunciation-topics/${id}`).then((r) => r.data),
+  create: (data: {
+    name: string;
+    description?: string;
+    difficulty?: string;
+    tags?: string[];
+    isPublished?: boolean;
+  }) => api.post('/admin/pronunciation-topics', data).then((r) => r.data),
+  update: (id: string, data: Record<string, unknown>) =>
+    api.patch(`/admin/pronunciation-topics/${id}`, data).then((r) => r.data),
+  togglePublish: (id: string) =>
+    api
+      .patch(`/admin/pronunciation-topics/${id}/publish`)
+      .then((r) => r.data),
+  delete: (id: string) =>
+    api.delete(`/admin/pronunciation-topics/${id}`).then((r) => r.data),
+};
+
+// ── Credits (Admin) ───────────────────────────────────
+
+export const adminCreditsApi = {
+  getAll: (params?: { search?: string; page?: number; limit?: number }) =>
+    api.get('/admin/credits', { params }).then((r) => r.data),
+  getTransactions: (
+    userId: string,
+    params?: { page?: number; limit?: number },
+  ) =>
+    api
+      .get(`/admin/credits/${userId}/transactions`, { params })
+      .then((r) => r.data),
+  grant: (userId: string, amount: number) =>
+    api.post(`/admin/credits/${userId}/grant`, { amount }).then((r) => r.data),
+  deduct: (userId: string, amount: number) =>
+    api
+      .post(`/admin/credits/${userId}/deduct`, { amount })
+      .then((r) => r.data),
+};
