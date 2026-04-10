@@ -22,6 +22,7 @@ import { PronunciationModule } from './pronunciation/pronunciation.module';
 import { TranslationModule } from './translation/translation.module';
 import { AiChatModule } from './ai-chat/ai-chat.module';
 import { ToeicSwGradingModule } from './toeic-sw-grading/toeic-sw-grading.module';
+import { LiveExamModule } from './live-exam/live-exam.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { ToeicSwGradingModule } from './toeic-sw-grading/toeic-sw-grading.module
     TranslationModule,
     AiChatModule,
     ToeicSwGradingModule,
+    LiveExamModule,
   ],
 })
 export class AppModule {}

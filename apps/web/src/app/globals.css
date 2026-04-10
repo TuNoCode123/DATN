@@ -842,6 +842,20 @@ h1, h2, h3, h4, h5, h6 {
   background: #EFF6FF;
 }
 
+/* Quiz answer feedback — GPU-friendly (only `transform` animated). */
+@keyframes quiz-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.06); }
+  100% { transform: scale(1); }
+}
+@keyframes quiz-shake {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(-6px); }
+  75%      { transform: translateX(6px); }
+}
+.animate-quiz-pop   { animation: quiz-pop   320ms cubic-bezier(.2,.9,.3,1.2); }
+.animate-quiz-shake { animation: quiz-shake 280ms ease-in-out; }
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
