@@ -7,6 +7,8 @@ export type ExamType =
   | 'IELTS_GENERAL'
   | 'TOEIC_LR'
   | 'TOEIC_SW'
+  | 'TOEIC_SPEAKING'
+  | 'TOEIC_WRITING'
   | 'HSK_1'
   | 'HSK_2'
   | 'HSK_3'

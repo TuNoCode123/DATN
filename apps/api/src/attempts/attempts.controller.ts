@@ -72,6 +72,15 @@ export class AttemptsController {
     return this.attemptsService.saveAnswersBulk(attemptId, body.answers);
   }
 
+  @Post(':id/answers/:questionId/audio-presign')
+  audioPresign(
+    @Param('id') attemptId: string,
+    @Param('questionId') questionId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.attemptsService.getAudioPresignUrl(attemptId, questionId, userId);
+  }
+
   @Post(':id/heartbeat')
   heartbeat(
     @Param('id') attemptId: string,

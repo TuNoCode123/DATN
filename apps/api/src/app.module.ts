@@ -19,6 +19,9 @@ import { HskGradingModule } from './hsk-grading/hsk-grading.module';
 import { HskVocabularyModule } from './hsk-vocabulary/hsk-vocabulary.module';
 import { CreditsModule } from './credits/credits.module';
 import { PronunciationModule } from './pronunciation/pronunciation.module';
+import { TranslationModule } from './translation/translation.module';
+import { AiChatModule } from './ai-chat/ai-chat.module';
+import { ToeicSwGradingModule } from './toeic-sw-grading/toeic-sw-grading.module';
 
 @Module({
   imports: [
@@ -42,6 +45,9 @@ import { PronunciationModule } from './pronunciation/pronunciation.module';
     HskVocabularyModule,
     CreditsModule,
     PronunciationModule,
+    TranslationModule,
+    AiChatModule,
+    ToeicSwGradingModule,
   ],
 })
 export class AppModule {}

@@ -11,11 +11,10 @@ import {
   Copy,
   Trash2,
   Play,
-  FileQuestion,
-  ClipboardCheck,
   Globe,
   Lock,
   Volume2,
+  Sparkles,
 } from 'lucide-react';
 
 export default function DeckDetailPage() {
@@ -104,11 +103,10 @@ export default function DeckDetailPage() {
       </div>
 
       {/* Mode Buttons */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
-        <ModeButton icon={<Play size={20} />} label="Study" desc="Flip cards" iconBg="bg-emerald-100" iconColor="text-emerald-600" onClick={() => router.push(`/flashcards/${deckId}/study`)} />
-        <ModeButton icon={<FileQuestion size={20} />} label="Practice" desc="AI questions" iconBg="bg-blue-100" iconColor="text-blue-600" onClick={() => router.push(`/flashcards/${deckId}/practice`)} />
-        <ModeButton icon={<ClipboardCheck size={20} />} label="Test" desc="Scored quiz" iconBg="bg-amber-100" iconColor="text-amber-600" onClick={() => router.push(`/flashcards/${deckId}/test`)} />
-        <ModeButton icon={<Brain size={20} />} label="Review" desc="Spaced repetition" iconBg="bg-violet-100" iconColor="text-violet-600" onClick={() => router.push('/flashcards/review')} />
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
+        <ModeButton icon={<Play size={20} />} label="Flip Cards" desc="Classic study" iconBg="bg-emerald-100" iconColor="text-emerald-600" onClick={() => router.push(`/flashcards/${deckId}/study?tab=flip`)} />
+        <ModeButton icon={<Sparkles size={20} />} label="Study with AI" desc="Mixed AI practice" iconBg="bg-gradient-to-br from-indigo-100 to-violet-100" iconColor="text-indigo-600" onClick={() => router.push(`/flashcards/${deckId}/study?tab=ai`)} />
+        <ModeButton icon={<Brain size={20} />} label="Review" desc="Spaced repetition" iconBg="bg-violet-100" iconColor="text-violet-600" onClick={() => router.push(`/flashcards/review?deckId=${deckId}`)} />
       </div>
 
       {/* Card List */}

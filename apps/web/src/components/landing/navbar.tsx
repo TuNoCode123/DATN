@@ -3,13 +3,15 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuthStore } from '@/lib/auth-store';
-import { Menu, X, BookOpen } from 'lucide-react';
+import { api } from '@/lib/api';
+import { Menu, X, BookOpen, Coins } from 'lucide-react';
 
 const navLinks = [
   { href: '/tests', label: 'Tests' },
   { href: '/flashcards', label: 'Flashcards' },
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '#pricing', label: 'Pricing' },
+  { href: '/pronunciation', label: 'Pronunciation' },
+  { href: '/translation', label: 'Translation' },
   { href: '#about', label: 'About' },
 ];
 
@@ -19,12 +21,19 @@ export function Navbar() {
   const logout = useAuthStore((s) => s.logout);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      api.get('/credits').then((res) => setCreditBalance(res.data.balance)).catch(() => {});
+    }
+  }, [isAuthenticated]);
 
   return (
     <header
@@ -60,6 +69,12 @@ export function Navbar() {
         <div className="hidden md:flex items-center gap-4">
           {isAuthenticated && user ? (
             <>
+              {creditBalance !== null && (
+                <div className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold border-2 border-border-strong rounded-full bg-yellow-100 shadow-[2px_2px_0_0_#1e293b]">
+                  <Coins className="w-3.5 h-3.5 text-yellow-600" />
+                  <span>{creditBalance}</span>
+                </div>
+              )}
               <span className="text-sm font-medium text-foreground">
                 {user.displayName || user.email}
               </span>
@@ -122,9 +137,17 @@ export function Navbar() {
             <div className="border-t border-border pt-3 flex flex-col gap-2">
               {isAuthenticated && user ? (
                 <>
-                  <span className="text-sm font-medium text-foreground">
-                    {user.displayName || user.email}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">
+                      {user.displayName || user.email}
+                    </span>
+                    {creditBalance !== null && (
+                      <div className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold border-2 border-border-strong rounded-full bg-yellow-100 shadow-[2px_2px_0_0_#1e293b]">
+                        <Coins className="w-3.5 h-3.5 text-yellow-600" />
+                        <span>{creditBalance}</span>
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={() => {
                       logout();

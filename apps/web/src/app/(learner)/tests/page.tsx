@@ -14,6 +14,8 @@ const EXAM_CATEGORIES = [
   { key: "IELTS_GENERAL", label: "IELTS General" },
   { key: "TOEIC_LR", label: "TOEIC" },
   { key: "TOEIC_SW", label: "TOEIC SW" },
+  { key: "TOEIC_SPEAKING", label: "TOEIC Speaking" },
+  { key: "TOEIC_WRITING", label: "TOEIC Writing" },
   { key: "HSK_1", label: "HSK 1" },
   { key: "HSK_2", label: "HSK 2" },
   { key: "HSK_3", label: "HSK 3" },

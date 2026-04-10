@@ -55,4 +55,5 @@ export interface LayoutProps {
   answers: Record<string, string>;
   onAnswer: (questionId: string, answer: string) => void;
   highlightEnabled?: boolean;
+  attemptId?: string;
 }

@@ -21,6 +21,8 @@ enum ExamType {
   IELTS_GENERAL
   TOEIC_LR
   TOEIC_SW
+  TOEIC_SPEAKING
+  TOEIC_WRITING
   HSK_1
   HSK_2
   HSK_3
@@ -111,6 +113,10 @@ enum CreditReason {
   AI_GRADING
   ADMIN_TOPUP
   ADMIN_DEDUCT
+  TRANSLATION_SESSION
+  TOEIC_SW_ATTEMPT
+  HSK_WRITING_ATTEMPT
+  AI_CHAT
 }
 
 enum DifficultyLevel {
@@ -157,6 +163,8 @@ model User {
   studySessions       StudySession[]
   credit              UserCredit?
   pronunciationSessions PronunciationSession[]
+  translationSessions   TranslationSession[]
+  aiConversations       AiConversation[]
 
   @@map("users")
 }
@@ -330,8 +338,9 @@ model UserAnswer {
   id         String   @id @default(cuid())
   attemptId  String
   questionId String
-  answerText String?
-  isCorrect  Boolean?
+  answerText     String?
+  audioAnswerUrl String?
+  isCorrect      Boolean?
 
   attempt    UserAttempt          @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question   Question             @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -690,4 +699,96 @@ model PronunciationResult {
 
   @@unique([sessionId, sentenceIndex])
   @@map("pronunciation_results")
+}
+
+// ─── Translation Models ────────────────────────────────
+
+model TranslationTopic {
+  id          String          @id @default(cuid())
+  name        String          @unique
+  description String?
+  difficulty  DifficultyLevel @default(INTERMEDIATE)
+  tags        String[]        @default([])
+  isPublished Boolean         @default(false)
+  orderIndex  Int             @default(0)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  sessions TranslationSession[]
+
+  @@index([isPublished, difficulty])
+  @@map("translation_topics")
+}
+
+model TranslationSession {
+  id             String          @id @default(cuid())
+  userId         String
+  topicId        String
+  topicName      String
+  difficulty     DifficultyLevel
+  sentencePairs  Json            // Array of { vietnamese: string, english: string }
+  avgScore       Float?
+  totalDone      Int             @default(0)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  topic   TranslationTopic  @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  results TranslationResult[]
+
+  @@index([userId, createdAt])
+  @@map("translation_sessions")
+}
+
+model TranslationResult {
+  id                 String   @id @default(cuid())
+  sessionId          String
+  sentenceIndex      Int
+  vietnameseSentence String
+  referenceEnglish   String
+  userTranslation    String
+  overallScore       Float
+  accuracyScore      Float
+  grammarScore       Float
+  vocabularyScore    Float
+  naturalnessScore   Float
+  suggestedTranslation String?
+  feedback           String
+  assessment         Json     // full TranslationAssessment JSON
+  createdAt          DateTime @default(now())
+
+  session TranslationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, sentenceIndex])
+  @@map("translation_results")
+}
+
+// ─── AI Chat Models ────────────────────────────────────
+
+model AiConversation {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages AiMessage[]
+
+  @@index([userId, updatedAt])
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id             String   @id @default(cuid())
+  conversationId String
+  role           String   // 'user' | 'assistant'
+  content        String
+  tokenCount     Int?
+  createdAt      DateTime @default(now())
+
+  conversation AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@map("ai_messages")
 }

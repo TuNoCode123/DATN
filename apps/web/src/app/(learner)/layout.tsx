@@ -3,6 +3,7 @@
 import { Navbar } from '@/components/landing/navbar';
 import { Footer } from '@/components/landing/footer';
 import { ChatBubble } from '@/components/chat/chat-bubble';
+import { AiChatBubble } from '@/components/ai-chat/ai-chat-bubble';
 
 export default function LearnerLayout({
   children,
@@ -17,6 +18,7 @@ export default function LearnerLayout({
       </main>
       <Footer />
       <ChatBubble />
+      <AiChatBubble />
     </div>
   );
 }

@@ -11,6 +11,7 @@ import {
   Lightbulb,
   ArrowRight,
   Loader2,
+  Coins,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
@@ -69,6 +70,12 @@ interface TestFromAPI {
   tags: { tag: { id: string; name: string } }[];
 }
 
+function getTestCreditCost(examType: string): number {
+  if (examType === 'TOEIC_SW' || examType === 'TOEIC_SPEAKING' || examType === 'TOEIC_WRITING') return 10;
+  if (examType.startsWith('HSK_') && parseInt(examType.replace('HSK_', '')) >= 3) return 5;
+  return 0;
+}
+
 const TIME_OPTIONS = [
   { value: 0, label: 'No time limit' },
   { value: 5, label: '5 minutes' },
@@ -97,7 +104,7 @@ export default function TestDetailPage() {
   const router = useRouter();
   const testId = params.id as string;
 
-  const [mode, setMode] = useState<'practice' | 'full' | 'discussion'>('practice');
+  const [mode, setMode] = useState<'practice' | 'full'>('practice');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
   const [timeLimit, setTimeLimit] = useState(0);
   const [starting, setStarting] = useState(false);
@@ -120,6 +127,20 @@ export default function TestDetailPage() {
     },
     enabled: !!user,
   });
+
+  const creditCost = test ? getTestCreditCost(test.examType) : 0;
+
+  const { data: creditBalance } = useQuery({
+    queryKey: ['credit-balance'],
+    queryFn: async () => {
+      const { data } = await api.get('/credits');
+      return data.balance as number;
+    },
+    enabled: !!user && creditCost > 0,
+  });
+
+  const insufficientCredits =
+    creditCost > 0 && creditBalance !== undefined && creditBalance < creditCost;
 
   const toggleSection = (sectionId: string) => {
     setSelectedSections((prev) =>
@@ -199,6 +220,30 @@ export default function TestDetailPage() {
         </div>
       </div>
 
+      {/* Credit cost banner for TOEIC_SW / HSK writing */}
+      {creditCost > 0 && (
+        <div
+          className={`brutal-card p-4 mb-6 flex items-center justify-between ${
+            insufficientCredits ? 'bg-red-50 border-red-300' : 'bg-yellow-50 border-yellow-300'
+          }`}
+        >
+          <div className="flex items-center gap-2 text-sm">
+            <Coins className="w-4 h-4" />
+            <span className="font-bold">Credits required: {creditCost}</span>
+            {creditBalance !== undefined && (
+              <span className="text-slate-500">
+                (Your balance: {creditBalance})
+              </span>
+            )}
+          </div>
+          {insufficientCredits && (
+            <span className="text-xs font-bold text-red-600">
+              Insufficient credits
+            </span>
+          )}
+        </div>
+      )}
+
       <p className="text-sm text-red-500 italic mb-6">
         Note: To get scaled scores (e.g. 990 for TOEIC or 9.0 for IELTS),
         please select FULL TEST mode.
@@ -208,7 +253,7 @@ export default function TestDetailPage() {
       {attemptHistory && attemptHistory.length > 0 && (
         <div className="mb-6">
           <h2 className="text-base font-bold text-foreground mb-3">Your results:</h2>
-          <div className="brutal-card overflow-hidden">
+          <div className="brutal-card overflow-hidden max-h-[400px] overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b-2 border-foreground bg-slate-50">
@@ -284,7 +329,6 @@ export default function TestDetailPage() {
         {[
           { key: 'practice' as const, label: 'Practice' },
           { key: 'full' as const, label: 'Full Test' },
-          { key: 'discussion' as const, label: 'Discussion' },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -352,7 +396,7 @@ export default function TestDetailPage() {
           </div>
 
           <button
-            disabled={selectedSections.length === 0 || starting}
+            disabled={selectedSections.length === 0 || starting || insufficientCredits}
             onClick={handleStart}
             className="brutal-btn bg-primary text-white px-8 py-3.5 text-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
           >
@@ -377,7 +421,7 @@ export default function TestDetailPage() {
           </p>
           <button
             onClick={handleStart}
-            disabled={starting}
+            disabled={starting || insufficientCredits}
             className="brutal-btn bg-primary text-white px-8 py-3.5 text-sm flex items-center gap-2 disabled:opacity-50 cursor-pointer"
           >
             {starting ? (
@@ -392,12 +436,11 @@ export default function TestDetailPage() {
         </div>
       )}
 
-      {/* Discussion */}
-      {mode === 'discussion' && (
-        <div className="brutal-card p-5">
-          <CommentSection testId={testId} />
-        </div>
-      )}
+      {/* Discussion — always visible below */}
+      <div className="mt-10 brutal-card p-5">
+        <h2 className="text-base font-bold text-foreground mb-4">Discussion ({test.commentCount})</h2>
+        <CommentSection testId={testId} />
+      </div>
     </div>
   );
 }

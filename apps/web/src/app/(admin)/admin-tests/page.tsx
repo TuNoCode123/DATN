@@ -53,6 +53,8 @@ export default function AdminTestsPage() {
           IELTS_GENERAL: 'bg-teal-50 text-teal-700 border-teal-200',
           TOEIC_LR: 'bg-amber-50 text-amber-700 border-amber-200',
           TOEIC_SW: 'bg-rose-50 text-rose-700 border-rose-200',
+          TOEIC_SPEAKING: 'bg-rose-50 text-rose-700 border-rose-200',
+          TOEIC_WRITING: 'bg-amber-50 text-amber-700 border-amber-200',
         };
         return <Badge variant="outline" className={colors[val] || ''}>{val.replace('_', ' ')}</Badge>;
       },
@@ -167,6 +169,8 @@ export default function AdminTestsPage() {
                 <SelectItem value="IELTS_GENERAL">IELTS General</SelectItem>
                 <SelectItem value="TOEIC_LR">TOEIC L&R</SelectItem>
                 <SelectItem value="TOEIC_SW">TOEIC S&W</SelectItem>
+                <SelectItem value="TOEIC_SPEAKING">TOEIC Speaking</SelectItem>
+                <SelectItem value="TOEIC_WRITING">TOEIC Writing</SelectItem>
               </SelectContent>
             </Select>
           </div>

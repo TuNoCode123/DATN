@@ -607,6 +607,18 @@ export class AdminTestsService {
       }
     }
 
+    if (test.examType === 'TOEIC_SPEAKING') {
+      if (totalQuestions !== 11) {
+        warnings.push(`TOEIC Speaking should have 11 questions (has ${totalQuestions})`);
+      }
+    }
+
+    if (test.examType === 'TOEIC_WRITING') {
+      if (totalQuestions !== 8) {
+        warnings.push(`TOEIC Writing should have 8 questions (has ${totalQuestions})`);
+      }
+    }
+
     return {
       valid: warnings.length === 0,
       totalQuestions,
@@ -1130,6 +1142,34 @@ export class AdminTestsService {
           { title: 'Writing: Write Sentences', skill: 'WRITING' as const, instructions: 'Write a sentence based on the picture.' },
           { title: 'Writing: Respond to Request', skill: 'WRITING' as const, instructions: 'Respond to the written request.' },
           { title: 'Writing: Write an Opinion Essay', skill: 'WRITING' as const, instructions: 'Write an essay expressing your opinion on the given topic.' },
+        ],
+      };
+    }
+
+    if (examType === 'TOEIC_SPEAKING') {
+      return {
+        title: 'TOEIC Speaking Test',
+        durationMins: 20,
+        description: 'TOEIC Speaking — 11 questions, 5 task types',
+        sections: [
+          { title: 'Read Aloud', skill: 'SPEAKING' as const, instructions: 'Read the text aloud.' },
+          { title: 'Describe a Picture', skill: 'SPEAKING' as const, instructions: 'Describe the picture in as much detail as possible.' },
+          { title: 'Respond to Questions', skill: 'SPEAKING' as const, instructions: 'Answer the questions.' },
+          { title: 'Propose a Solution', skill: 'SPEAKING' as const, instructions: 'Propose a solution to the problem described.' },
+          { title: 'Express an Opinion', skill: 'SPEAKING' as const, instructions: 'Express and support your opinion on the given topic.' },
+        ],
+      };
+    }
+
+    if (examType === 'TOEIC_WRITING') {
+      return {
+        title: 'TOEIC Writing Test',
+        durationMins: 60,
+        description: 'TOEIC Writing — 8 questions, 3 task types',
+        sections: [
+          { title: 'Write Sentences', skill: 'WRITING' as const, instructions: 'Write a sentence based on the picture.' },
+          { title: 'Respond to Request', skill: 'WRITING' as const, instructions: 'Respond to the written request.' },
+          { title: 'Write an Opinion Essay', skill: 'WRITING' as const, instructions: 'Write an essay expressing your opinion on the given topic.' },
         ],
       };
     }

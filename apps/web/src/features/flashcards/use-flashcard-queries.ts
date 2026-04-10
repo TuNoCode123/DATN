@@ -236,6 +236,23 @@ export function useCompleteStudy() {
   });
 }
 
+// ─── AI Study Mode ──────────────────────────────────
+
+export interface AiStudyData {
+  session: { id: string; type: string; totalCards: number };
+  cards: { id: string; word: string; meaning: string; exampleSentence?: string; ipa?: string; audioUrl?: string }[];
+  questions: SessionQuestion[];
+}
+
+export function useStartAiStudy() {
+  return useMutation({
+    mutationFn: async ({ deckId, questionTypes }: { deckId: string; questionTypes?: string[] }) => {
+      const { data } = await api.post(`/flashcards/decks/${deckId}/ai-study/start`, { questionTypes });
+      return data as AiStudyData;
+    },
+  });
+}
+
 // ─── Practice Mode ───────────────────────────────────────
 
 export function useStartPractice() {
@@ -299,8 +316,8 @@ export function useDueCards(deckId?: string) {
 
 export function useStartReview() {
   return useMutation({
-    mutationFn: async (deckId?: string) => {
-      const { data } = await api.post('/flashcards/review/start', { deckId });
+    mutationFn: async (params?: { deckId?: string; force?: boolean }) => {
+      const { data } = await api.post('/flashcards/review/start', params || {});
       return data;
     },
   });
@@ -317,11 +334,11 @@ export function useRateCard() {
   });
 }
 
-export function useReviewStats() {
+export function useReviewStats(deckId?: string) {
   return useQuery({
-    queryKey: ['review-stats'],
+    queryKey: ['review-stats', deckId],
     queryFn: async () => {
-      const { data } = await api.get('/flashcards/review/stats');
+      const { data } = await api.get('/flashcards/review/stats', { params: deckId ? { deckId } : {} });
       return data as ReviewStats;
     },
   });

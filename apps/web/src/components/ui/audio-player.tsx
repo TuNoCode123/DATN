@@ -34,15 +34,29 @@ export function AudioPlayer({ src, className = "" }: AudioPlayerProps) {
     if (!audio) return;
     const onTime = () => {
       if (!isDragging) setCurrentTime(audio.currentTime);
+      // Some sources don't fire loadedmetadata; grab duration here as fallback
+      if (audio.duration && isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
     };
-    const onDur = () => setDuration(audio.duration || 0);
+    const onDur = () => {
+      if (audio.duration && isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
     const onEnd = () => setIsPlaying(false);
     audio.addEventListener("timeupdate", onTime);
     audio.addEventListener("loadedmetadata", onDur);
+    audio.addEventListener("durationchange", onDur);
     audio.addEventListener("ended", onEnd);
+    // If metadata already loaded (cached), read duration now
+    if (audio.duration && isFinite(audio.duration)) {
+      setDuration(audio.duration);
+    }
     return () => {
       audio.removeEventListener("timeupdate", onTime);
       audio.removeEventListener("loadedmetadata", onDur);
+      audio.removeEventListener("durationchange", onDur);
       audio.removeEventListener("ended", onEnd);
     };
   }, [isDragging]);
@@ -61,11 +75,13 @@ export function AudioPlayer({ src, className = "" }: AudioPlayerProps) {
   const seekTo = (clientX: number) => {
     const audio = audioRef.current;
     const bar = progressRef.current;
-    if (!audio || !bar || !duration) return;
+    if (!audio || !bar || !duration || !isFinite(duration)) return;
     const rect = bar.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    audio.currentTime = pct * duration;
-    setCurrentTime(pct * duration);
+    const newTime = pct * duration;
+    if (!isFinite(newTime)) return;
+    audio.currentTime = newTime;
+    setCurrentTime(newTime);
   };
 
   const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {

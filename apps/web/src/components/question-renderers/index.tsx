@@ -8,6 +8,9 @@ import { McqRenderer } from './mcq-renderer';
 import { SentenceReorderRenderer } from './sentence-reorder-renderer';
 import { KeywordCompositionRenderer } from './keyword-composition-renderer';
 import { PictureCompositionRenderer } from './picture-composition-renderer';
+import { WriteSentencesRenderer } from './toeic-writing/write-sentences-renderer';
+import { RespondRequestRenderer } from './toeic-writing/respond-request-renderer';
+import { OpinionEssayRenderer } from './toeic-writing/opinion-essay-renderer';
 
 
 interface QuestionFromAPI {
@@ -90,6 +93,45 @@ export function QuestionGroupRenderer({
   const isSentenceReorder = group.questionType === 'SENTENCE_REORDER';
   const isKeywordComposition = group.questionType === 'KEYWORD_COMPOSITION';
   const isPictureComposition = group.questionType === 'PICTURE_COMPOSITION';
+  const isWriteSentences = group.questionType === 'WRITE_SENTENCES';
+  const isRespondRequest = group.questionType === 'RESPOND_WRITTEN_REQUEST';
+  const isOpinionEssay = group.questionType === 'WRITE_OPINION_ESSAY';
+
+  // TOEIC Writing: Write Sentences
+  if (isWriteSentences) {
+    return (
+      <WriteSentencesRenderer
+        group={group}
+        questions={sortedQuestions}
+        answers={answers}
+        onAnswer={onAnswer}
+      />
+    );
+  }
+
+  // TOEIC Writing: Respond to Written Request
+  if (isRespondRequest) {
+    return (
+      <RespondRequestRenderer
+        group={group}
+        questions={sortedQuestions}
+        answers={answers}
+        onAnswer={onAnswer}
+      />
+    );
+  }
+
+  // TOEIC Writing: Opinion Essay
+  if (isOpinionEssay) {
+    return (
+      <OpinionEssayRenderer
+        group={group}
+        questions={sortedQuestions}
+        answers={answers}
+        onAnswer={onAnswer}
+      />
+    );
+  }
 
   // MCQ-style (including TFNG which has options)
   if (isMcq || isTfng) {

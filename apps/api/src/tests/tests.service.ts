@@ -21,7 +21,14 @@ export class TestsService {
       isPublished: true,
     };
 
-    if (filters.examType) where.examType = filters.examType;
+    if (filters.examType) {
+      // TOEIC_SW is a composite filter that matches SW, Speaking, and Writing tests
+      if (filters.examType === 'TOEIC_SW') {
+        where.examType = { in: ['TOEIC_SW', 'TOEIC_SPEAKING', 'TOEIC_WRITING'] };
+      } else {
+        where.examType = filters.examType;
+      }
+    }
     if (filters.search) {
       where.title = { contains: filters.search, mode: 'insensitive' };
     }

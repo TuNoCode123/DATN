@@ -142,6 +142,18 @@ export default function EditDeckPage() {
                 className={smallInputClasses}
                 placeholder="Meaning"
               />
+              <input
+                defaultValue={card.exampleSentence || ''}
+                onBlur={(e) => e.target.value !== (card.exampleSentence || '') && handleSaveCard(card.id, 'exampleSentence', e.target.value)}
+                className={smallInputClasses}
+                placeholder="Example Sentence"
+              />
+              <input
+                defaultValue={card.ipa || ''}
+                onBlur={(e) => e.target.value !== (card.ipa || '') && handleSaveCard(card.id, 'ipa', e.target.value)}
+                className={smallInputClasses}
+                placeholder="IPA Pronunciation"
+              />
             </div>
           </div>
         ))}
@@ -163,6 +175,18 @@ export default function EditDeckPage() {
               onChange={(e) => { const c = [...newCards]; c[i] = { ...c[i], meaning: e.target.value }; setNewCards(c); }}
               className={smallInputClasses}
               placeholder="Meaning"
+            />
+            <input
+              value={card.exampleSentence}
+              onChange={(e) => { const c = [...newCards]; c[i] = { ...c[i], exampleSentence: e.target.value }; setNewCards(c); }}
+              className={smallInputClasses}
+              placeholder="Example Sentence"
+            />
+            <input
+              value={card.ipa}
+              onChange={(e) => { const c = [...newCards]; c[i] = { ...c[i], ipa: e.target.value }; setNewCards(c); }}
+              className={smallInputClasses}
+              placeholder="IPA Pronunciation"
             />
           </div>
         </div>

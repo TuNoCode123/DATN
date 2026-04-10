@@ -384,6 +384,7 @@ function AttemptContent() {
                 answers={answers}
                 onAnswer={setAnswer}
                 highlightEnabled={highlightEnabled}
+                attemptId={attemptId || undefined}
               />
             )}
           </div>

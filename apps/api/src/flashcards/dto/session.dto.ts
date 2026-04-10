@@ -65,6 +65,13 @@ export class SubmitTestAnswerItem {
   userAnswer: string;
 }
 
+export class StartAiStudyDto {
+  @IsOptional()
+  @IsArray()
+  @IsEnum(FlashcardQuestionType, { each: true })
+  questionTypes?: FlashcardQuestionType[];
+}
+
 export class RateCardDto {
   @IsString()
   flashcardId: string;

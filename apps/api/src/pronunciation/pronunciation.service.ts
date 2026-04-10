@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { BedrockService } from '../bedrock/bedrock.service';
-import type { DifficultyLevel } from '@prisma/client';
+
 import type { TranscribeItem } from './pronunciation.gateway';
 
 interface ScoreItem {
@@ -27,8 +27,6 @@ export interface PronunciationAssessment {
   feedback: string;
 }
 
-const SYSTEM_PROMPT = `You are a pronunciation and language assessment engine. You receive a target sentence and detailed speech-to-text metadata from AWS Transcribe, including per-word confidence scores and timing data. Use this metadata to produce accurate, data-driven assessments. Return ONLY valid JSON — no markdown, no code fences.`;
-
 @Injectable()
 export class PronunciationService {
   private readonly logger = new Logger(PronunciationService.name);
@@ -38,130 +36,343 @@ export class PronunciationService {
     private bedrock: BedrockService,
   ) {}
 
+  // ─── Deterministic word alignment & scoring ────────────────
+
+  /** Strip punctuation and lowercase for comparison */
+  private normalize(word: string): string {
+    return word.toLowerCase().replace(/[^a-z0-9']/g, '');
+  }
+
+  /** Levenshtein edit distance between two strings */
+  private editDistance(a: string, b: string): number {
+    const m = a.length;
+    const n = b.length;
+    const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
+      Array.from({ length: n + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)),
+    );
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] =
+          a[i - 1] === b[j - 1]
+            ? dp[i - 1][j - 1]
+            : 1 + Math.min(dp[i - 1][j - 1], dp[i - 1][j], dp[i][j - 1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  /**
+   * Similarity-aware substitution score.
+   * Similar words (like "county"→"country") get a mild penalty so they
+   * stay aligned. Completely different words (like "we"→"free") get a
+   * heavy penalty so the algorithm prefers gaps instead.
+   */
+  private substitutionScore(a: string, b: string): number {
+    if (a === b) return 3; // exact match
+    const maxLen = Math.max(a.length, b.length);
+    if (maxLen === 0) return 3;
+    const similarity = 1 - this.editDistance(a, b) / maxLen;
+    // similarity >= 0.5 → words are close (e.g., "fair"/"far", "county"/"country")
+    // similarity < 0.5  → words are unrelated (e.g., "we"/"free", "celebrate"/"slip")
+    if (similarity >= 0.5) return 0; // mild penalty, prefer substitution over 2 gaps
+    return -5; // heavy penalty, prefer gaps over forced substitution
+  }
+
+  /**
+   * Needleman-Wunsch global sequence alignment with similarity-aware scoring.
+   * Aligns spoken words to target words, handling insertions,
+   * deletions, and substitutions properly.
+   *
+   * Returns an array of length targetWords.length where each entry
+   * is the index into spokenWords that aligns with that target word,
+   * or null if the target word was missed (gap).
+   */
+  private alignWords(
+    targetWords: string[],
+    spokenWords: string[],
+  ): (number | null)[] {
+    const m = targetWords.length;
+    const n = spokenWords.length;
+    const normTarget = targetWords.map((w) => this.normalize(w));
+    const normSpoken = spokenWords.map((w) => this.normalize(w));
+
+    const GAP = -2;
+
+    // Pre-compute substitution scores for all pairs
+    const subScores: number[][] = Array.from({ length: m }, (_, i) =>
+      Array.from({ length: n }, (_, j) =>
+        this.substitutionScore(normTarget[i], normSpoken[j]),
+      ),
+    );
+
+    // Build DP table
+    const dp: number[][] = Array.from({ length: m + 1 }, () =>
+      new Array(n + 1).fill(0),
+    );
+    for (let i = 1; i <= m; i++) dp[i][0] = dp[i - 1][0] + GAP;
+    for (let j = 1; j <= n; j++) dp[0][j] = dp[0][j - 1] + GAP;
+
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] = Math.max(
+          dp[i - 1][j - 1] + subScores[i - 1][j - 1], // match / substitution
+          dp[i - 1][j] + GAP, // gap in spoken (target word missed)
+          dp[i][j - 1] + GAP, // gap in target (extra spoken word)
+        );
+      }
+    }
+
+    // Backtrack to find alignment
+    const alignment: (number | null)[] = new Array(m).fill(null);
+    let i = m;
+    let j = n;
+    while (i > 0 && j > 0) {
+      const sub = subScores[i - 1][j - 1];
+      if (dp[i][j] === dp[i - 1][j - 1] + sub) {
+        // Only align if it was a match or a similar-word substitution (not a forced bad sub)
+        alignment[i - 1] = j - 1;
+        i--;
+        j--;
+      } else if (dp[i][j] === dp[i - 1][j] + GAP) {
+        // Gap in spoken — target word was missed
+        i--;
+      } else {
+        // Gap in target — extra spoken word (skip)
+        j--;
+      }
+    }
+    // Remaining i > 0 means those target words are unmatched (null)
+
+    return alignment;
+  }
+
+  /**
+   * Build WordComparison[] deterministically from alignment + Transcribe items.
+   */
+  private buildWordComparison(
+    target: string,
+    spoken: string,
+    items?: TranscribeItem[],
+  ): WordComparison[] {
+    const targetWords = target.split(/\s+/).filter((w) => w.length > 0);
+    const spokenWords = spoken.split(/\s+/).filter((w) => w.length > 0);
+
+    // Build confidence & timing maps from Transcribe items (pronunciation type only)
+    const confidenceMap = new Map<number, number>();
+    const timingMap = new Map<number, { start: number; end: number }>();
+    if (items) {
+      let wordIdx = 0;
+      for (const item of items) {
+        if (item.type === 'pronunciation') {
+          confidenceMap.set(wordIdx, item.confidence);
+          timingMap.set(wordIdx, {
+            start: item.startTime,
+            end: item.endTime,
+          });
+          wordIdx++;
+        }
+      }
+    }
+
+    const alignment = this.alignWords(targetWords, spokenWords);
+
+    return targetWords.map((tw, idx) => {
+      const spokenIdx = alignment[idx];
+      const matched = spokenIdx !== null;
+      const spokenWord = matched ? spokenWords[spokenIdx] : null;
+      const isCorrect =
+        matched && this.normalize(tw) === this.normalize(spokenWord!);
+
+      // Confidence from Transcribe item at the aligned spoken index
+      const confidence =
+        matched && spokenIdx !== null
+          ? (confidenceMap.get(spokenIdx) ?? null)
+          : null;
+
+      // Fluency: correct + high confidence + no long pause before the word
+      let fluent = isCorrect;
+      if (isCorrect && confidence !== null) {
+        fluent = confidence >= 0.85;
+        if (fluent && spokenIdx !== null && spokenIdx > 0) {
+          const prev = timingMap.get(spokenIdx - 1);
+          const curr = timingMap.get(spokenIdx);
+          if (prev && curr) {
+            const gap = curr.start - prev.end;
+            if (gap > 0.5) fluent = false;
+          }
+        }
+      }
+
+      return {
+        target: tw,
+        spoken: spokenWord,
+        correct: isCorrect,
+        confidence,
+        fluent,
+      };
+    });
+  }
+
+  /**
+   * Compute scores deterministically from word comparison + Transcribe items.
+   */
+  private computeScores(
+    wordComparison: WordComparison[],
+    items?: TranscribeItem[],
+  ): {
+    pronunciation: ScoreItem;
+    accuracy: ScoreItem;
+    fluency: ScoreItem;
+    completeness: ScoreItem;
+    overall: ScoreItem;
+  } {
+    const total = wordComparison.length || 1;
+    const correctWords = wordComparison.filter((w) => w.correct);
+    const matchedWords = wordComparison.filter((w) => w.spoken !== null);
+
+    // Accuracy: % of target words spoken correctly
+    const accuracyScore = Math.round((correctWords.length / total) * 100);
+
+    // Completeness: % of target words that had any spoken match (correct or not)
+    const completenessScore = Math.round((matchedWords.length / total) * 100);
+
+    // Pronunciation: average confidence of matched words (from Transcribe)
+    let pronunciationScore: number;
+    const confidences = wordComparison
+      .filter((w) => w.confidence !== null)
+      .map((w) => w.confidence!);
+    if (confidences.length > 0) {
+      pronunciationScore = Math.round(
+        (confidences.reduce((a, b) => a + b, 0) / confidences.length) * 100,
+      );
+    } else {
+      // No Transcribe data — use accuracy as proxy
+      pronunciationScore = accuracyScore;
+    }
+
+    // Fluency: start at 100, penalize for pauses between words
+    let fluencyScore = 100;
+    if (items && items.length > 1) {
+      const pronItems = items.filter((it) => it.type === 'pronunciation');
+      for (let i = 1; i < pronItems.length; i++) {
+        const gap = pronItems[i].startTime - pronItems[i - 1].endTime;
+        if (gap > 1.0) fluencyScore -= 10;
+        else if (gap > 0.5) fluencyScore -= 5;
+      }
+      fluencyScore = Math.max(0, fluencyScore);
+    } else {
+      // No timing data — estimate from fluent ratio
+      const fluentCount = wordComparison.filter((w) => w.fluent).length;
+      fluencyScore = Math.round((fluentCount / total) * 100);
+    }
+
+    // Overall: weighted average
+    const overallScore = Math.round(
+      pronunciationScore * 0.3 +
+        accuracyScore * 0.3 +
+        fluencyScore * 0.2 +
+        completenessScore * 0.2,
+    );
+
+    const toStatus = (s: number) =>
+      s >= 90 ? 'master' : s >= 70 ? 'good' : s >= 50 ? 'fair' : 'poor';
+
+    return {
+      pronunciation: {
+        score: pronunciationScore,
+        status: toStatus(pronunciationScore),
+      },
+      accuracy: { score: accuracyScore, status: toStatus(accuracyScore) },
+      fluency: { score: fluencyScore, status: toStatus(fluencyScore) },
+      completeness: {
+        score: completenessScore,
+        status: toStatus(completenessScore),
+      },
+      overall: { score: overallScore, status: toStatus(overallScore) },
+    };
+  }
+
+  /**
+   * Generate feedback text using AI. Falls back to a simple string on error.
+   */
+  private async generateFeedback(
+    target: string,
+    spoken: string,
+    wordComparison: WordComparison[],
+  ): Promise<string> {
+    const missed = wordComparison
+      .filter((w) => w.spoken === null)
+      .map((w) => w.target);
+    const wrong = wordComparison
+      .filter((w) => w.spoken !== null && !w.correct)
+      .map((w) => `"${w.target}" (you said "${w.spoken}")`);
+    const notFluent = wordComparison
+      .filter((w) => w.correct && !w.fluent)
+      .map((w) => `"${w.target}"`);
+
+    const prompt = `Give 2-3 sentences of constructive pronunciation feedback.
+
+Target: "${target}"
+Spoken: "${spoken}"
+
+${wrong.length > 0 ? `Mispronounced/wrong words: ${wrong.join(', ')}` : 'No mispronounced words.'}
+${missed.length > 0 ? `Missed words: ${missed.join(', ')}` : 'No missed words.'}
+${notFluent.length > 0 ? `Words lacking fluency (hesitation/low confidence): ${notFluent.join(', ')}` : ''}
+
+Instructions:
+1. Mention specific mispronounced or missed words.
+2. If any words lacked fluency, mention them.
+3. Give one specific tip to improve.
+Return ONLY the feedback text, no JSON, no markdown.`;
+
+    try {
+      const response = await this.bedrock.messages.create({
+        max_tokens: 512,
+        temperature: 0.3,
+        system:
+          'You are a helpful pronunciation coach. Give concise, encouraging feedback.',
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const text =
+        response.content[0].type === 'text' ? response.content[0].text : '';
+      return text.trim();
+    } catch {
+      // Fallback: build a simple feedback string
+      const parts: string[] = [];
+      if (wrong.length > 0)
+        parts.push(`You mispronounced: ${wrong.join(', ')}.`);
+      if (missed.length > 0)
+        parts.push(
+          `You missed ${missed.length} word${missed.length > 1 ? 's' : ''}.`,
+        );
+      if (notFluent.length > 0)
+        parts.push(`Practice fluency on: ${notFluent.join(', ')}.`);
+      if (parts.length === 0) parts.push('Good job! Keep practicing.');
+      return parts.join(' ');
+    }
+  }
+
+  // ─── Main assess entry point ───────────────────────────────
+
   async assess(
     target: string,
     spoken: string,
     items?: TranscribeItem[],
   ): Promise<PronunciationAssessment> {
-    // If no items provided, fall back to text-only assessment
-    if (!items || items.length === 0) {
-      return this.assessFromText(target, spoken);
-    }
+    // Step 1: Deterministic word alignment
+    const wordComparison = this.buildWordComparison(target, spoken, items);
 
-    const prompt = `Assess pronunciation quality using AWS Transcribe metadata.
+    // Step 2: Deterministic scoring
+    const scores = this.computeScores(wordComparison, items);
 
-Target sentence: "${target}"
-Transcribed text: "${spoken}"
+    // Step 3: AI-generated feedback (non-critical, fallback available)
+    const feedback = await this.generateFeedback(
+      target,
+      spoken,
+      wordComparison,
+    );
 
-Transcribe items (per-word metadata):
-${JSON.stringify(items, null, 2)}
-
-**Pronunciation** (0-100): Derive from per-word confidence scores. Higher confidence = clearer pronunciation. Average the confidence values of "pronunciation" type items and scale to 0-100. Words with confidence < 0.6 indicate poor pronunciation.
-
-**Accuracy** (0-100): Compare each spoken word (item.content) against the target sentence words. Calculate the percentage of target words that were correctly spoken.
-
-**Fluency** (0-100): Analyze timing gaps between consecutive words (gap = next item's startTime - current item's endTime). Natural speech has gaps < 0.3s. Penalize for:
-- Long pauses (> 0.5s between words): -5 points per occurrence
-- Very long pauses (> 1.0s): -10 points per occurrence
-Start from 100 and subtract penalties.
-
-**Completeness** (0-100): Count how many target words appear in the spoken items vs total target words. (spoken_words / target_words) * 100.
-
-**Overall** (0-100): Weighted average — pronunciation 30%, accuracy 30%, fluency 20%, completeness 20%.
-
-Status thresholds: master >= 90, good >= 70, fair >= 50, poor < 50.
-
-For wordComparison, include per-word details:
-- "confidence": the Transcribe confidence score for that word (0.0-1.0), or null if the word was missed
-- "fluent": true if the word was spoken smoothly (confidence >= 0.85 AND no long pause before it), false otherwise
-
-In "feedback", provide 2-3 sentences of constructive advice:
-1. Mention any mispronounced or missed words.
-2. Mention any words that lacked fluency (hesitation, low confidence, long pauses before them) even if they were technically correct — these are words the speaker should practice more.
-3. Give a specific tip to improve.
-
-Return ONLY this JSON structure:
-{
-  "pronunciation": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "accuracy": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "fluency": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "completeness": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "overall": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "wordComparison": [
-    { "target": "word", "spoken": "word_or_null", "correct": true_or_false, "confidence": 0.0-1.0_or_null, "fluent": true_or_false }
-  ],
-  "feedback": "2-3 sentences covering mispronounced words, non-fluent words, and a tip."
-}`;
-
-    try {
-      const response = await this.bedrock.messages.create({
-        max_tokens: 2048,
-        temperature: 0.1,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: prompt }],
-      });
-
-      const text =
-        response.content[0].type === 'text' ? response.content[0].text : '';
-
-      const cleaned = text.replace(/```json?\s*/g, '').replace(/```\s*/g, '').trim();
-      return JSON.parse(cleaned) as PronunciationAssessment;
-    } catch (err) {
-      this.logger.error(`Failed to get/parse assessment: ${err.message ?? err}`);
-      return this.fallbackAssessment(target, spoken);
-    }
-  }
-
-  /** Legacy text-only assessment (when items metadata is unavailable) */
-  private async assessFromText(
-    target: string,
-    spoken: string,
-  ): Promise<PronunciationAssessment> {
-    const prompt = `Compare the spoken text to the target text and assess pronunciation quality.
-
-Target: "${target}"
-Spoken: "${spoken}"
-
-Return ONLY valid JSON (no markdown, no code fences):
-{
-  "pronunciation": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "accuracy": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "fluency": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "completeness": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "overall": { "score": <0-100>, "status": "<master|good|fair|poor>" },
-  "wordComparison": [
-    { "target": "word", "spoken": "word_or_null", "correct": true_or_false, "confidence": null, "fluent": true_or_false }
-  ],
-  "feedback": "2-3 sentences covering mispronounced words, non-fluent words, and a tip."
-}
-
-Scoring rules:
-- pronunciation: How clearly words were spoken (if STT transcribed correctly, pronunciation was good)
-- accuracy: How closely spoken words match target words
-- fluency: Natural flow without stutters or long pauses
-- completeness: Percentage of target words that were spoken
-- overall: Weighted average (pronunciation 30%, accuracy 30%, fluency 20%, completeness 20%)
-- Status thresholds: master >= 90, good >= 70, fair >= 50, poor < 50
-- wordComparison: One entry per target word. "spoken" is null if the word was missed. "confidence" is null for text-only assessment. "fluent" is false if the word seems hesitant or unclear based on transcription differences.
-- feedback: Mention any mispronounced words AND any words that lacked fluency (even if correct). Give a specific improvement tip.`;
-
-    try {
-      const response = await this.bedrock.messages.create({
-        max_tokens: 2048,
-        temperature: 0.1,
-        system: SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: prompt }],
-      });
-
-      const text =
-        response.content[0].type === 'text' ? response.content[0].text : '';
-
-      const cleaned = text.replace(/```json?\s*/g, '').replace(/```\s*/g, '').trim();
-      return JSON.parse(cleaned) as PronunciationAssessment;
-    } catch (err) {
-      this.logger.error(`Failed to get/parse text-only assessment: ${err.message ?? err}`);
-      return this.fallbackAssessment(target, spoken);
-    }
+    return { ...scores, wordComparison, feedback };
   }
 
   async saveResult(
@@ -381,32 +592,5 @@ Return ONLY a JSON array of 10 strings, no other text:
     return session;
   }
 
-  private fallbackAssessment(
-    target: string,
-    spoken: string,
-  ): PronunciationAssessment {
-    const targetWords = target.toLowerCase().split(/\s+/);
-    const spokenWords = spoken.toLowerCase().split(/\s+/);
-
-    const wordComparison: WordComparison[] = targetWords.map((tw) => {
-      const found = spokenWords.includes(tw);
-      return { target: tw, spoken: found ? tw : null, correct: found, confidence: null, fluent: found };
-    });
-
-    const correctCount = wordComparison.filter((w) => w.correct).length;
-    const ratio = targetWords.length > 0 ? correctCount / targetWords.length : 0;
-    const score = Math.round(ratio * 100);
-    const status =
-      score >= 90 ? 'master' : score >= 70 ? 'good' : score >= 50 ? 'fair' : 'poor';
-
-    return {
-      pronunciation: { score, status },
-      accuracy: { score, status },
-      fluency: { score, status },
-      completeness: { score, status },
-      overall: { score, status },
-      wordComparison,
-      feedback: 'Assessment generated from word matching (AI was unavailable).',
-    };
-  }
+  // fallbackAssessment removed — assess() now uses deterministic alignment for all cases
 }

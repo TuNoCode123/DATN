@@ -18,6 +18,7 @@ import { AddCardsDto, UpdateCardDto, ReorderCardsDto } from './dto/card.dto';
 import {
   StartPracticeDto,
   StartTestDto,
+  StartAiStudyDto,
   FlipResultDto,
   SubmitAnswerDto,
   SubmitTestDto,
@@ -138,6 +139,17 @@ export class FlashcardsController {
     return this.flashcardsService.completeStudy(sessionId, req.user.id);
   }
 
+  // ─── AI Study Mode ─────────────────────────────────────
+
+  @Post('decks/:deckId/ai-study/start')
+  startAiStudy(
+    @Request() req: any,
+    @Param('deckId') deckId: string,
+    @Body() dto: StartAiStudyDto,
+  ) {
+    return this.flashcardsService.startAiStudy(deckId, req.user.id, dto);
+  }
+
   // ─── Practice Mode ────────────────────────────────────
 
   @Post('decks/:deckId/practice/start')
@@ -200,8 +212,8 @@ export class FlashcardsController {
   }
 
   @Post('review/start')
-  startReview(@Request() req: any, @Body('deckId') deckId?: string) {
-    return this.flashcardsService.startReview(req.user.id, deckId);
+  startReview(@Request() req: any, @Body('deckId') deckId?: string, @Body('force') force?: boolean) {
+    return this.flashcardsService.startReview(req.user.id, deckId, force);
   }
 
   @Post('review/:sessionId/rate')
@@ -214,7 +226,7 @@ export class FlashcardsController {
   }
 
   @Get('review/stats')
-  getReviewStats(@Request() req: any) {
-    return this.flashcardsService.getReviewStats(req.user.id);
+  getReviewStats(@Request() req: any, @Query('deckId') deckId?: string) {
+    return this.flashcardsService.getReviewStats(req.user.id, deckId);
   }
 }

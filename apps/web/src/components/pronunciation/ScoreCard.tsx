@@ -99,7 +99,7 @@ export function ScoreCard({ assessment }: ScoreCardProps) {
 
       {/* Feedback */}
       <div className="brutal-card p-3 bg-blue-50 border-blue-300">
-        <p className="text-sm text-gray-700">{assessment.feedback}</p>
+        <p className="text-sm text-gray-700" dangerouslySetInnerHTML={{ __html: assessment.feedback }} />
       </div>
     </div>
   );
