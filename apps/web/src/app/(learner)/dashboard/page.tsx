@@ -17,6 +17,8 @@ interface AttemptFromAPI {
   status: 'IN_PROGRESS' | 'SUBMITTED';
   mode: 'FULL_TEST' | 'PRACTICE';
   scorePercent: number | null;
+  scaledScore: number | null;
+  sectionScores: Record<string, { scaled: number; level?: number }> | null;
   correctCount: number | null;
   totalQuestions: number | null;
   startedAt: string;
@@ -35,6 +37,8 @@ const EXAM_TYPE_LABELS: Record<string, string> = {
   IELTS_GENERAL: 'IELTS General',
   TOEIC_LR: 'TOEIC',
   TOEIC_SW: 'TOEIC SW',
+  TOEIC_SPEAKING: 'TOEIC Speaking',
+  TOEIC_WRITING: 'TOEIC Writing',
   HSK_1: 'HSK 1', HSK_2: 'HSK 2', HSK_3: 'HSK 3',
   HSK_4: 'HSK 4', HSK_5: 'HSK 5', HSK_6: 'HSK 6',
   TOPIK_I: 'TOPIK I', TOPIK_II: 'TOPIK II',
@@ -45,9 +49,18 @@ const EXAM_TYPE_LABELS: Record<string, string> = {
   THPTQG: 'THPTQG',
 };
 
+const TOEIC_SW_TYPES = new Set(['TOEIC_SW', 'TOEIC_SPEAKING', 'TOEIC_WRITING']);
+
 function scoreColor(score: number): string {
   if (score >= 80) return 'text-emerald-600';
   if (score >= 60) return 'text-amber-500';
+  return 'text-red-500';
+}
+
+function levelColor(level: number): string {
+  if (level >= 8) return 'text-emerald-600';
+  if (level >= 6) return 'text-blue-600';
+  if (level >= 4) return 'text-amber-500';
   return 'text-red-500';
 }
 
@@ -249,14 +262,30 @@ export default function DashboardPage() {
                             </span>
                           </td>
                           <td className="py-3 pr-4 text-right">
-                            <div className="flex flex-col items-end">
-                              <span className={`font-bold text-base ${scoreColor(score)}`}>
-                                {score.toFixed(1)}%
-                              </span>
-                              <span className="text-xs text-slate-400">
-                                {a.correctCount}/{a.totalQuestions}
-                              </span>
-                            </div>
+                            {TOEIC_SW_TYPES.has(a.test.examType) && a.scaledScore != null ? (
+                              <div className="flex flex-col items-end">
+                                <span className="font-bold text-base text-foreground">
+                                  {a.scaledScore}/200
+                                </span>
+                                {a.sectionScores && (() => {
+                                  const section = a.sectionScores.speaking || a.sectionScores.writing;
+                                  return section?.level != null ? (
+                                    <span className={`text-xs font-semibold ${levelColor(section.level)}`}>
+                                      Level {section.level}
+                                    </span>
+                                  ) : null;
+                                })()}
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-end">
+                                <span className={`font-bold text-base ${scoreColor(score)}`}>
+                                  {score.toFixed(1)}%
+                                </span>
+                                <span className="text-xs text-slate-400">
+                                  {a.correctCount}/{a.totalQuestions}
+                                </span>
+                              </div>
+                            )}
                           </td>
                           <td className="py-3 pr-4 text-right text-slate-500 text-xs whitespace-nowrap">
                             {a.submittedAt ? formatDate(a.submittedAt) : '--'}

@@ -21,6 +21,9 @@ import {
   ChevronRight,
   Menu,
   GraduationCap,
+  Mic,
+  CreditCard,
+  Languages,
 } from "lucide-react";
 
 const navItems = [
@@ -28,7 +31,10 @@ const navItems = [
   { icon: Users, label: "Users", href: "/admin-users" },
   { icon: ClipboardList, label: "Tests", href: "/admin-tests" },
   { icon: HelpCircle, label: "Question Bank", href: "/admin-questions" },
+  { icon: Mic, label: "Pronunciation", href: "/admin-pronunciation-topics" },
+  { icon: Languages, label: "Translation", href: "/admin-translation-topics" },
   { icon: BarChart3, label: "Results", href: "/admin-results" },
+  { icon: CreditCard, label: "Credits", href: "/admin-credits" },
   { icon: TrendingUp, label: "Analytics", href: "/admin-analytics" },
   { icon: Settings, label: "Settings", href: "/admin-settings" },
 ];

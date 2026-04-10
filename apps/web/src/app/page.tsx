@@ -258,10 +258,10 @@ export default function Home() {
                 <ArrowRight className="w-4 h-4" />
               </Link>
               <Link
-                href="#pricing"
+                href="/pronunciation"
                 className="brutal-btn bg-secondary text-secondary-foreground px-8 py-3.5 text-sm"
               >
-                View Pricing
+                Try Pronunciation
               </Link>
             </div>
 

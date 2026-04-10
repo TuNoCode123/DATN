@@ -20,6 +20,7 @@ const ALLOWED_TYPES: Record<string, number> = {
   'audio/wav': 50,
   'audio/ogg': 50,
   'audio/mp4': 50,
+  'audio/webm': 50,
   // Documents (5MB)
   'text/html': 5,
   'application/pdf': 5,
@@ -71,6 +72,19 @@ export class UploadService {
     const fileUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
 
     return { uploadUrl, fileUrl, key, maxSizeMB };
+  }
+
+  async generatePresignedUrlForKey(key: string, contentType: string) {
+    const command = new PutObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+      ContentType: contentType,
+    });
+
+    const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn: 300 });
+    const fileUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+
+    return { uploadUrl, fileUrl, key };
   }
 
   async deleteFile(key: string) {

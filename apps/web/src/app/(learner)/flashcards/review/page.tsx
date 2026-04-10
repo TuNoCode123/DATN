@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useStartReview, useRateCard, useReviewStats } from '@/features/flashcards/use-flashcard-queries';
 import { ArrowLeft, Brain, Flame, BookOpen, Trophy, Star, RotateCcw, Check } from 'lucide-react';
 
@@ -30,7 +30,9 @@ type Phase = 'stats' | 'review' | 'complete';
 
 export default function ReviewPage() {
   const router = useRouter();
-  const { data: stats } = useReviewStats();
+  const searchParams = useSearchParams();
+  const deckId = searchParams.get('deckId') || undefined;
+  const { data: stats } = useReviewStats(deckId);
   const startReview = useStartReview();
   const rateCard = useRateCard();
 
@@ -41,8 +43,8 @@ export default function ReviewPage() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [reviewedCount, setReviewedCount] = useState(0);
 
-  const handleStartReview = () => {
-    startReview.mutate(undefined, {
+  const handleStartReview = (force?: boolean) => {
+    startReview.mutate({ deckId, force }, {
       onSuccess: (data) => {
         if (!data.session) return;
         setSessionId(data.session.id); setCards(data.cards); setPhase('review');
@@ -68,8 +70,8 @@ export default function ReviewPage() {
   if (phase === 'stats') {
     return (
       <div className="max-w-2xl mx-auto px-4 py-8">
-        <button onClick={() => router.push('/flashcards')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 font-medium cursor-pointer text-sm">
-          <ArrowLeft size={16} /> Back to Decks
+        <button onClick={() => router.push(deckId ? `/flashcards/${deckId}` : '/flashcards')} className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 font-medium cursor-pointer text-sm">
+          <ArrowLeft size={16} /> {deckId ? 'Back to Deck' : 'Back to Decks'}
         </button>
 
         <div className="text-center mb-8">
@@ -119,10 +121,14 @@ export default function ReviewPage() {
           </div>
         )}
 
-        <button onClick={handleStartReview} disabled={startReview.isPending || (stats?.dueToday === 0)}
-          className="brutal-btn-fill w-full py-3 text-sm disabled:opacity-50">
-          {startReview.isPending ? 'Loading...' : stats?.dueToday === 0 ? 'All caught up! No cards due' : `Review ${stats?.dueToday || ''} Due Cards`}
-        </button>
+        {stats?.dueToday ? (
+          <button onClick={() => handleStartReview()} disabled={startReview.isPending}
+            className="brutal-btn-fill w-full py-3 text-sm disabled:opacity-50">
+            {startReview.isPending ? 'Loading...' : `Review ${stats.dueToday} Due Cards`}
+          </button>
+        ) : (
+          <p className="text-center text-sm text-muted-foreground font-medium">All caught up! No cards due</p>
+        )}
       </div>
     );
   }

@@ -32,6 +32,20 @@ const questionTypeLabels: Record<string, string> = {
   FORM_COMPLETION: "Form",
   SHORT_ANSWER: "Short Answer",
   LABELLING: "Labelling",
+  // TOEIC Speaking
+  READ_ALOUD: "Read Aloud",
+  DESCRIBE_PICTURE: "Describe Picture",
+  RESPOND_TO_QUESTIONS: "Respond to Q",
+  PROPOSE_SOLUTION: "Propose Solution",
+  EXPRESS_OPINION: "Express Opinion",
+  // TOEIC Writing
+  WRITE_SENTENCES: "Write Sentences",
+  RESPOND_WRITTEN_REQUEST: "Written Request",
+  WRITE_OPINION_ESSAY: "Opinion Essay",
+  // HSK Writing
+  SENTENCE_REORDER: "Reorder",
+  KEYWORD_COMPOSITION: "Keyword Comp",
+  PICTURE_COMPOSITION: "Picture Comp",
 };
 
 export default function AdminQuestionsPage() {

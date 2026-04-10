@@ -32,3 +32,16 @@ export {
   useRecentActivity,
   useScoreDistribution,
 } from './use-admin-analytics';
+export {
+  useAdminPronunciationTopics,
+  useCreatePronunciationTopic,
+  useUpdatePronunciationTopic,
+  useTogglePronunciationTopicPublish,
+  useDeletePronunciationTopic,
+} from './use-admin-pronunciation-topics';
+export {
+  useAdminCredits,
+  useAdminUserTransactions,
+  useGrantCredits,
+  useDeductCredits,
+} from './use-admin-credits';

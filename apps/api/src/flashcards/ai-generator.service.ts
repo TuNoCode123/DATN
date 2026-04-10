@@ -17,46 +17,47 @@ export interface GeneratedQuestion {
   explanation: string;
 }
 
-const SYSTEM_PROMPT = `You are an expert IELTS vocabulary question generator. Your task is to create high-quality English vocabulary questions for IELTS learners.
+const SYSTEM_PROMPT = `You are an expert English vocabulary question generator. Your task is to create high-quality vocabulary practice questions.
 
-## Rules
-1. All questions must be grammatically correct and use natural English.
-2. For MULTIPLE_CHOICE: generate exactly 4 options. Distractors must be plausible (same word class, similar difficulty level) but clearly wrong.
-3. For FILL_IN_THE_BLANK: provide a sentence with exactly one blank (marked as ___). The blank must be the target word.
-4. For TYPING: ask a definition-based or context-based question where the answer is the target word.
-5. Explanations must be concise (1-2 sentences) and help the learner understand WHY the answer is correct.
-6. Never use the target word in the question stem for MULTIPLE_CHOICE (to avoid giving it away).
-7. Example sentences should be at the appropriate IELTS band level.
-8. Avoid cultural bias and offensive content.
+## CRITICAL RULES
+
+### For ALL question types:
+- "word" must be EXACTLY the target word from the input (preserve original casing).
+- "correctAnswer" must ALWAYS be the target word itself — never a definition, synonym, or phrase.
+- All questions must be grammatically correct and use natural English.
+- Explanations must be concise (1-2 sentences) and help the learner understand the word.
+- Avoid cultural bias and offensive content.
+
+### For MULTIPLE_CHOICE:
+- Generate exactly 4 options. The correctAnswer (the target word) must be one of the 4 options.
+- Distractors must be plausible (same word class, similar difficulty) but clearly wrong.
+- The question should describe the meaning or give context — do NOT include the target word in the question.
+- Example question: "Which word means 'happening every day'?" → correctAnswer: "daily"
+
+### For TYPING:
+- "options" must be null.
+- "correctAnswer" is the target word (NOT a definition or synonym).
+- The question should describe the meaning and ask the learner to type the word.
+- Example question: "Type the word that means 'happening every day':" → correctAnswer: "daily"
+
+### For FILL_IN_THE_BLANK:
+- "options" must be null.
+- "correctAnswer" is the target word.
+- The question must contain exactly one blank marked as ___ where the target word fits.
+- Example question: "We check the news on a ___ basis." → correctAnswer: "daily"
 
 ## Output Format
-Return ONLY a JSON array, no markdown, no explanation outside the JSON:
+Return ONLY a valid JSON array. No markdown, no backticks, no explanation outside the JSON:
 [
   {
-    "word": "the target word",
-    "questionType": "MULTIPLE_CHOICE",
-    "question": "the question text",
-    "options": ["option1", "option2", "option3", "option4"],
-    "correctAnswer": "the correct option (must match exactly one option)",
-    "explanation": "Brief explanation of why this is correct"
+    "word": "daily",
+    "questionType": "TYPING",
+    "question": "Type the word that means 'happening every day':",
+    "options": null,
+    "correctAnswer": "daily",
+    "explanation": "'Daily' means happening or done every day."
   }
-]
-
-For TYPING type:
-- "options" should be null
-- "correctAnswer" is the target word
-- "question" should prompt the user to type the word
-
-For FILL_IN_THE_BLANK type:
-- "options" should be null
-- "correctAnswer" is the target word
-- "question" should contain ___ where the word goes
-
-## Quality Checklist
-- Is the question unambiguous? (only ONE correct answer possible)
-- Are distractors plausible but clearly wrong?
-- Is the language natural and at the right level?
-- Does the explanation teach something useful?`;
+]`;
 
 @Injectable()
 export class AiGeneratorService {
@@ -77,7 +78,17 @@ export class AiGeneratorService {
         messages: [
           {
             role: 'user',
-            content: JSON.stringify({ cards, questionType, count }),
+            content: `Generate ${count} ${questionType} question(s) for the following vocabulary words.
+
+IMPORTANT: The "correctAnswer" for EVERY question must be the TARGET WORD itself, not a definition or synonym.
+
+Words:
+${cards.map((c) => `- "${c.word}" (meaning: ${c.meaning})`).join('\n')}
+
+Question type: ${questionType}
+Count: ${count}
+
+Return a JSON array with ${count} question object(s).`,
           },
         ],
       });
@@ -97,20 +108,28 @@ export class AiGeneratorService {
     questions: GeneratedQuestion[],
     expectedType: FlashcardQuestionType,
   ): GeneratedQuestion[] {
-    return questions.filter((q) => {
-      if (!q.word || !q.question || !q.correctAnswer) return false;
-      if (
-        expectedType === 'MULTIPLE_CHOICE' &&
-        (!q.options || q.options.length !== 4)
-      )
-        return false;
-      if (
-        expectedType === 'MULTIPLE_CHOICE' &&
-        !q.options!.includes(q.correctAnswer)
-      )
-        return false;
-      return true;
-    });
+    return questions
+      .map((q) => {
+        if (!q.word || !q.question || !q.correctAnswer) return null;
+
+        // Enforce: correctAnswer must be the target word
+        if (q.correctAnswer.toLowerCase() !== q.word.toLowerCase()) {
+          q.correctAnswer = q.word;
+        }
+
+        // For MC: ensure correct answer is in options
+        if (expectedType === 'MULTIPLE_CHOICE') {
+          if (!q.options || q.options.length !== 4) return null;
+          if (!q.options.some((o) => o.toLowerCase() === q.correctAnswer.toLowerCase())) {
+            // Replace a random wrong option with the correct answer
+            const idx = Math.floor(Math.random() * q.options.length);
+            q.options[idx] = q.correctAnswer;
+          }
+        }
+
+        return q;
+      })
+      .filter(Boolean) as GeneratedQuestion[];
   }
 
   generateFallbackQuestions(

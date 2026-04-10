@@ -385,6 +385,92 @@ export class FlashcardsService {
     });
   }
 
+  // ─── AI Study Mode ─────────────────────────────────────
+
+  async startAiStudy(
+    deckId: string,
+    userId: string,
+    dto: { questionTypes?: FlashcardQuestionType[] },
+  ) {
+    const deck = await this.getDeckWithCards(deckId, userId);
+
+    const questionTypes: FlashcardQuestionType[] =
+      dto.questionTypes && dto.questionTypes.length > 0
+        ? dto.questionTypes
+        : ['MULTIPLE_CHOICE', 'TYPING', 'FILL_IN_THE_BLANK'];
+
+    // Generate 1 question per card, cycling through random question types
+    const allQuestions: GeneratedQuestion[] = [];
+    const shuffledTypes = [...questionTypes].sort(() => Math.random() - 0.5);
+
+    const typeGroups: Record<string, typeof deck.cards> = {};
+    deck.cards.forEach((card, i) => {
+      const qType = shuffledTypes[i % shuffledTypes.length];
+      if (!typeGroups[qType]) typeGroups[qType] = [];
+      typeGroups[qType].push(card);
+    });
+
+    for (const [qType, cards] of Object.entries(typeGroups)) {
+      const generated = await this.aiGenerator.generateQuestions(
+        cards.map((c) => ({ word: c.word, meaning: c.meaning })),
+        qType as FlashcardQuestionType,
+        cards.length,
+      );
+      allQuestions.push(...generated);
+    }
+
+    // Create session
+    const session = await this.prisma.studySession.create({
+      data: {
+        userId,
+        deckId,
+        type: 'PRACTICE',
+        questionTypes,
+        questionCount: allQuestions.length,
+        totalCards: deck.cards.length,
+        answers: {
+          create: allQuestions.map((q) => ({
+            flashcardId:
+              deck.cards.find((c) => c.word === q.word)?.id ||
+              deck.cards[0].id,
+            questionType: q.questionType,
+            question: q.question,
+            options: q.options ?? undefined,
+            correctAnswer: q.correctAnswer,
+            explanation: q.explanation,
+          })),
+        },
+      },
+      include: { answers: true },
+    });
+
+    // Map questions to their cards for the frontend
+    const questions = session.answers.map((a) => ({
+      id: a.id,
+      flashcardId: a.flashcardId,
+      questionType: a.questionType,
+      question: a.question,
+      options: a.options,
+    }));
+
+    return {
+      session: {
+        id: session.id,
+        type: session.type,
+        totalCards: session.totalCards,
+      },
+      cards: deck.cards.map((c) => ({
+        id: c.id,
+        word: c.word,
+        meaning: c.meaning,
+        exampleSentence: c.exampleSentence,
+        ipa: c.ipa,
+        audioUrl: c.audioUrl,
+      })),
+      questions,
+    };
+  }
+
   // ─── Practice Mode ────────────────────────────────────
 
   async startPractice(deckId: string, userId: string, dto: StartPracticeDto) {
@@ -684,14 +770,74 @@ export class FlashcardsService {
       take: 50,
     });
 
+    // Also fetch new cards (no progress entry yet) — they should be reviewable immediately
+    const remaining = 50 - dueCards.length;
+    if (remaining > 0) {
+      const deckFilter = deckId
+        ? { deckId }
+        : {};
+      const newCards = await this.prisma.flashcard.findMany({
+        where: {
+          ...deckFilter,
+          deck: { OR: [{ userId }, { visibility: 'PUBLIC' }] },
+          progress: { none: { userId } },
+        },
+        include: { deck: { select: { id: true, title: true } } },
+        orderBy: { orderIndex: 'asc' },
+        take: remaining,
+      });
+
+      // Map new cards to match the same shape as due cards
+      const newCardsMapped = newCards.map((card) => ({
+        id: null as unknown as string,
+        userId,
+        flashcardId: card.id,
+        familiarity: 0,
+        easeFactor: 2.5,
+        interval: 0,
+        repetitions: 0,
+        nextReviewAt: new Date(),
+        lastReviewAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        flashcard: card,
+      }));
+
+      const combined = [...dueCards, ...newCardsMapped];
+      // Shuffle to avoid consecutive same words
+      for (let i = combined.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [combined[i], combined[j]] = [combined[j], combined[i]];
+      }
+      return combined;
+    }
+
     return dueCards;
   }
 
-  async startReview(userId: string, deckId?: string) {
-    const dueCards = await this.getDueCards(userId, deckId);
+  async startReview(userId: string, deckId?: string, force?: boolean) {
+    let dueCards = await this.getDueCards(userId, deckId);
+
+    // If no due cards but force=true, get all learned cards for re-review
+    if (dueCards.length === 0 && force) {
+      const where: Prisma.UserCardProgressWhereInput = { userId };
+      if (deckId) {
+        where.flashcard = { deckId };
+      }
+      dueCards = await this.prisma.userCardProgress.findMany({
+        where,
+        include: {
+          flashcard: {
+            include: { deck: { select: { id: true, title: true } } },
+          },
+        },
+        orderBy: { nextReviewAt: 'asc' },
+        take: 50,
+      });
+    }
 
     if (dueCards.length === 0) {
-      return { session: null, cards: [], message: 'All caught up! No cards due for review.' };
+      return { session: null, cards: [], message: 'No cards available for review.' };
     }
 
     const targetDeckId = deckId || dueCards[0].flashcard.deckId;
@@ -781,20 +927,32 @@ export class FlashcardsService {
     return result;
   }
 
-  async getReviewStats(userId: string) {
-    const [totalCards, dueCards, learnedCards, masteredCards] =
+  async getReviewStats(userId: string, deckId?: string) {
+    const flashcardFilter = deckId ? { flashcard: { deckId } } : {};
+    const [progressTotal, dueWithProgress, learnedCards, masteredCards, newCards] =
       await Promise.all([
-        this.prisma.userCardProgress.count({ where: { userId } }),
+        this.prisma.userCardProgress.count({ where: { userId, ...flashcardFilter } }),
         this.prisma.userCardProgress.count({
-          where: { userId, nextReviewAt: { lte: new Date() } },
+          where: { userId, nextReviewAt: { lte: new Date() }, ...flashcardFilter },
         }),
         this.prisma.userCardProgress.count({
-          where: { userId, repetitions: { gte: 1 } },
+          where: { userId, repetitions: { gte: 1 }, ...flashcardFilter },
         }),
         this.prisma.userCardProgress.count({
-          where: { userId, interval: { gte: 21 } },
+          where: { userId, interval: { gte: 21 }, ...flashcardFilter },
+        }),
+        // Count cards the user owns or can access but has never reviewed
+        this.prisma.flashcard.count({
+          where: {
+            ...(deckId ? { deckId } : {}),
+            deck: { OR: [{ userId }, { visibility: 'PUBLIC' }] },
+            progress: { none: { userId } },
+          },
         }),
       ]);
+
+    const totalCards = progressTotal + newCards;
+    const dueCards = dueWithProgress + newCards;
 
     // Recent review history (last 7 days)
     const sevenDaysAgo = new Date();

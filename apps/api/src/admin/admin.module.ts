@@ -25,6 +25,15 @@ import { AdminResultsService } from './admin-results.service';
 import { AdminAnalyticsController } from './admin-analytics.controller';
 import { AdminAnalyticsService } from './admin-analytics.service';
 
+import { AdminPronunciationTopicsController } from './admin-pronunciation-topics.controller';
+import { AdminPronunciationTopicsService } from './admin-pronunciation-topics.service';
+
+import { AdminCreditsController } from './admin-credits.controller';
+import { AdminCreditsService } from './admin-credits.service';
+
+import { AdminTranslationTopicsController } from './admin-translation-topics.controller';
+import { AdminTranslationTopicsService } from './admin-translation-topics.service';
+
 @Module({
   imports: [PrismaModule],
   controllers: [
@@ -36,6 +45,9 @@ import { AdminAnalyticsService } from './admin-analytics.service';
     AdminQuestionsController,
     AdminResultsController,
     AdminAnalyticsController,
+    AdminPronunciationTopicsController,
+    AdminCreditsController,
+    AdminTranslationTopicsController,
   ],
   providers: [
     AdminUsersService,
@@ -46,6 +58,9 @@ import { AdminAnalyticsService } from './admin-analytics.service';
     AdminQuestionsService,
     AdminResultsService,
     AdminAnalyticsService,
+    AdminPronunciationTopicsService,
+    AdminCreditsService,
+    AdminTranslationTopicsService,
   ],
 })
 export class AdminModule {}

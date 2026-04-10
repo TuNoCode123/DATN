@@ -81,6 +81,17 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'FORM_COMPLETION', label: 'Form Completion' },
   { value: 'SHORT_ANSWER', label: 'Short Answer' },
   { value: 'LABELLING', label: 'Labelling' },
+  // TOEIC Speaking
+  { value: 'READ_ALOUD', label: 'Read Aloud' },
+  { value: 'DESCRIBE_PICTURE', label: 'Describe a Picture' },
+  { value: 'RESPOND_TO_QUESTIONS', label: 'Respond to Questions' },
+  { value: 'PROPOSE_SOLUTION', label: 'Propose a Solution' },
+  { value: 'EXPRESS_OPINION', label: 'Express an Opinion' },
+  // TOEIC Writing
+  { value: 'WRITE_SENTENCES', label: 'Write Sentences' },
+  { value: 'RESPOND_WRITTEN_REQUEST', label: 'Respond to a Written Request' },
+  { value: 'WRITE_OPINION_ESSAY', label: 'Write an Opinion Essay' },
+  // HSK Writing
   { value: 'SENTENCE_REORDER', label: 'Sentence Reorder (排列顺序)' },
   { value: 'KEYWORD_COMPOSITION', label: 'Keyword Composition (看词写作)' },
   { value: 'PICTURE_COMPOSITION', label: 'Picture Composition (看图写作)' },
@@ -96,6 +107,7 @@ export default function TestEditorPage() {
   const { data: serverTest, isLoading } = useAdminTest(testId);
   const { data: validation } = useValidateTest(testId);
   const [activeTab, setActiveTab] = useState(0);
+  const [activeSkillTab, setActiveSkillTab] = useState<'SPEAKING' | 'WRITING'>('SPEAKING');
   const [showMetadata, setShowMetadata] = useState(false);
 
   // Local state — the single source of truth for editing
@@ -444,6 +456,97 @@ export default function TestEditorPage() {
       )}
 
       {/* ─── Section Tabs ─── */}
+      {localTest.examType === 'TOEIC_SW' ? (
+        <div className="bg-white border-b shrink-0">
+          {/* Tier 1: Speaking / Writing skill picker */}
+          <div className="flex items-center border-b border-slate-100 px-4">
+            {([
+              { skill: 'SPEAKING' as const, label: 'Speaking', icon: Mic, color: 'text-rose-600', bg: 'bg-rose-50', border: 'border-rose-500', qTotal: sections.filter((s) => s.skill === 'SPEAKING').reduce((sum, s) => sum + (s.questionGroups || []).reduce((gs, g) => gs + (g.questions?.length || 0), 0), 0), sCount: sections.filter((s) => s.skill === 'SPEAKING').length },
+              { skill: 'WRITING' as const, label: 'Writing', icon: Pen, color: 'text-amber-600', bg: 'bg-amber-50', border: 'border-amber-500', qTotal: sections.filter((s) => s.skill === 'WRITING').reduce((sum, s) => sum + (s.questionGroups || []).reduce((gs, g) => gs + (g.questions?.length || 0), 0), 0), sCount: sections.filter((s) => s.skill === 'WRITING').length },
+            ]).map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeSkillTab === tab.skill;
+              return (
+                <button
+                  key={tab.skill}
+                  className={cn(
+                    'flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 -mb-px transition-colors cursor-pointer',
+                    isActive
+                      ? `${tab.border} ${tab.color} ${tab.bg}`
+                      : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-50',
+                  )}
+                  onClick={() => {
+                    setActiveSkillTab(tab.skill);
+                    // Auto-select first section of this skill
+                    const firstIdx = sections.findIndex((s) => s.skill === tab.skill);
+                    if (firstIdx >= 0) setActiveTab(firstIdx);
+                  }}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                  <span className={cn(
+                    'inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-full text-xs font-semibold',
+                    isActive ? 'bg-white text-current' : 'bg-slate-100 text-slate-400',
+                  )}>
+                    {tab.qTotal}
+                  </span>
+                  <span className="text-xs font-normal text-slate-400">
+                    ({tab.sCount} {tab.sCount === 1 ? 'section' : 'sections'})
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Tier 2: Sections within selected skill */}
+          <div className="flex items-center px-2">
+            <div
+              ref={tabsRef}
+              className="flex items-center gap-1 overflow-x-auto scrollbar-hide px-2 py-1"
+            >
+              {sections.map((section, index) => {
+                if (section.skill !== activeSkillTab) return null;
+                const skillCfg = SKILL_CONFIG[section.skill];
+                const Icon = skillCfg.icon;
+                const isActive = activeTab === index;
+                const qCount = (section.questionGroups || []).reduce((s, g) => s + (g.questions?.length || 0), 0);
+                // Strip "Speaking: " or "Writing: " prefix for cleaner display
+                const shortTitle = section.title.replace(/^(Speaking|Writing):\s*/i, '');
+                return (
+                  <button
+                    key={section.id}
+                    className={cn(
+                      'flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all',
+                      isActive
+                        ? `${skillCfg.bg} ${skillCfg.color} shadow-sm ring-1 ${skillCfg.border}`
+                        : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground',
+                    )}
+                    onClick={() => setActiveTab(index)}
+                  >
+                    <Icon className={cn('h-4 w-4', isActive ? skillCfg.color : 'text-muted-foreground')} />
+                    <span className="max-w-[180px] truncate">{shortTitle}</span>
+                    <span className={cn(
+                      'inline-flex items-center justify-center min-w-[22px] h-[22px] rounded-full text-xs font-semibold',
+                      isActive ? 'bg-white/80 text-current' : 'bg-muted text-muted-foreground',
+                    )}>
+                      {qCount}
+                    </span>
+                  </button>
+                );
+              })}
+
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-sm shrink-0 ml-1 text-muted-foreground hover:text-foreground"
+                onClick={handleAddSection}
+              >
+                <Plus className="h-4 w-4 mr-1" /> Add Section
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : (
       <div className="bg-white border-b shrink-0">
         <div className="flex items-center px-2">
           {sections.length > 4 && (
@@ -501,6 +604,7 @@ export default function TestEditorPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* ─── Active Section Content ─── */}
       <div className="flex-1 overflow-y-auto">
@@ -683,6 +787,108 @@ const TOEIC_LR_GUIDE: Record<string, { title: string; skill: string; questions: 
   },
 };
 
+const TOEIC_SW_SPEAKING_GUIDE: Record<string, { title: string; skill: string; questions: string; steps: string[] }> = {
+  'read aloud': {
+    title: 'Questions 1-2: Read Aloud',
+    skill: 'SPEAKING',
+    questions: '2 questions',
+    steps: [
+      'Add 1 Question Group: READ_ALOUD',
+      'Add 2 questions — each with a text passage in the "stem" field',
+      'The text should be 1-2 paragraphs (~60-90 words each)',
+      'Default timing: 45s prep, 45s response (set in metadata)',
+      'Students will read the passage aloud; pronunciation is scored via word alignment',
+    ],
+  },
+  'describe': {
+    title: 'Questions 3-4: Describe a Picture',
+    skill: 'SPEAKING',
+    questions: '2 questions',
+    steps: [
+      'Add 1 Question Group: DESCRIBE_PICTURE',
+      'Add 2 questions — each with an image uploaded via the image field',
+      'Leave the "stem" empty — the image IS the prompt',
+      'Default timing: 45s prep, 30s response',
+      'Students describe what they see; scored by AI for relevance and fluency',
+    ],
+  },
+  'respond to questions': {
+    title: 'Questions 5-7: Respond to Questions',
+    skill: 'SPEAKING',
+    questions: '3 questions',
+    steps: [
+      'Add 1 Question Group: RESPOND_TO_QUESTIONS',
+      'Set group instructions with the scenario context (e.g. "Imagine a market research company calls you...")',
+      'Add 3 questions — each with a different question in the "stem" field',
+      'Default timing: Q5-6: 0s prep / 15s response, Q7: 0s prep / 30s response',
+      'Students answer spoken questions; scored by AI',
+    ],
+  },
+  'propose': {
+    title: 'Questions 8-10: Propose a Solution',
+    skill: 'SPEAKING',
+    questions: '3 questions (1 scenario)',
+    steps: [
+      'Add 1 Question Group: PROPOSE_SOLUTION',
+      'Set group instructions with the scenario/document context (voicemail, table, etc.)',
+      'Add up to 3 questions — each with a sub-prompt in the "stem" field',
+      'Default timing: 45s prep, 60s response',
+      'Students propose solutions; scored by AI for problem-solving and language',
+    ],
+  },
+  'express': {
+    title: 'Question 11: Express an Opinion',
+    skill: 'SPEAKING',
+    questions: '1 question',
+    steps: [
+      'Add 1 Question Group: EXPRESS_OPINION',
+      'Add 1 question — put the opinion prompt in the "stem" field',
+      'Example: "Do you agree or disagree that technology improves education?"',
+      'Default timing: 30s prep, 60s response',
+      'Students give and support their opinion; scored by AI for coherence and reasoning',
+    ],
+  },
+};
+
+const TOEIC_SW_WRITING_GUIDE: Record<string, { title: string; skill: string; questions: string; steps: string[] }> = {
+  'write sentences': {
+    title: 'Questions 1-5: Write Sentences',
+    skill: 'WRITING',
+    questions: '5 questions',
+    steps: [
+      'Add 1 Question Group: WRITE_SENTENCES',
+      'Add 5 questions — each with an image (photo) and 2 keywords in metadata',
+      'Set metadata: { "keywords": ["word1", "word2"] }',
+      'Students write ONE sentence using both keywords that describes the image',
+      'Scored by AI for grammar, relevance to image, and correct keyword usage',
+    ],
+  },
+  'respond to request': {
+    title: 'Questions 6-7: Respond to a Written Request',
+    skill: 'WRITING',
+    questions: '2 questions',
+    steps: [
+      'Add 1 Question Group: RESPOND_WRITTEN_REQUEST',
+      'Add 2 questions — put the email/letter content in the "stem" field (use rich text editor)',
+      'Set metadata: { "minWords": 50, "maxWords": 150 } (adjust per question)',
+      'Students write a reply email/letter responding to the request',
+      'Scored by AI for task completion, coherence, and language use',
+    ],
+  },
+  'opinion essay': {
+    title: 'Question 8: Write an Opinion Essay',
+    skill: 'WRITING',
+    questions: '1 question',
+    steps: [
+      'Add 1 Question Group: WRITE_OPINION_ESSAY',
+      'Add 1 question — put the essay prompt in the "stem" field',
+      'Set metadata: { "minWords": 300 }',
+      'Example: "Some people prefer to work from home. Others prefer to work in an office. Which do you prefer?"',
+      'Students write a multi-paragraph essay; scored by AI for argument quality, organization, and language',
+    ],
+  },
+};
+
 const IELTS_READING_GUIDE: Record<string, { title: string; steps: string[] }> = {
   'section 1': {
     title: 'Section 1: Passage 1',
@@ -789,6 +995,23 @@ function SectionSetupGuide({
       allGuides.push({ key, title: val.title, steps: val.steps });
       if (titleLower.includes(key)) {
         guide = val;
+      }
+    }
+  } else if (examType === 'TOEIC_SW' || examType === 'TOEIC_SPEAKING' || examType === 'TOEIC_WRITING') {
+    const isSpeaking = examType === 'TOEIC_SPEAKING' || (examType === 'TOEIC_SW' && titleLower.includes('speaking'));
+    const isWriting = examType === 'TOEIC_WRITING' || (examType === 'TOEIC_SW' && titleLower.includes('writing'));
+    const guideMap = isWriting ? TOEIC_SW_WRITING_GUIDE : TOEIC_SW_SPEAKING_GUIDE;
+    for (const [key, val] of Object.entries(guideMap)) {
+      allGuides.push({ key, title: val.title, steps: val.steps });
+      if (titleLower.includes(key)) {
+        guide = val;
+      }
+    }
+    // For combined TOEIC_SW, also show the other skill's guides
+    if (examType === 'TOEIC_SW') {
+      const otherMap = isSpeaking ? TOEIC_SW_WRITING_GUIDE : TOEIC_SW_SPEAKING_GUIDE;
+      for (const [key, val] of Object.entries(otherMap)) {
+        allGuides.push({ key, title: val.title, steps: val.steps });
       }
     }
   } else if (examType === 'IELTS_ACADEMIC' || examType === 'IELTS_GENERAL') {
@@ -1691,6 +1914,29 @@ function QuestionGroupEditor({
       newQ.metadata = { type: 'PICTURE_COMPOSITION', minChars: 60, maxChars: 100, hskLevel: 5 };
       newQ.correctAnswer = '';
       newQ.stem = '请结合这张图片写一篇80字左右的短文。';
+    } else if (group.questionType === 'WRITE_SENTENCES') {
+      newQ.metadata = { type: 'WRITE_SENTENCES', keywords: [], timeLimit: 90 };
+      newQ.correctAnswer = '';
+      newQ.stem = '';
+    } else if (group.questionType === 'RESPOND_WRITTEN_REQUEST') {
+      newQ.metadata = { type: 'RESPOND_WRITTEN_REQUEST', minWords: 50, maxWords: 120, timeLimit: 600 };
+      newQ.correctAnswer = '';
+      newQ.stem = '';
+    } else if (group.questionType === 'WRITE_OPINION_ESSAY') {
+      newQ.metadata = { type: 'WRITE_OPINION_ESSAY', minWords: 300, timeLimit: 1800 };
+      newQ.correctAnswer = '';
+      newQ.stem = '';
+    } else if (['READ_ALOUD', 'DESCRIBE_PICTURE', 'RESPOND_TO_QUESTIONS', 'PROPOSE_SOLUTION', 'EXPRESS_OPINION'].includes(group.questionType)) {
+      const speakingDefaults: Record<string, { prepTime: number; responseTime: number }> = {
+        READ_ALOUD: { prepTime: 45, responseTime: 45 },
+        DESCRIBE_PICTURE: { prepTime: 45, responseTime: 45 },
+        RESPOND_TO_QUESTIONS: { prepTime: 0, responseTime: 15 },
+        PROPOSE_SOLUTION: { prepTime: 45, responseTime: 60 },
+        EXPRESS_OPINION: { prepTime: 30, responseTime: 60 },
+      };
+      newQ.metadata = { type: group.questionType, ...speakingDefaults[group.questionType] };
+      newQ.correctAnswer = '';
+      newQ.stem = '';
     }
 
     onChange({ ...group, questions: [...group.questions, newQ] });
@@ -1957,6 +2203,11 @@ function QuestionEditor({
   const isKeywordComp = questionType === 'KEYWORD_COMPOSITION';
   const isPictureComp = questionType === 'PICTURE_COMPOSITION';
   const isHskWriting = isSentenceReorder || isKeywordComp || isPictureComp;
+  const isToeicWriteSentences = questionType === 'WRITE_SENTENCES';
+  const isToeicRespondRequest = questionType === 'RESPOND_WRITTEN_REQUEST';
+  const isToeicOpinionEssay = questionType === 'WRITE_OPINION_ESSAY';
+  const isToeicWriting = isToeicWriteSentences || isToeicRespondRequest || isToeicOpinionEssay;
+  const isToeicSpeaking = ['READ_ALOUD', 'DESCRIBE_PICTURE', 'RESPOND_TO_QUESTIONS', 'PROPOSE_SOLUTION', 'EXPRESS_OPINION'].includes(questionType);
 
   return (
     <div className={cn(
@@ -1972,7 +2223,7 @@ function QuestionEditor({
         {/* Question Content */}
         <div className="flex-1 min-w-0 space-y-3">
           {/* Stem */}
-          {(isMCQ || isTFNG || isYNNG || !isCompletion) && (
+          {(isMCQ || isTFNG || isYNNG || !isCompletion) && !isToeicSpeaking && !isToeicWriting && !isHskWriting && (
             <Input
               value={question.stem || ''}
               onChange={(e) => onChange({ ...question, stem: e.target.value })}
@@ -2237,6 +2488,123 @@ function QuestionEditor({
                 </div>
               </div>
               <p className="text-xs text-amber-600 font-medium">⚠ No correctAnswer — this question is AI-graded</p>
+            </div>
+          )}
+
+          {/* TOEIC Writing: Write Sentences */}
+          {isToeicWriteSentences && (
+            <div className="space-y-3 p-4 bg-blue-50/50 rounded-lg border border-blue-200">
+              <div>
+                <Label className="text-sm font-medium">Instructions (stem)</Label>
+                <Textarea
+                  value={question.stem || ''}
+                  onChange={(e) => onChange({ ...question, stem: e.target.value })}
+                  placeholder="Write ONE sentence based on the picture. Use the TWO words or phrases given."
+                  rows={2}
+                  className="text-sm bg-white mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Keywords (comma-separated)</Label>
+                <Input
+                  value={((question.metadata as Record<string, unknown>)?.keywords as string[])?.join(', ') || ''}
+                  onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), keywords: e.target.value.split(',').map((k: string) => k.trim()).filter(Boolean) } })}
+                  placeholder="e.g. meeting, schedule"
+                  className="h-10 text-sm bg-white mt-1"
+                />
+              </div>
+              <p className="text-xs text-amber-600 font-medium">⚠ AI-graded — upload image via Media section below</p>
+            </div>
+          )}
+
+          {/* TOEIC Writing: Respond to Written Request */}
+          {isToeicRespondRequest && (
+            <div className="space-y-3 p-4 bg-blue-50/50 rounded-lg border border-blue-200">
+              <div>
+                <Label className="text-sm font-medium">Email/Letter Content (stem - supports HTML)</Label>
+                <Textarea
+                  value={question.stem || ''}
+                  onChange={(e) => onChange({ ...question, stem: e.target.value })}
+                  placeholder="Dear Mr./Ms. ..."
+                  rows={6}
+                  className="text-sm bg-white mt-1"
+                />
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Min Words</Label>
+                  <Input type="number" min={0} value={((question.metadata as Record<string, unknown>)?.minWords as number) || 50} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), minWords: parseInt(e.target.value) || 50 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Max Words</Label>
+                  <Input type="number" min={0} value={((question.metadata as Record<string, unknown>)?.maxWords as number) || 120} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), maxWords: parseInt(e.target.value) || 120 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+              </div>
+              <p className="text-xs text-amber-600 font-medium">⚠ AI-graded — no correctAnswer needed</p>
+            </div>
+          )}
+
+          {/* TOEIC Writing: Opinion Essay */}
+          {isToeicOpinionEssay && (
+            <div className="space-y-3 p-4 bg-blue-50/50 rounded-lg border border-blue-200">
+              <div>
+                <Label className="text-sm font-medium">Essay Prompt (stem)</Label>
+                <Textarea
+                  value={question.stem || ''}
+                  onChange={(e) => onChange({ ...question, stem: e.target.value })}
+                  placeholder="Do you agree or disagree with the following statement? ..."
+                  rows={4}
+                  className="text-sm bg-white mt-1"
+                />
+              </div>
+              <div>
+                <Label className="text-sm font-medium">Min Words</Label>
+                <Input type="number" min={0} value={((question.metadata as Record<string, unknown>)?.minWords as number) || 300} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), minWords: parseInt(e.target.value) || 300 } })} className="h-10 w-24 text-sm bg-white mt-1" />
+              </div>
+              <p className="text-xs text-amber-600 font-medium">⚠ AI-graded — no correctAnswer needed</p>
+            </div>
+          )}
+
+          {/* TOEIC Speaking question types */}
+          {isToeicSpeaking && (
+            <div className="space-y-3 p-4 bg-red-50/50 rounded-lg border border-red-200">
+              {questionType === 'READ_ALOUD' && (
+                <div>
+                  <Label className="text-sm font-medium">Instruction line</Label>
+                  <Input
+                    value={((question.metadata as Record<string, unknown>)?.instruction as string) || 'Read the text aloud'}
+                    onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), instruction: e.target.value } })}
+                    placeholder="e.g. Read the text aloud"
+                    className="h-10 text-sm bg-white mt-1"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">Displayed as a separate title above the passage</p>
+                </div>
+              )}
+              <div>
+                <Label className="text-sm font-medium">
+                  {questionType === 'READ_ALOUD' ? 'Text Passage (stem)' :
+                   questionType === 'DESCRIBE_PICTURE' ? 'Instructions (stem)' :
+                   'Question / Prompt (stem)'}
+                </Label>
+                <div className="mt-1">
+                  <TiptapMiniEditor
+                    content={question.stem || ''}
+                    onChange={(html) => onChange({ ...question, stem: html })}
+                    placeholder={questionType === 'READ_ALOUD' ? 'Enter the text passage to be read aloud...' : 'Enter the question or prompt...'}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Prep Time (sec)</Label>
+                  <Input type="number" min={0} value={((question.metadata as Record<string, unknown>)?.prepTime as number) || 0} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), prepTime: parseInt(e.target.value) || 0 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Response Time (sec)</Label>
+                  <Input type="number" min={0} value={((question.metadata as Record<string, unknown>)?.responseTime as number) || 45} onChange={(e) => onChange({ ...question, metadata: { ...(question.metadata as Record<string, unknown> || {}), responseTime: parseInt(e.target.value) || 45 } })} className="h-10 w-20 text-sm bg-white mt-1" />
+                </div>
+              </div>
+              <p className="text-xs text-amber-600 font-medium">⚠ Speaking question — graded via audio recording + AI</p>
             </div>
           )}
 

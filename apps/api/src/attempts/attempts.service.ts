@@ -4,11 +4,16 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScoringService, SectionResult, Skill } from '../scoring/scoring.service';
 import { HskGradingService } from '../hsk-grading/hsk-grading.service';
-import { AttemptMode, AttemptStatus, Prisma } from '@prisma/client';
+import { CreditsService } from '../credits/credits.service';
+import { UploadService } from '../upload/upload.service';
+import { ToeicSwGradingService } from '../toeic-sw-grading/toeic-sw-grading.service';
+import { AttemptMode, AttemptStatus, CreditReason, Prisma } from '@prisma/client';
 import { matchAnswer } from './answer-matcher';
 
 const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes
@@ -21,6 +26,11 @@ export class AttemptsService {
     private prisma: PrismaService,
     private scoringService: ScoringService,
     private hskGradingService: HskGradingService,
+    private creditsService: CreditsService,
+    private uploadService: UploadService,
+    @Optional()
+    @Inject('ToeicSwGradingService')
+    private toeicSwGradingService?: ToeicSwGradingService,
   ) {}
 
   async startAttempt(
@@ -35,6 +45,20 @@ export class AttemptsService {
       include: { sections: true },
     });
     if (!test) throw new NotFoundException('Test not found');
+
+    // Credit gate for TOEIC_SW and HSK writing tests
+    const creditCost = this.getAttemptCreditCost(test.examType);
+    if (creditCost > 0) {
+      const sufficient = await this.creditsService.hasSufficientCredits(
+        userId,
+        creditCost,
+      );
+      if (!sufficient) {
+        throw new BadRequestException(
+          `Insufficient credits. This test requires ${creditCost} credits.`,
+        );
+      }
+    }
 
     // Check for existing in-progress attempt
     const existing = await this.prisma.userAttempt.findFirst({
@@ -73,7 +97,7 @@ export class AttemptsService {
       throw new BadRequestException('At least one section must be selected');
     }
 
-    return this.prisma.userAttempt.create({
+    const attempt = await this.prisma.userAttempt.create({
       data: {
         userId,
         testId,
@@ -93,6 +117,21 @@ export class AttemptsService {
         test: { select: { id: true, title: true, durationMins: true, examType: true } },
       },
     });
+
+    // Deduct credits after successful attempt creation
+    if (creditCost > 0) {
+      const reason =
+        test.examType === 'TOEIC_SW' || test.examType === 'TOEIC_SPEAKING' || test.examType === 'TOEIC_WRITING'
+          ? CreditReason.TOEIC_SW_ATTEMPT
+          : CreditReason.HSK_WRITING_ATTEMPT;
+      await this.creditsService
+        .deduct(userId, creditCost, reason, attempt.id)
+        .catch((err) =>
+          this.logger.error('Failed to deduct attempt credits', err),
+        );
+    }
+
+    return attempt;
   }
 
   async findById(attemptId: string, userId: string) {
@@ -234,10 +273,24 @@ export class AttemptsService {
     }
 
     // Grade each answer
+    const TOEIC_SPEAKING_TYPES = [
+      'READ_ALOUD',
+      'DESCRIBE_PICTURE',
+      'RESPOND_TO_QUESTIONS',
+      'PROPOSE_SOLUTION',
+      'EXPRESS_OPINION',
+    ];
+    const TOEIC_WRITING_TYPES = [
+      'WRITE_SENTENCES',
+      'RESPOND_WRITTEN_REQUEST',
+      'WRITE_OPINION_ESSAY',
+    ];
+
     let correctCount = 0;
     const correctBySkill = new Map<string, number>();
     const totalBySkill = new Map<string, number>();
     const pendingWritingAnswerIds: string[] = [];
+    const pendingToeicWritingAnswerIds: string[] = [];
     const reorderScores: number[] = [];
 
     for (const answer of attempt.answers) {
@@ -246,7 +299,29 @@ export class AttemptsService {
 
       totalBySkill.set(skill, (totalBySkill.get(skill) || 0) + 1);
 
-      if (questionType === 'SENTENCE_REORDER') {
+      if (TOEIC_SPEAKING_TYPES.includes(questionType)) {
+        // Speaking answers are already graded during recording via WebSocket.
+        // The answerText contains the stable transcript, assessment is in metadata.
+        // Deduct AI grading credits (non-blocking).
+        this.creditsService
+          .deduct(attempt.userId, 3, CreditReason.AI_GRADING, answer.id)
+          .catch(() => {});
+        await this.prisma.userAnswer.update({
+          where: { id: answer.id },
+          data: { isCorrect: null }, // AI-graded, no simple correct/incorrect
+        });
+      } else if (TOEIC_WRITING_TYPES.includes(questionType)) {
+        // Queue async AI grading for TOEIC writing answers
+        pendingToeicWritingAnswerIds.push(answer.id);
+        // Deduct AI grading credits (non-blocking)
+        this.creditsService
+          .deduct(attempt.userId, 2, CreditReason.AI_GRADING, answer.id)
+          .catch(() => {});
+        await this.prisma.userAnswer.update({
+          where: { id: answer.id },
+          data: { isCorrect: null },
+        });
+      } else if (questionType === 'SENTENCE_REORDER') {
         // Deterministic: normalize + compare with partial credit
         const meta = answer.question.metadata as { fragments: string[] };
         const result = this.hskGradingService.gradeSentenceReorder(
@@ -290,11 +365,20 @@ export class AttemptsService {
       }
     }
 
-    // Queue AI grading for writing composition questions
+    // Queue AI grading for HSK writing composition questions
     if (pendingWritingAnswerIds.length > 0) {
       this.hskGradingService
         .queueWritingGrading(attemptId, pendingWritingAnswerIds)
-        .catch((err) => this.logger.error('Failed to queue writing grading', err));
+        .catch((err) => this.logger.error('Failed to queue HSK writing grading', err));
+    }
+
+    // Queue AI grading for TOEIC SW writing questions
+    if (pendingToeicWritingAnswerIds.length > 0 && this.toeicSwGradingService) {
+      this.toeicSwGradingService
+        .queueWritingGrading(attemptId, pendingToeicWritingAnswerIds)
+        .catch((err) =>
+          this.logger.error('Failed to queue TOEIC writing grading', err),
+        );
     }
 
     // Count total questions from selected sections
@@ -383,7 +467,7 @@ export class AttemptsService {
     const attempt = await this.prisma.userAttempt.findUnique({
       where: { id: attemptId },
       include: {
-        test: { select: { id: true, title: true } },
+        test: { select: { id: true, title: true, examType: true } },
         sections: {
           include: {
             section: {
@@ -497,6 +581,46 @@ export class AttemptsService {
     }
 
     return submitted;
+  }
+
+  async getAudioPresignUrl(
+    attemptId: string,
+    questionId: string,
+    userId: string,
+  ) {
+    const attempt = await this.prisma.userAttempt.findUnique({
+      where: { id: attemptId },
+    });
+    if (!attempt) throw new NotFoundException('Attempt not found');
+    if (attempt.userId !== userId) throw new ForbiddenException();
+    if (attempt.status !== AttemptStatus.IN_PROGRESS) {
+      throw new BadRequestException('Attempt not active');
+    }
+
+    const key = `uploads/answers/${attemptId}/${questionId}.webm`;
+    const result = await this.uploadService.generatePresignedUrlForKey(
+      key,
+      'audio/webm',
+    );
+
+    // Save the audio URL to the answer
+    await this.prisma.userAnswer.upsert({
+      where: { attemptId_questionId: { attemptId, questionId } },
+      create: { attemptId, questionId, audioAnswerUrl: result.fileUrl },
+      update: { audioAnswerUrl: result.fileUrl },
+    });
+
+    return result;
+  }
+
+  private getAttemptCreditCost(examType: string): number {
+    if (examType === 'TOEIC_SW' || examType === 'TOEIC_SPEAKING' || examType === 'TOEIC_WRITING') return 10;
+    if (
+      examType.startsWith('HSK_') &&
+      parseInt(examType.replace('HSK_', '')) >= 3
+    )
+      return 5;
+    return 0;
   }
 
   private isHeartbeatStale(
