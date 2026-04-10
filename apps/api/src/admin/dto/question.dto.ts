@@ -32,7 +32,15 @@ export class CreateQuestionBodyDto {
 
   @IsOptional()
   @IsString()
+  transcript?: string;
+
+  @IsOptional()
+  @IsString()
   imageLayout?: string;
+
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
 
   @IsOptional()
   metadata?: any;
@@ -71,7 +79,15 @@ export class UpdateQuestionDto {
 
   @IsOptional()
   @IsString()
+  transcript?: string;
+
+  @IsOptional()
+  @IsString()
   imageLayout?: string;
+
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
 
   @IsOptional()
   metadata?: any;

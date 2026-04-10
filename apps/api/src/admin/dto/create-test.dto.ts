@@ -49,7 +49,15 @@ export class CreateQuestionDto {
 
   @IsOptional()
   @IsString()
+  transcript?: string;
+
+  @IsOptional()
+  @IsString()
   imageLayout?: string;
+
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
 
   @IsOptional()
   metadata?: any;
@@ -78,6 +86,10 @@ export class CreateQuestionGroupDto {
   @IsString()
   imageUrl?: string;
 
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
+
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => CreateQuestionDto)
@@ -103,6 +115,14 @@ export class CreatePassageDto {
   @IsOptional()
   @IsString()
   imageLayout?: string;
+
+  @IsOptional()
+  @IsString()
+  imageSize?: string;
+
+  @IsOptional()
+  @IsArray()
+  images?: any[];
 
   @IsInt()
   @Min(0)

@@ -53,7 +53,7 @@ export function KeywordCompositionRenderer({
               className="px-6 py-5"
             >
             <div className="flex items-center gap-2 mb-2">
-              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-50 text-blue-600 font-semibold text-xs shrink-0 border border-blue-200">
+              <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-amber-100 text-amber-700 font-bold text-xs shrink-0 border border-amber-200">
                 {question.questionNumber}
               </span>
             </div>

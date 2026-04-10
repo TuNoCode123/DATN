@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { App, Modal } from "antd";
-import { X, Info, ChevronRight, ChevronLeft } from "lucide-react";
+import { X, Info, ChevronRight, ChevronLeft, Loader2 } from "lucide-react";
 import { api } from "@/lib/api";
 import { LayoutRouter } from "@/components/attempt-layouts/layout-router";
 import { QuestionNavigator } from "@/components/question-navigator";
@@ -298,6 +298,9 @@ function AttemptContent() {
       .sort((a, b) => a.questionNumber - b.questionNumber),
   }));
 
+  const formatTime = (s: number) =>
+    `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
+
   return (
     <div
       className="fixed inset-0 z-50 flex flex-col bg-cream"
@@ -317,60 +320,64 @@ function AttemptContent() {
       </div>
 
       {/* Body */}
-      <div className="flex flex-1 overflow-hidden m-3 border-2 border-border-strong rounded-2xl bg-white">
+      <div className="flex flex-col md:flex-row flex-1 overflow-y-auto md:overflow-hidden m-1.5 md:m-3 border-2 border-border-strong rounded-2xl bg-white">
         {/* Left main area */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Toolbar row: highlight toggle + section tabs */}
-          <div className="flex items-center gap-4 px-5 py-2.5 border-b border-slate-200 bg-white shrink-0">
-            {/* Highlight toggle (only for passage layouts) */}
-            {showHighlight && (
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => setHighlightEnabled((v) => !v)}
-                  className={`relative inline-flex items-center rounded-full transition-colors shrink-0 cursor-pointer ${
-                    highlightEnabled ? "bg-primary" : "bg-slate-300"
-                  }`}
-                  style={{ width: 36, height: 20 }}
-                >
-                  <span
-                    className="inline-block rounded-full bg-white shadow transition-transform"
-                    style={{
-                      width: 16,
-                      height: 16,
-                      transform: highlightEnabled
-                        ? "translateX(18px)"
-                        : "translateX(2px)",
-                    }}
-                  />
-                </button>
-                <span className="text-slate-600 text-sm">Highlight</span>
-                <span className="text-slate-400 cursor-help">
-                  <Info className="w-3.5 h-3.5" />
-                </span>
-                <div className="w-px h-5 bg-slate-200 ml-2" />
-              </div>
-            )}
+        <div className="flex flex-col md:min-h-0 md:flex-1 md:overflow-hidden">
+          {/* Sticky header on mobile: section tabs + timer/submit */}
+          <div className="sticky top-0 z-10 bg-white border-b border-slate-200 shrink-0">
+            {/* Toolbar row: highlight toggle + section tabs */}
+            <div className="flex items-center gap-2 md:gap-4 px-3 md:px-5 py-2 md:py-2.5">
+              {/* Highlight toggle (only for passage layouts) */}
+              {showHighlight && (
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setHighlightEnabled((v) => !v)}
+                    className={`relative inline-flex items-center rounded-full transition-colors shrink-0 cursor-pointer ${
+                      highlightEnabled ? "bg-primary" : "bg-slate-300"
+                    }`}
+                    style={{ width: 36, height: 20 }}
+                  >
+                    <span
+                      className="inline-block rounded-full bg-white shadow transition-transform"
+                      style={{
+                        width: 16,
+                        height: 16,
+                        transform: highlightEnabled
+                          ? "translateX(18px)"
+                          : "translateX(2px)",
+                      }}
+                    />
+                  </button>
+                  <span className="text-slate-600 text-sm">Highlight</span>
+                  <span className="text-slate-400 cursor-help">
+                    <Info className="w-3.5 h-3.5" />
+                  </span>
+                  <div className="w-px h-5 bg-slate-200 ml-2" />
+                </div>
+              )}
 
-            {/* Section tabs */}
-            <div className="flex items-center gap-2 flex-1 overflow-x-auto">
-              {sections.map((section, idx) => (
-                <button
-                  key={section.id}
-                  onClick={() => setActiveSectionIndex(idx)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap ${
-                    idx === activeSectionIndex
-                      ? "bg-primary text-white"
-                      : "text-slate-500 hover:text-foreground hover:bg-slate-50"
-                  }`}
-                >
-                  {section.title}
-                </button>
-              ))}
+              {/* Section tabs */}
+              <div className="flex items-center gap-2 flex-1 overflow-x-auto">
+                {sections.map((section, idx) => (
+                  <button
+                    key={section.id}
+                    onClick={() => setActiveSectionIndex(idx)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors cursor-pointer whitespace-nowrap ${
+                      idx === activeSectionIndex
+                        ? "bg-primary text-white"
+                        : "text-slate-500 hover:text-foreground hover:bg-slate-50"
+                    }`}
+                  >
+                    {section.title}
+                  </button>
+                ))}
+              </div>
             </div>
+
           </div>
 
           {/* Layout content — delegated to LayoutRouter */}
-          <div className="flex flex-1 overflow-hidden">
+          <div className="flex md:flex-1 md:overflow-hidden">
             {activeSection && (
               <LayoutRouter
                 section={activeSection}
@@ -382,7 +389,7 @@ function AttemptContent() {
           </div>
 
           {/* Bottom nav */}
-          <div className="flex justify-between px-5 py-2.5 border-t border-slate-200 bg-white shrink-0">
+          <div className="flex justify-between px-3 md:px-5 py-2 md:py-2.5 border-t border-slate-200 bg-white shrink-0">
             {activeSectionIndex > 0 ? (
               <button
                 onClick={() => setActiveSectionIndex((i) => i - 1)}
@@ -404,18 +411,88 @@ function AttemptContent() {
               </button>
             )}
           </div>
+
+          {/* Timer + Submit + Question palette — mobile only, at bottom */}
+          <div className="md:hidden border-t border-slate-200">
+            {/* Timer + Submit */}
+            <div className="flex items-center gap-3 px-4 py-3">
+              <div className="flex-1">
+                <div className="text-slate-500 text-xs font-medium mb-0.5">
+                  {timeLeft !== null ? "Time Remaining:" : "No Time Limit"}
+                </div>
+                {timeLeft !== null && (
+                  <div className="font-extrabold text-foreground tabular-nums text-2xl">
+                    {formatTime(timeLeft)}
+                  </div>
+                )}
+              </div>
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="brutal-btn bg-foreground text-white py-2 px-6 text-sm disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+              >
+                {submitting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  "SUBMIT"
+                )}
+              </button>
+            </div>
+            {/* Note */}
+            <div className="px-4 pb-2">
+              <p className="text-red-500 italic text-xs leading-snug">
+                Click question numbers to navigate.
+              </p>
+            </div>
+            {/* Question palette */}
+            <div className="px-4 py-3 border-t border-slate-200">
+            {navSections.map((section, sIdx) => (
+              <div key={section.id} className="mb-3 last:mb-0">
+                <div className="font-bold text-foreground text-xs mb-2">
+                  {section.title}
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {section.questions.map((q) => {
+                    const isAnswered = !!answers[q.id]?.trim();
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={() => handleQuestionClick(sIdx, q.id)}
+                        className={`rounded-lg border-2 text-center transition-colors tabular-nums cursor-pointer ${
+                          isAnswered
+                            ? "bg-primary text-white border-primary"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-primary"
+                        }`}
+                        style={{
+                          width: 28,
+                          height: 28,
+                          fontSize: 11,
+                          lineHeight: "24px",
+                        }}
+                      >
+                        {q.questionNumber}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            </div>
+          </div>
         </div>
 
-        {/* Right sidebar — Question Navigator */}
-        <QuestionNavigator
-          sections={navSections}
-          answers={answers}
-          timeLeft={timeLeft}
-          submitting={submitting}
-          onSubmit={handleSubmit}
-          onQuestionClick={handleQuestionClick}
-          activeSectionIndex={activeSectionIndex}
-        />
+        {/* Right sidebar — Question Navigator (desktop only) */}
+        <div className="hidden md:flex">
+          <QuestionNavigator
+            sections={navSections}
+            answers={answers}
+            timeLeft={timeLeft}
+            submitting={submitting}
+            onSubmit={handleSubmit}
+            onQuestionClick={handleQuestionClick}
+            activeSectionIndex={activeSectionIndex}
+          />
+        </div>
       </div>
     </div>
   );

@@ -79,7 +79,10 @@ export interface AdminPassage {
   contentHtml: string;
   imageUrl: string | null;
   audioUrl: string | null;
+  transcript: string | null;
   imageLayout: string | null;
+  imageSize: string | null;
+  images: Array<{ url: string; layout?: string; size?: string }> | null;
   orderIndex: number;
 }
 
@@ -94,7 +97,9 @@ export interface AdminQuestion {
   explanation: string | null;
   imageUrl: string | null;
   audioUrl: string | null;
+  transcript: string | null;
   imageLayout: string | null;
+  imageSize: string | null;
   metadata?: Record<string, unknown> | null;
 }
 
@@ -108,6 +113,7 @@ export interface AdminQuestionGroup {
   matchingOptions: { label: string; text: string }[] | null;
   audioUrl: string | null;
   imageUrl: string | null;
+  imageSize: string | null;
   questions: AdminQuestion[];
 }
 
