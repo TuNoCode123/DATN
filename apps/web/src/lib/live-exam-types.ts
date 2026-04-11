@@ -18,19 +18,31 @@ export type LiveExamSessionStatus = 'LOBBY' | 'LIVE' | 'ENDED' | 'CANCELLED';
 
 export type McqOption = { id: string; text: string };
 
+/**
+ * Optional media attached to a question, rendered alongside the HTML
+ * prompt. Stored inside payload.media, mirrors backend QuestionMedia.
+ */
+export type QuestionMedia = {
+  imageUrl?: string;
+  audioUrl?: string;
+};
+
 export type McqPayload = {
   options: McqOption[];
   correctOptionId: string;
+  media?: QuestionMedia;
 };
 
 export type ShortAnswerPayload = {
   acceptedAnswers: string[];
   caseSensitive: boolean;
+  media?: QuestionMedia;
 };
 
 export type SentenceReorderPayload = {
   fragments: string[]; // in correct order
   correctOrder: number[]; // usually [0..n-1]
+  media?: QuestionMedia;
 };
 
 export type QuestionPayload =
@@ -40,12 +52,20 @@ export type QuestionPayload =
 
 // ─── Dispatch payloads (what the player actually sees) ────────────
 
-export type McqDispatch = { type: 'MULTIPLE_CHOICE'; options: McqOption[] };
-export type ShortAnswerDispatch = { type: 'SHORT_ANSWER' };
+export type McqDispatch = {
+  type: 'MULTIPLE_CHOICE';
+  options: McqOption[];
+  media?: QuestionMedia;
+};
+export type ShortAnswerDispatch = {
+  type: 'SHORT_ANSWER';
+  media?: QuestionMedia;
+};
 export type SentenceReorderDispatch = {
   type: 'SENTENCE_REORDER';
   /** Fragments already shuffled by the server. Client renders in this order. */
   shuffledFragments: string[];
+  media?: QuestionMedia;
 };
 export type DispatchPayload =
   | McqDispatch
@@ -121,6 +141,7 @@ export type QuestionDraft =
 
 export type TemplateDraft = {
   id?: string;
+  status?: LiveExamTemplateStatus;
   title: string;
   description?: string;
   durationSec: number;
@@ -185,8 +206,13 @@ export function emptyQuestionOfType(type: LiveExamQuestionType): QuestionDraft {
 
 // ─── Client-side validation (cheap pre-submit check) ──────────────
 
+/** Strip HTML and whitespace to check whether a rich-text prompt is empty. */
+function htmlIsEmpty(html: string): boolean {
+  return html.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() === '';
+}
+
 export function validateQuestionDraft(q: QuestionDraft): string | null {
-  if (!q.prompt.trim()) return 'Prompt is required';
+  if (htmlIsEmpty(q.prompt)) return 'Prompt is required';
   switch (q.type) {
     case 'MULTIPLE_CHOICE': {
       if (q.payload.options.length < 2) return 'At least 2 options required';

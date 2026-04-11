@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { RichContent } from '@/components/rich-content';
 import { AudioPlayer } from '@/components/ui/audio-player';
 import { TranscriptSection } from '@/components/ui/transcript-section';
@@ -62,11 +63,14 @@ function GroupMedia({ group }: { group: QuestionGroupFromAPI }) {
       )}
       {hasImage && (
         <div className={`rounded-xl border-2 border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-full ${getImageContainerClass(group.imageSize)}`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
+          <Image
             src={group.imageUrl!}
             alt="Question group image"
+            width={0}
+            height={0}
+            sizes="(max-width: 768px) 100vw, 60vw"
             className={`${sizeClasses} w-full h-auto object-contain`}
+            style={{ width: "100%", height: "auto" }}
           />
         </div>
       )}

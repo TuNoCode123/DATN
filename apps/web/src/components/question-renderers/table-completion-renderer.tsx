@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useCallback, useEffect, useRef } from 'react';
 import { RichContent } from '@/components/rich-content';
 import { AudioPlayer } from '@/components/ui/audio-player';
@@ -173,8 +174,15 @@ export function TableCompletionRenderer({
       )}
       {group.imageUrl && (
         <div className={`mb-3 inline-block max-w-full rounded-xl border-2 border-slate-200 overflow-hidden bg-slate-50 ${getImageContainerClass(group.imageSize)}`}>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={group.imageUrl} alt="Question group" className={`${getImageSizeClasses(group.imageSize)} w-full h-auto object-contain`} />
+          <Image
+            src={group.imageUrl}
+            alt="Question group"
+            width={0}
+            height={0}
+            sizes="(max-width: 768px) 100vw, 60vw"
+            className={`${getImageSizeClasses(group.imageSize)} w-full h-auto object-contain`}
+            style={{ width: "100%", height: "auto" }}
+          />
         </div>
       )}
       <div className="table-completion-container">

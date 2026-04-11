@@ -105,6 +105,14 @@ function TestsContent() {
     }
   }, [searchParams]);
 
+  useEffect(() => {
+    const examType = searchParams.get("examType");
+    if (examType && EXAM_CATEGORIES.some((c) => c.key === examType)) {
+      setActiveCategory(examType);
+      setCurrentPage(1);
+    }
+  }, [searchParams]);
+
   const { data, isLoading } = useQuery({
     queryKey: ["tests", activeCategory, activeFormat, searchQuery, currentPage],
     queryFn: async () => {

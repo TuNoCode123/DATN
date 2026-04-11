@@ -27,11 +27,10 @@ import {
  * Ownership is enforced on every mutating call via
  * `template.createdById === userId`.
  *
- * A template can only be edited while in DRAFT. Once PUBLISHED, the
- * author can archive it or spawn sessions from it but cannot alter
- * questions — this guarantees that any in-flight session (which
- * snapshots the questions) matches exactly what authors see in the
- * template detail view.
+ * Templates are editable in both DRAFT and PUBLISHED — sessions
+ * snapshot their own copy of the questions at spawn time, so editing
+ * a published template does not affect any past or in-flight session.
+ * Only ARCHIVED templates are read-only.
  */
 @Injectable()
 export class LiveExamTemplateService {
@@ -78,7 +77,7 @@ export class LiveExamTemplateService {
   }
 
   async update(templateId: string, userId: string, dto: UpdateLiveExamTemplateDto) {
-    const t = await this.assertOwnerDraft(templateId, userId);
+    const t = await this.assertOwnerEditable(templateId, userId);
     return this.prisma.liveExamTemplate.update({
       where: { id: t.id },
       data: dto,
@@ -124,7 +123,7 @@ export class LiveExamTemplateService {
     userId: string,
     dto: CreateLiveExamQuestionDto,
   ) {
-    const t = await this.assertOwnerDraft(templateId, userId);
+    const t = await this.assertOwnerEditable(templateId, userId);
     const payload = this.validatePayloadOrBadRequest(dto.type, dto.payload);
 
     let orderIndex = dto.orderIndex;
@@ -154,7 +153,7 @@ export class LiveExamTemplateService {
     userId: string,
     dto: CreateLiveExamQuestionDto,
   ) {
-    const t = await this.assertOwnerDraft(templateId, userId);
+    const t = await this.assertOwnerEditable(templateId, userId);
     const payload = this.validatePayloadOrBadRequest(dto.type, dto.payload);
 
     const existing = await this.prisma.liveExamTemplateQuestion.findUnique({
@@ -177,7 +176,7 @@ export class LiveExamTemplateService {
   }
 
   async deleteQuestion(templateId: string, questionId: string, userId: string) {
-    const t = await this.assertOwnerDraft(templateId, userId);
+    const t = await this.assertOwnerEditable(templateId, userId);
     const existing = await this.prisma.liveExamTemplateQuestion.findUnique({
       where: { id: questionId },
     });
@@ -281,10 +280,10 @@ export class LiveExamTemplateService {
     return t;
   }
 
-  private async assertOwnerDraft(templateId: string, userId: string) {
+  private async assertOwnerEditable(templateId: string, userId: string) {
     const t = await this.assertOwner(templateId, userId);
-    if (t.status !== LiveExamTemplateStatus.DRAFT) {
-      throw new ConflictException('Can only edit DRAFT templates');
+    if (t.status === LiveExamTemplateStatus.ARCHIVED) {
+      throw new ConflictException('Archived templates cannot be edited');
     }
     return t;
   }

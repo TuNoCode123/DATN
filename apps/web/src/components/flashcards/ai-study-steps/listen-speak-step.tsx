@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Volume2, Mic, MicOff, SkipForward, ChevronRight, RefreshCw } from 'lucide-react';
 import { usePronunciation } from '@/lib/pronunciation/use-pronunciation';
 import type { PronunciationAssessment } from '@/lib/pronunciation/types';
+import { useFeedback } from '@/components/feedback/feedback-overlay';
 
 interface ListenSpeakStepProps {
   word: string;
@@ -62,6 +63,7 @@ function ScoreRing({ score, label, color, delay }: { score: number; label: strin
 export default function ListenSpeakStep({ word, ipa, onComplete, onSkip }: ListenSpeakStepProps) {
   const [showScores, setShowScores] = useState(false);
   const savedAssessment = useRef<PronunciationAssessment | null>(null);
+  const { show: showFeedback, overlay: feedbackOverlay } = useFeedback(1300);
 
   const {
     phase,
@@ -78,6 +80,11 @@ export default function ListenSpeakStep({ word, ipa, onComplete, onSkip }: Liste
     onComplete: (a) => {
       savedAssessment.current = a;
       setShowScores(true);
+      if (a && a.overall.score >= 70) {
+        showFeedback('correct', 'Great pronunciation!', `Score: ${a.overall.score}`);
+      } else if (a) {
+        showFeedback('wrong', 'Try again', `Score: ${a.overall.score}`);
+      }
     },
   });
 
@@ -206,7 +213,7 @@ export default function ListenSpeakStep({ word, ipa, onComplete, onSkip }: Liste
                 <p className="font-bold text-foreground font-heading text-base">
                   {assessment.overall.score >= 80 ? 'Excellent!' : assessment.overall.score >= 50 ? 'Good effort!' : 'Keep practicing!'}
                 </p>
-                <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{assessment.feedback}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{assessment.feedback}</p>
               </div>
             </div>
           </div>
@@ -246,6 +253,7 @@ export default function ListenSpeakStep({ word, ipa, onComplete, onSkip }: Liste
           <SkipForward size={11} /> Skip
         </button>
       )}
+      {feedbackOverlay}
     </div>
   );
 }

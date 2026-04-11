@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { Button, Progress } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
@@ -32,10 +33,12 @@ export function UploadPreview({ file, progress, uploading, error, onCancel, onRe
     <div className="mx-3 mb-2 p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center gap-3">
       {/* Preview / Icon */}
       {isImage && preview ? (
-        /* eslint-disable-next-line @next/next/no-img-element */
-        <img
+        <Image
           src={preview}
           alt={file.name}
+          width={56}
+          height={56}
+          unoptimized
           className="w-14 h-14 object-cover rounded-md flex-shrink-0"
         />
       ) : (

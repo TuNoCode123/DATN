@@ -16,7 +16,7 @@ export function CreditBadge() {
   if (balance === null) return null;
 
   return (
-    <div className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-bold border-2 border-black rounded-full bg-yellow-100 shadow-[2px_2px_0_0_#1e293b]">
+    <div className="inline-flex items-center gap-1.5 px-3 py-1 text-sm font-bold border-2 border-black rounded-full bg-yellow-100 shadow-[2px_2px_0_0_#1e293b] whitespace-nowrap">
       <span>&#9733;</span>
       <span>{balance} credits</span>
     </div>

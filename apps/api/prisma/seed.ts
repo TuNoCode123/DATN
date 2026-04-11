@@ -199,15 +199,18 @@ async function createIeltsListeningTest(cfg: IeltsListeningConfig, tagIds: strin
 //   npx prisma db seed                  → seed all (ielts + toeic + hsk)
 //   npx prisma db seed -- --only ielts  → seed IELTS only
 //   npx prisma db seed -- --only toeic  → seed TOEIC only
-//   npx prisma db seed -- --only hsk    → seed HSK only
+//   npx prisma db seed -- --only hsk     → seed HSK only
+//   npx prisma db seed -- --only credits → seed credit packages only
 
-function parseSeedTarget(): 'all' | 'ielts' | 'toeic' | 'hsk' {
+type SeedTarget = 'all' | 'ielts' | 'toeic' | 'hsk' | 'credits';
+
+function parseSeedTarget(): SeedTarget {
   const args = process.argv.slice(2);
   const onlyIdx = args.indexOf('--only');
   if (onlyIdx !== -1 && args[onlyIdx + 1]) {
     const target = args[onlyIdx + 1].toLowerCase();
-    if (['ielts', 'toeic', 'hsk'].includes(target)) {
-      return target as 'ielts' | 'toeic' | 'hsk';
+    if (['ielts', 'toeic', 'hsk', 'credits'].includes(target)) {
+      return target as SeedTarget;
     }
   }
   return 'all';
@@ -273,11 +276,38 @@ async function seedBase() {
   return { admin, student1, student2, tags, tagDefs };
 }
 
+// ─── Credit Packages ─────────────────────────────────────────────────────────
+
+async function seedCreditPackages() {
+  console.log('\n── Credit Packages ──');
+  const creditPackages = [
+    { id: 'pkg_starter',  name: 'Starter',  description: '200 credits',              priceUsd: '2.00',  baseCredits: 200,  bonusCredits: 0,    sortOrder: 1 },
+    { id: 'pkg_standard', name: 'Standard', description: '500 + 50 bonus credits',   priceUsd: '5.00',  baseCredits: 500,  bonusCredits: 50,   sortOrder: 2 },
+    { id: 'pkg_plus',     name: 'Plus',     description: '1,000 + 200 bonus',        priceUsd: '10.00', baseCredits: 1000, bonusCredits: 200,  sortOrder: 3 },
+    { id: 'pkg_pro',      name: 'Pro',      description: '2,000 + 600 bonus',        priceUsd: '20.00', baseCredits: 2000, bonusCredits: 600,  sortOrder: 4 },
+    { id: 'pkg_mega',     name: 'Mega',     description: '5,000 + 2,000 bonus',      priceUsd: '50.00', baseCredits: 5000, bonusCredits: 2000, sortOrder: 5 },
+  ];
+  for (const pkg of creditPackages) {
+    await prisma.creditPackage.upsert({
+      where: { id: pkg.id },
+      update: { ...pkg, active: true },
+      create: { ...pkg, active: true },
+    });
+  }
+  console.log(`  ✓ Seeded ${creditPackages.length} credit packages`);
+}
+
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
   const target = parseSeedTarget();
   console.log(`\nSeed target: ${target.toUpperCase()}\n`);
+
+  if (target === 'credits') {
+    await seedCreditPackages();
+    console.log('\nSeed completed successfully!');
+    return;
+  }
 
   const { admin, student1, student2, tags, tagDefs } = await seedBase();
 
@@ -1313,6 +1343,8 @@ async function main() {
   console.log('  ✓ HSK 5 test complete (100 questions)');
 
   } // end if (hsk)
+
+  await seedCreditPackages();
 
   // ─── Summary ────────────────────────────────────────────────────────────────
   const testCount = await prisma.test.count();

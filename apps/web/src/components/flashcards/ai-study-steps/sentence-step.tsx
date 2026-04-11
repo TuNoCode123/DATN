@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Volume2, Mic, MicOff, ChevronRight, Star, BookOpen, Sparkles } from 'lucide-react';
 import { usePronunciation } from '@/lib/pronunciation/use-pronunciation';
+import { useFeedback } from '@/components/feedback/feedback-overlay';
 
 interface SentenceStepProps {
   word: string;
@@ -62,6 +63,7 @@ export default function SentenceStep({ word, sentence, onComplete }: SentenceSte
   const [confidence, setConfidence] = useState(0);
   const [showPronunciation, setShowPronunciation] = useState(false);
   const [pronDone, setPronDone] = useState(false);
+  const { show: showFeedback, overlay: feedbackOverlay } = useFeedback(1300);
 
   const {
     phase,
@@ -74,7 +76,14 @@ export default function SentenceStep({ word, sentence, onComplete }: SentenceSte
   } = usePronunciation({
     targetSentence: sentence,
     language: 'en-US',
-    onComplete: () => setPronDone(true),
+    onComplete: (a) => {
+      setPronDone(true);
+      if (a && a.overall.score >= 70) {
+        showFeedback('correct', 'Nice reading!', `Score: ${a.overall.score}`);
+      } else if (a) {
+        showFeedback('wrong', 'Keep practicing', `Score: ${a.overall.score}`);
+      }
+    },
   });
 
   const isListening = phase === 'listening';
@@ -156,7 +165,7 @@ export default function SentenceStep({ word, sentence, onComplete }: SentenceSte
             <p className="text-sm font-bold text-foreground">
               {assessment.overall.score >= 80 ? 'Great reading!' : assessment.overall.score >= 50 ? 'Good try!' : 'Keep practicing!'}
             </p>
-            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-2">{assessment.feedback}</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{assessment.feedback}</p>
           </div>
         </div>
       )}
@@ -201,6 +210,7 @@ export default function SentenceStep({ word, sentence, onComplete }: SentenceSte
       >
         Continue <ChevronRight size={14} />
       </button>
+      {feedbackOverlay}
     </div>
   );
 }

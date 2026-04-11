@@ -31,9 +31,10 @@ type TemplateDetail = {
 };
 
 /**
- * Edit page. If the template is no longer DRAFT (published/archived)
- * we redirect the user back to the template detail page where they
- * can spawn sessions — editing a published template is forbidden.
+ * Edit page. DRAFT and PUBLISHED templates are both editable; sessions
+ * snapshot their own copy of the questions at spawn time so changes
+ * here never affect past or in-flight sessions. ARCHIVED templates
+ * are read-only and bounce back to the detail page.
  */
 export default function EditTemplatePage({
   params,
@@ -56,11 +57,11 @@ export default function EditTemplatePage({
     );
   }
 
-  if (data.status !== 'DRAFT') {
+  if (data.status === 'ARCHIVED') {
     return (
       <div className="brutal-card p-6">
         <p className="font-bold mb-2">
-          This template is {data.status.toLowerCase()} and cannot be edited.
+          This template is archived and cannot be edited.
         </p>
         <a
           href={`/live/templates/${data.id}`}
@@ -74,6 +75,7 @@ export default function EditTemplatePage({
 
   const draft: TemplateDraft = {
     id: data.id,
+    status: data.status,
     title: data.title,
     description: data.description ?? '',
     durationSec: data.durationSec,

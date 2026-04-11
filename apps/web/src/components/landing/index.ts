@@ -5,3 +5,7 @@ export { FeatureCard } from './feature-card';
 export { TestCard } from './test-card';
 export { TestimonialCard } from './testimonial-card';
 export { HeroCard } from './hero-card';
+export { WelcomeAnimation } from './welcome-animation';
+export { Reveal } from './reveal';
+export { CtaSection } from './cta-section';
+export { ExamCtaButton } from './exam-cta-button';

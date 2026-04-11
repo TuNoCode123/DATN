@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useState } from 'react';
 import { Avatar, Badge } from 'antd';
 import { UserOutlined, StopOutlined } from '@ant-design/icons';
@@ -103,12 +104,14 @@ export function MessageBubble({ message, isOwn, onEdit, onDelete, onReaction }: 
             >
               {/* IMAGE content */}
               {message.type === 'IMAGE' && message.attachmentUrl && (
-                /* eslint-disable-next-line @next/next/no-img-element */
-                <img
+                <Image
                   src={message.attachmentUrl}
                   alt={message.attachmentName || 'Image'}
+                  width={300}
+                  height={400}
+                  sizes="300px"
                   className="max-w-[300px] max-h-[400px] object-cover rounded-t-2xl cursor-pointer"
-                  loading="lazy"
+                  style={{ width: 'auto', height: 'auto', maxWidth: '300px', maxHeight: '400px' }}
                   onClick={() => setLightboxOpen(true)}
                 />
               )}

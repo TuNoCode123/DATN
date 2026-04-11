@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { RichContent } from "@/components/rich-content";
 import { AudioPlayer } from "@/components/ui/audio-player";
 import { TranscriptSection } from "@/components/ui/transcript-section";
@@ -130,8 +131,15 @@ export function McqRenderer({
       {question.imageUrl && (question.imageLayout === 'horizontal' || question.imageLayout === 'beside-left' || question.imageLayout === 'beside-right') ? (
         <div className={`ml-9 mb-3 flex flex-col sm:flex-row gap-3 ${question.imageLayout === 'beside-right' ? 'sm:flex-row-reverse' : ''}`}>
           <div className="w-full sm:w-2/5 sm:shrink-0 rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={question.imageUrl} alt={`Question ${question.questionNumber}`} className={`max-w-full w-full h-auto object-contain`} />
+            <Image
+              src={question.imageUrl}
+              alt={`Question ${question.questionNumber}`}
+              width={0}
+              height={0}
+              sizes="(max-width: 640px) 100vw, 40vw"
+              className="max-w-full w-full h-auto object-contain"
+              style={{ width: "100%", height: "auto" }}
+            />
           </div>
           <div className="w-full sm:w-3/5 flex flex-col gap-0.5">
             {normalizeMcqOptions(question.options).map((opt) => (
@@ -162,8 +170,15 @@ export function McqRenderer({
           {question.imageUrl && question.imageLayout !== 'below-text' && (
             <div className="ml-9 mb-3 max-w-full">
               <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-full">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={question.imageUrl} alt={`Question ${question.questionNumber}`} className={`${sizeClasses} w-full h-auto object-contain`} />
+                <Image
+                  src={question.imageUrl}
+                  alt={`Question ${question.questionNumber}`}
+                  width={0}
+                  height={0}
+                  sizes="(max-width: 768px) 100vw, 60vw"
+                  className={`${sizeClasses} w-full h-auto object-contain`}
+                  style={{ width: "100%", height: "auto" }}
+                />
               </div>
             </div>
           )}
@@ -193,8 +208,15 @@ export function McqRenderer({
           {question.imageUrl && question.imageLayout === 'below-text' && (
             <div className="ml-9 mt-3 max-w-full">
               <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-full">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={question.imageUrl} alt={`Question ${question.questionNumber}`} className={`${sizeClasses} w-full h-auto object-contain`} />
+                <Image
+                  src={question.imageUrl}
+                  alt={`Question ${question.questionNumber}`}
+                  width={0}
+                  height={0}
+                  sizes="(max-width: 768px) 100vw, 60vw"
+                  className={`${sizeClasses} w-full h-auto object-contain`}
+                  style={{ width: "100%", height: "auto" }}
+                />
               </div>
             </div>
           )}

@@ -15,6 +15,9 @@ import {
   validateQuestionDraft,
 } from '@/lib/live-exam-types';
 import { QuestionFields } from './question-fields';
+import TiptapMiniEditor from '@/components/admin/tiptap-mini-editor';
+import { FileUpload } from '@/components/admin/file-upload';
+import type { QuestionMedia } from '@/lib/live-exam-types';
 
 /**
  * TemplateEditor: the host-facing editor for a live exam template.
@@ -26,9 +29,9 @@ import { QuestionFields } from './question-fields';
  *
  * This replaces the old MCQ-only exam-editor. Save semantics: saving
  * re-creates every question (deletes existing then re-posts) to keep
- * orderIndex normalization simple for the user. This is safe because
- * templates only mutate in DRAFT and no session references them until
- * they are PUBLISHED and the host spawns a session.
+ * orderIndex normalization simple. This is safe because sessions
+ * snapshot their own copy of the questions at spawn time, so even
+ * editing a PUBLISHED template never touches in-flight or past sessions.
  */
 export function TemplateEditor({ initial }: { initial?: TemplateDraft }) {
   const router = useRouter();
@@ -94,7 +97,8 @@ export function TemplateEditor({ initial }: { initial?: TemplateDraft }) {
     },
     onSuccess: (templateId) => {
       queryClient.invalidateQueries({ queryKey: ['live-exam-templates', 'mine'] });
-      message.success('Draft saved');
+      queryClient.invalidateQueries({ queryKey: ['live-exam-template', templateId] });
+      message.success(isPublished ? 'Changes saved' : 'Draft saved');
       if (!draft.id) router.push(`/live/templates/${templateId}/edit`);
     },
     onError: (err: unknown) => {
@@ -180,6 +184,7 @@ export function TemplateEditor({ initial }: { initial?: TemplateDraft }) {
   const firstErrorIdx = validationErrors.findIndex((e) => e !== null);
   const canSave = draft.title.trim().length > 0 && firstErrorIdx === -1;
   const canPublish = canSave && draft.questions.length > 0;
+  const isPublished = draft.status === 'PUBLISHED';
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -189,29 +194,37 @@ export function TemplateEditor({ initial }: { initial?: TemplateDraft }) {
             {draft.id ? 'Edit template' : 'New template'}
           </h1>
           <p className="text-neutral-600 text-sm mt-1">
-            Design a reusable quiz template. Once published you can spawn
-            multiple live sessions from it.
+            {isPublished
+              ? 'This template is published. Edits apply to future sessions only — past and in-flight sessions keep their own snapshot.'
+              : 'Design a reusable quiz template. Once published you can spawn multiple live sessions from it.'}
           </p>
         </div>
         <div className="flex gap-2 flex-wrap">
           <button
             type="button"
-            className="brutal-btn px-4 py-2 bg-white flex items-center gap-2 disabled:opacity-50"
+            className={
+              isPublished
+                ? 'brutal-btn-fill px-4 py-2 flex items-center gap-2 disabled:opacity-50'
+                : 'brutal-btn px-4 py-2 bg-white flex items-center gap-2 disabled:opacity-50'
+            }
             disabled={!canSave || saveDraft.isPending}
             onClick={() => saveDraft.mutate()}
           >
-            <Save className="w-4 h-4" /> Save draft
+            <Save className="w-4 h-4" />
+            {isPublished ? 'Save changes' : 'Save draft'}
           </button>
-          <button
-            type="button"
-            className="brutal-btn-fill px-4 py-2 flex items-center gap-2 disabled:opacity-50"
-            disabled={!canPublish || publish.isPending}
-            onClick={() => publish.mutate()}
-            data-testid="publish-btn"
-          >
-            <Rocket className="w-4 h-4" />
-            {publish.isPending ? 'Publishing…' : 'Publish template'}
-          </button>
+          {!isPublished && (
+            <button
+              type="button"
+              className="brutal-btn-fill px-4 py-2 flex items-center gap-2 disabled:opacity-50"
+              disabled={!canPublish || publish.isPending}
+              onClick={() => publish.mutate()}
+              data-testid="publish-btn"
+            >
+              <Rocket className="w-4 h-4" />
+              {publish.isPending ? 'Publishing…' : 'Publish template'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -310,7 +323,7 @@ export function TemplateEditor({ initial }: { initial?: TemplateDraft }) {
                           </div>
                           <div className="truncate">
                             {i + 1}.{' '}
-                            {q.prompt || (
+                            {htmlToPreview(q.prompt) || (
                               <em className="text-neutral-400">empty</em>
                             )}
                           </div>
@@ -397,15 +410,29 @@ export function TemplateEditor({ initial }: { initial?: TemplateDraft }) {
 
           <div>
             <label className="text-xs font-bold uppercase">Prompt</label>
-            <textarea
-              value={currentQ.prompt}
-              onChange={(e) => updateQuestion({ prompt: e.target.value })}
-              rows={3}
-              className="w-full border-2 border-black rounded px-2 py-2 mt-1"
-              placeholder="What is the capital of France?"
-              data-testid={`q-${selectedIdx}-prompt`}
-            />
+            <div className="mt-1" data-testid={`q-${selectedIdx}-prompt`}>
+              <TiptapMiniEditor
+                content={currentQ.prompt}
+                onChange={(html) => updateQuestion({ prompt: html })}
+                placeholder="What is the capital of France?"
+              />
+            </div>
           </div>
+
+          <MediaFields
+            media={currentQ.payload.media}
+            onChange={(media) => {
+              const nextPayload = { ...currentQ.payload, media } as typeof currentQ.payload;
+              setDraft((d) => ({
+                ...d,
+                questions: d.questions.map((x, i) =>
+                  i === selectedIdx
+                    ? ({ ...x, payload: nextPayload } as QuestionDraft)
+                    : x,
+                ),
+              }));
+            }}
+          />
 
           <QuestionFields
             question={currentQ}
@@ -422,13 +449,13 @@ export function TemplateEditor({ initial }: { initial?: TemplateDraft }) {
             <label className="text-xs font-bold uppercase">
               Explanation (optional)
             </label>
-            <textarea
-              value={currentQ.explanation ?? ''}
-              onChange={(e) => updateQuestion({ explanation: e.target.value })}
-              rows={2}
-              className="w-full border-2 border-black rounded px-2 py-2 mt-1"
-              placeholder="Shown after the question locks."
-            />
+            <div className="mt-1">
+              <TiptapMiniEditor
+                content={currentQ.explanation ?? ''}
+                onChange={(html) => updateQuestion({ explanation: html })}
+                placeholder="Shown after the question locks."
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -457,6 +484,47 @@ function LabeledNumber({
         onChange={(e) => onChange(parseInt(e.target.value, 10) || min)}
         className="w-full border-2 border-black rounded px-2 py-1 mt-1"
       />
+    </div>
+  );
+}
+
+/** Strip HTML tags and collapse whitespace — for list/sidebar previews. */
+function htmlToPreview(html: string): string {
+  return html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function MediaFields({
+  media,
+  onChange,
+}: {
+  media: QuestionMedia | undefined;
+  onChange: (next: QuestionMedia | undefined) => void;
+}) {
+  const set = (patch: Partial<QuestionMedia>) => {
+    const merged: QuestionMedia = { ...(media ?? {}), ...patch };
+    if (!merged.imageUrl) delete merged.imageUrl;
+    if (!merged.audioUrl) delete merged.audioUrl;
+    onChange(merged.imageUrl || merged.audioUrl ? merged : undefined);
+  };
+  return (
+    <div>
+      <label className="text-xs font-bold uppercase">Media (optional)</label>
+      <div className="grid sm:grid-cols-2 gap-3 mt-1">
+        <FileUpload
+          label="Image"
+          accept="image/*"
+          maxSizeMB={5}
+          value={media?.imageUrl ?? null}
+          onChange={(url) => set({ imageUrl: url ?? undefined })}
+        />
+        <FileUpload
+          label="Audio"
+          accept="audio/*"
+          maxSizeMB={10}
+          value={media?.audioUrl ?? null}
+          onChange={(url) => set({ audioUrl: url ?? undefined })}
+        />
+      </div>
     </div>
   );
 }

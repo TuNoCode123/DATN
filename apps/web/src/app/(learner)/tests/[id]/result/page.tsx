@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { Suspense, useState, useEffect } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -375,22 +376,28 @@ function QuestionDetailModal({
             {/* Multiple images */}
             {hasMultiImages && passage!.images!.map((img, idx) => (
               <div key={idx} className="rounded-lg overflow-hidden mb-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={img.url}
                   alt={`Question ${question.questionNumber} - image ${idx + 1}`}
+                  width={0}
+                  height={0}
+                  sizes="(max-width: 768px) 100vw, 50vw"
                   className="w-full object-contain max-h-80"
+                  style={{ width: "100%", height: "auto", maxHeight: "20rem" }}
                 />
               </div>
             ))}
             {/* Single image */}
             {imageUrl && (
               <div className="rounded-lg overflow-hidden mb-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={imageUrl}
                   alt={`Question ${question.questionNumber}`}
+                  width={0}
+                  height={0}
+                  sizes="(max-width: 768px) 100vw, 50vw"
                   className="w-full object-contain max-h-80"
+                  style={{ width: "100%", height: "auto", maxHeight: "20rem" }}
                 />
               </div>
             )}

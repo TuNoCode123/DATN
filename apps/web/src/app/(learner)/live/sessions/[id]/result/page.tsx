@@ -10,8 +10,10 @@ import { useAuthStore } from '@/lib/auth-store';
 import {
   AnswerPayload,
   LiveExamQuestionType,
+  QuestionMedia,
   RevealPayload,
 } from '@/lib/live-exam-types';
+import { PromptWithMedia } from '@/components/live-exam/prompt-media';
 
 type PlayerResult = {
   session: { id: string; title: string; endedAt: string | null };
@@ -128,15 +130,17 @@ function PlayerResultView({ sessionId }: { sessionId: string }) {
         </div>
         <div className="flex justify-center gap-4 mt-4">
           <span
-            className="brutal-card px-4 py-2 bg-green-100 font-bold"
+            className="brutal-card px-4 py-2 bg-green-100 font-bold flex items-center gap-2"
             data-testid="correct-count"
           >
+            <Check className="w-4 h-4 text-green-700" />
             {data.me.correctCount}
           </span>
           <span
-            className="brutal-card px-4 py-2 bg-red-100 font-bold"
+            className="brutal-card px-4 py-2 bg-red-100 font-bold flex items-center gap-2"
             data-testid="wrong-count"
           >
+            <X className="w-4 h-4 text-red-700" />
             {data.me.wrongCount}
           </span>
         </div>
@@ -289,7 +293,11 @@ function BreakdownCard({ q }: { q: PlayerResult['breakdown'][number] }) {
           <div className="text-xs font-bold uppercase text-neutral-500">
             Q{q.orderIndex + 1} · {q.type.replace('_', ' ').toLowerCase()}
           </div>
-          <div className="font-bold">{q.prompt}</div>
+          <PromptWithMedia
+            prompt={q.prompt}
+            media={(q.payload as { media?: QuestionMedia } | null)?.media}
+            promptClassName="font-bold"
+          />
         </div>
         <div className="text-right text-xs">
           {q.answeredMs !== null && (
@@ -522,7 +530,11 @@ function HostResultView({ sessionId }: { sessionId: string }) {
               <div className="text-xs uppercase text-neutral-500 mb-1">
                 Q{q.orderIndex + 1} · {q.type.replace('_', ' ').toLowerCase()}
               </div>
-              <div className="font-bold">{q.prompt}</div>
+              <div
+                className="prose max-w-none font-bold break-words"
+                dangerouslySetInnerHTML={{ __html: q.prompt }}
+              />
+
               <div className="text-sm text-neutral-600 mt-1">
                 Correct rate: {(q.correctRate * 100).toFixed(0)}% · Avg speed:{' '}
                 {(q.avgAnsweredMs / 1000).toFixed(1)}s

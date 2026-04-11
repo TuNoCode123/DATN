@@ -119,7 +119,7 @@ function McqFields({
         {q.payload.options.map((o, idx) => (
           <label
             key={idx}
-            className={`brutal-card p-3 flex items-start gap-2 cursor-pointer ${
+            className={`brutal-card p-3 flex items-start gap-2 cursor-pointer focus-within:-translate-x-0.5 focus-within:-translate-y-0.5 ${
               q.payload.correctOptionId === o.id ? 'bg-green-100' : 'bg-white'
             }`}
           >
@@ -152,7 +152,8 @@ function McqFields({
                 type="text"
                 value={o.text}
                 onChange={(e) => setOption(idx, { text: e.target.value })}
-                className="w-full border-b-2 border-black bg-transparent px-1 mt-1"
+                placeholder="Option text"
+                className="w-full bg-transparent px-1 mt-1 focus:outline-none placeholder:text-neutral-400"
                 data-testid={`q-${testIdx}-option-${o.id}`}
               />
             </div>

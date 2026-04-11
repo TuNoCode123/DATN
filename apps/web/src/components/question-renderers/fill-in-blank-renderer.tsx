@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { RichContent } from "@/components/rich-content";
 import { AudioPlayer } from "@/components/ui/audio-player";
 import { getImageSizeClasses, getImageContainerClass } from "@/lib/image-size";
@@ -50,8 +51,15 @@ export function FillInBlankRenderer({
       {question.imageUrl && question.imageLayout !== 'below-text' && (
         <div className={`ml-9 mb-3 max-w-full ${question.imageLayout === 'horizontal' || question.imageLayout === 'beside-left' ? 'float-left mr-3 w-2/5' : question.imageLayout === 'beside-right' ? 'float-right ml-3 w-2/5' : ''}`}>
           <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-full">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={question.imageUrl} alt={`Question ${question.questionNumber}`} className={`${sizeClasses} w-full h-auto object-contain`} />
+            <Image
+              src={question.imageUrl}
+              alt={`Question ${question.questionNumber}`}
+              width={0}
+              height={0}
+              sizes="(max-width: 768px) 100vw, 60vw"
+              className={`${sizeClasses} w-full h-auto object-contain`}
+              style={{ width: "100%", height: "auto" }}
+            />
           </div>
         </div>
       )}
@@ -79,8 +87,15 @@ export function FillInBlankRenderer({
       {question.imageUrl && question.imageLayout === 'below-text' && (
         <div className="ml-9 mt-3 max-w-full">
           <div className="rounded-lg border border-slate-200 overflow-hidden bg-slate-50 inline-block max-w-full">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={question.imageUrl} alt={`Question ${question.questionNumber}`} className={`${sizeClasses} w-full h-auto object-contain`} />
+            <Image
+              src={question.imageUrl}
+              alt={`Question ${question.questionNumber}`}
+              width={0}
+              height={0}
+              sizes="(max-width: 768px) 100vw, 60vw"
+              className={`${sizeClasses} w-full h-auto object-contain`}
+              style={{ width: "100%", height: "auto" }}
+            />
           </div>
         </div>
       )}

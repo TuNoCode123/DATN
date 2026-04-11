@@ -9,12 +9,9 @@ import {
 import { UploadService } from './upload.service';
 import { PresignRequestDto } from './dto/presign.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../auth/guards/roles.guard';
-import { Roles } from '../auth/decorators/roles.decorator';
 
 @Controller('admin/upload')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles('ADMIN')
+@UseGuards(JwtAuthGuard)
 export class UploadController {
   constructor(private service: UploadService) {}
 
