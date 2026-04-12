@@ -25,6 +25,7 @@ import {
   CreditCard,
   Languages,
   Newspaper,
+  ShieldAlert,
 } from "lucide-react";
 
 const navItems = [
@@ -35,6 +36,7 @@ const navItems = [
   { icon: Mic, label: "Pronunciation", href: "/admin-pronunciation-topics" },
   { icon: Languages, label: "Translation", href: "/admin-translation-topics" },
   { icon: Newspaper, label: "Blog", href: "/admin-blog" },
+  { icon: ShieldAlert, label: "Comments", href: "/admin-comments" },
   { icon: BarChart3, label: "Results", href: "/admin-results" },
   { icon: CreditCard, label: "Credits", href: "/admin-credits" },
   { icon: TrendingUp, label: "Analytics", href: "/admin-analytics" },

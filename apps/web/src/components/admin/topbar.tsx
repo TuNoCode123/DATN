@@ -21,6 +21,7 @@ const pageTitles: Record<string, { title: string; description: string }> = {
   "/admin-questions": { title: "Question Bank", description: "Build your question library" },
   "/admin-tests": { title: "Test Management", description: "Create and publish assessments" },
   "/admin-results": { title: "Test Results", description: "Review student performance" },
+  "/admin-comments": { title: "Comment Moderation", description: "Review reported and pending comments" },
   "/admin-analytics": { title: "Analytics", description: "Insights and learning trends" },
   "/admin-settings": { title: "Settings", description: "Account and platform preferences" },
 };

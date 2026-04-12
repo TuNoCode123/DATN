@@ -13,6 +13,7 @@ interface CommentRepliesProps {
   onEdit: (commentId: string, body: string) => void;
   onDelete: (commentId: string) => void;
   onLike: (commentId: string, liked: boolean) => void;
+  onReport: (commentId: string) => void;
   isReplyPending?: boolean;
   isEditPending?: boolean;
 }
@@ -24,6 +25,7 @@ export function CommentReplies({
   onEdit,
   onDelete,
   onLike,
+  onReport,
   isReplyPending,
   isEditPending,
 }: CommentRepliesProps) {
@@ -56,6 +58,7 @@ export function CommentReplies({
           onEdit={onEdit}
           onDelete={onDelete}
           onLike={onLike}
+          onReport={onReport}
           isReplyPending={isReplyPending}
           isEditPending={isEditPending}
         />

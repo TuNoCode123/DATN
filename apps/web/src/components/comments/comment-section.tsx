@@ -13,6 +13,7 @@ import {
   useUpdateComment,
   useDeleteComment,
   useLikeComment,
+  useReportComment,
 } from './use-comments';
 
 interface CommentSectionProps {
@@ -36,6 +37,7 @@ export function CommentSection({ testId }: CommentSectionProps) {
   const updateMutation = useUpdateComment(testId);
   const deleteMutation = useDeleteComment(testId);
   const likeMutation = useLikeComment(testId);
+  const reportMutation = useReportComment(testId);
 
   const comments = data?.pages.flatMap((p) => p.data) ?? [];
   const total = data?.pages[0]?.total ?? 0;
@@ -72,6 +74,20 @@ export function CommentSection({ testId }: CommentSectionProps) {
   const handleLike = (commentId: string, liked: boolean) => {
     requireAuth(() => {
       likeMutation.mutate({ commentId, liked });
+    });
+  };
+
+  const handleReport = (commentId: string) => {
+    requireAuth(() => {
+      const reason = prompt('Why are you reporting this comment?');
+      if (!reason?.trim()) return;
+      reportMutation.mutate(
+        { commentId, reason: reason.trim() },
+        {
+          onSuccess: () => message.success('Comment reported'),
+          onError: () => message.error('Already reported or failed'),
+        },
+      );
     });
   };
 
@@ -122,6 +138,7 @@ export function CommentSection({ testId }: CommentSectionProps) {
               onEdit={handleEdit}
               onDelete={handleDelete}
               onLike={handleLike}
+              onReport={handleReport}
               isReplyPending={createMutation.isPending}
               isEditPending={updateMutation.isPending}
             />

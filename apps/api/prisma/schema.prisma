@@ -178,6 +178,13 @@ enum BlogPostStatus {
   SCHEDULED
 }
 
+enum CommentStatus {
+  PUBLISHED
+  PENDING
+  HIDDEN
+  DELETED
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -210,6 +217,8 @@ model User {
   liveExamParticipants   LiveExamParticipant[]
   paymentOrders          PaymentOrder[]
   blogPosts              BlogPost[]
+  commentReports         CommentReport[]
+  trustScore             Int              @default(0)
 
   @@map("users")
 }
@@ -433,25 +442,29 @@ model HskVocabulary {
 }
 
 model Comment {
-  id         String    @id @default(cuid())
-  testId     String
-  userId     String
-  parentId   String?
-  body       String
-  likeCount  Int       @default(0)
-  replyCount Int       @default(0)
-  depth      Int       @default(0)
-  deletedAt  DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id          String        @id @default(cuid())
+  testId      String
+  userId      String
+  parentId    String?
+  body        String
+  status      CommentStatus @default(PUBLISHED)
+  likeCount   Int           @default(0)
+  replyCount  Int           @default(0)
+  reportCount Int           @default(0)
+  depth       Int           @default(0)
+  deletedAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
-  test    Test          @relation(fields: [testId], references: [id], onDelete: Cascade)
-  user    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  parent  Comment?      @relation("CommentReplies", fields: [parentId], references: [id])
-  replies Comment[]     @relation("CommentReplies")
+  test    Test            @relation(fields: [testId], references: [id], onDelete: Cascade)
+  user    User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parent  Comment?        @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[]       @relation("CommentReplies")
   likes   CommentLike[]
+  reports CommentReport[]
 
   @@index([testId, parentId, createdAt])
+  @@index([status])
   @@map("comments")
 }
 
@@ -464,6 +477,21 @@ model CommentLike {
 
   @@id([userId, commentId])
   @@map("comment_likes")
+}
+
+model CommentReport {
+  id        String   @id @default(cuid())
+  commentId String
+  userId    String
+  reason    String
+  createdAt DateTime @default(now())
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@index([commentId])
+  @@map("comment_reports")
 }
 
 // ─── Chat Models ────────────────────────────────────────

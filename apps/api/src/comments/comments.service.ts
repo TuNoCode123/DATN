@@ -6,12 +6,17 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ModerationService } from './moderation.service';
+import { CommentStatus } from '@prisma/client';
 
 const MAX_DEPTH = 2;
 
 @Injectable()
 export class CommentsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private moderation: ModerationService,
+  ) {}
 
   async findByTest(
     testId: string,
@@ -23,35 +28,23 @@ export class CommentsService {
     const skip = (page - 1) * limit;
     const orderBy = sort === 'newest' ? 'desc' : 'asc';
 
+    const visibleFilter = this.visibleFilter(userId);
+
     const [comments, total] = await Promise.all([
       this.prisma.comment.findMany({
         where: {
           testId,
           parentId: null,
-          // Include soft-deleted root comments that still have replies
-          OR: [
-            { deletedAt: null },
-            { replyCount: { gt: 0 } },
-          ],
+          ...visibleFilter,
         },
         include: {
           user: { select: { id: true, displayName: true, avatarUrl: true } },
           replies: {
-            where: {
-              OR: [
-                { deletedAt: null },
-                { replyCount: { gt: 0 } },
-              ],
-            },
+            where: visibleFilter,
             include: {
               user: { select: { id: true, displayName: true, avatarUrl: true } },
               replies: {
-                where: {
-                  OR: [
-                    { deletedAt: null },
-                    { replyCount: { gt: 0 } },
-                  ],
-                },
+                where: visibleFilter,
                 include: {
                   user: { select: { id: true, displayName: true, avatarUrl: true } },
                 },
@@ -71,21 +64,17 @@ export class CommentsService {
         where: {
           testId,
           parentId: null,
-          OR: [
-            { deletedAt: null },
-            { replyCount: { gt: 0 } },
-          ],
+          ...visibleFilter,
         },
       }),
     ]);
 
-    // Collect all comment IDs to batch-query likes
     const allIds = this.collectCommentIds(comments);
     const likedSet = userId
       ? await this.getLikedSet(userId, allIds)
       : new Set<string>();
 
-    const data = comments.map((c) => this.mapComment(c, likedSet));
+    const data = comments.map((c) => this.mapComment(c, likedSet, userId));
 
     return { data, total, page, limit };
   }
@@ -102,25 +91,18 @@ export class CommentsService {
     if (!parent) throw new NotFoundException('Comment not found');
 
     const skip = (page - 1) * limit;
+    const visibleFilter = this.visibleFilter(userId);
 
     const [replies, total] = await Promise.all([
       this.prisma.comment.findMany({
         where: {
           parentId: commentId,
-          OR: [
-            { deletedAt: null },
-            { replyCount: { gt: 0 } },
-          ],
+          ...visibleFilter,
         },
         include: {
           user: { select: { id: true, displayName: true, avatarUrl: true } },
           replies: {
-            where: {
-              OR: [
-                { deletedAt: null },
-                { replyCount: { gt: 0 } },
-              ],
-            },
+            where: visibleFilter,
             include: {
               user: { select: { id: true, displayName: true, avatarUrl: true } },
             },
@@ -135,10 +117,7 @@ export class CommentsService {
       this.prisma.comment.count({
         where: {
           parentId: commentId,
-          OR: [
-            { deletedAt: null },
-            { replyCount: { gt: 0 } },
-          ],
+          ...visibleFilter,
         },
       }),
     ]);
@@ -148,7 +127,7 @@ export class CommentsService {
       ? await this.getLikedSet(userId, allIds)
       : new Set<string>();
 
-    const data = replies.map((r) => this.mapComment(r, likedSet));
+    const data = replies.map((r) => this.mapComment(r, likedSet, userId));
 
     return { data, total, page, limit };
   }
@@ -172,14 +151,10 @@ export class CommentsService {
 
       depth = parent.depth + 1;
 
-      // Flatten deep replies: if replying to a depth-1+ comment,
-      // attach to depth-1 parent so we don't exceed max depth
       if (depth > MAX_DEPTH) {
-        // Find the depth-1 ancestor
         if (parent.depth >= 1 && parent.parentId) {
           actualParentId = parent.parentId;
-          depth = parent.depth; // same depth as parent (stays at depth 1 or 2)
-          // Recalculate: attach to the level-1 parent
+          depth = parent.depth;
           const grandParent = await this.prisma.comment.findUnique({
             where: { id: parent.parentId },
           });
@@ -197,6 +172,8 @@ export class CommentsService {
       }
     }
 
+    const { status, reason } = await this.moderation.moderate(userId, body);
+
     const comment = await this.prisma.$transaction(async (tx) => {
       const created = await tx.comment.create({
         data: {
@@ -205,13 +182,13 @@ export class CommentsService {
           body,
           parentId: actualParentId,
           depth,
+          status,
         },
         include: {
           user: { select: { id: true, displayName: true, avatarUrl: true } },
         },
       });
 
-      // Increment parent's replyCount
       if (actualParentId) {
         await tx.comment.update({
           where: { id: actualParentId },
@@ -219,20 +196,27 @@ export class CommentsService {
         });
       }
 
-      // Increment test's commentCount
-      await tx.test.update({
-        where: { id: testId },
-        data: { commentCount: { increment: 1 } },
-      });
+      if (status === CommentStatus.PUBLISHED) {
+        await tx.test.update({
+          where: { id: testId },
+          data: { commentCount: { increment: 1 } },
+        });
+      }
 
       return created;
     });
 
+    if (status === CommentStatus.PUBLISHED) {
+      this.moderation.incrementTrust(userId).catch(() => {});
+    }
+
     return {
       ...comment,
+      status: comment.status,
       isDeleted: false,
       likedByMe: false,
       replies: [],
+      moderationReason: status !== CommentStatus.PUBLISHED ? reason : undefined,
     };
   }
 
@@ -244,13 +228,19 @@ export class CommentsService {
     if (comment.userId !== userId) {
       throw new ForbiddenException("Cannot edit another user's comment");
     }
-    if (comment.deletedAt) {
+    if (comment.deletedAt || comment.status === CommentStatus.DELETED) {
       throw new BadRequestException('Cannot edit a deleted comment');
     }
 
+    const spamCheck = this.moderation.checkSpam(body);
+    const blacklistCheck = this.moderation.checkBlacklist(body);
+    const newStatus = (spamCheck || blacklistCheck)
+      ? CommentStatus.PENDING
+      : comment.status;
+
     const updated = await this.prisma.comment.update({
       where: { id: commentId },
-      data: { body },
+      data: { body, status: newStatus },
       include: {
         user: { select: { id: true, displayName: true, avatarUrl: true } },
       },
@@ -259,7 +249,7 @@ export class CommentsService {
     return {
       ...updated,
       isDeleted: false,
-      likedByMe: false, // caller can re-check
+      likedByMe: false,
     };
   }
 
@@ -271,19 +261,16 @@ export class CommentsService {
     if (comment.userId !== userId) {
       throw new ForbiddenException("Cannot delete another user's comment");
     }
-    if (comment.deletedAt) {
+    if (comment.deletedAt || comment.status === CommentStatus.DELETED) {
       throw new BadRequestException('Comment already deleted');
     }
 
     if (comment.replyCount === 0) {
-      // Hard delete — no replies to preserve
       await this.prisma.$transaction(async (tx) => {
-        // Delete associated likes
         await tx.commentLike.deleteMany({ where: { commentId } });
-
+        await tx.commentReport.deleteMany({ where: { commentId } });
         await tx.comment.delete({ where: { id: commentId } });
 
-        // Decrement parent's replyCount
         if (comment.parentId) {
           await tx.comment.update({
             where: { id: comment.parentId },
@@ -291,18 +278,45 @@ export class CommentsService {
           });
         }
 
-        await tx.test.update({
-          where: { id: comment.testId },
-          data: { commentCount: { decrement: 1 } },
-        });
+        if (comment.status === CommentStatus.PUBLISHED) {
+          await tx.test.update({
+            where: { id: comment.testId },
+            data: { commentCount: { decrement: 1 } },
+          });
+        }
       });
     } else {
-      // Soft delete — preserve thread
       await this.prisma.comment.update({
         where: { id: commentId },
-        data: { deletedAt: new Date() },
+        data: { deletedAt: new Date(), status: CommentStatus.DELETED },
       });
     }
+  }
+
+  async report(commentId: string, userId: string, reason: string) {
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment) throw new NotFoundException('Comment not found');
+    if (comment.userId === userId) {
+      throw new BadRequestException('Cannot report your own comment');
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.commentReport.create({
+          data: { commentId, userId, reason },
+        });
+        await tx.comment.update({
+          where: { id: commentId },
+          data: { reportCount: { increment: 1 } },
+        });
+      });
+    } catch {
+      throw new ConflictException('Already reported this comment');
+    }
+
+    await this.moderation.handleReport(commentId);
   }
 
   async like(commentId: string, userId: string) {
@@ -310,8 +324,8 @@ export class CommentsService {
       where: { id: commentId },
     });
     if (!comment) throw new NotFoundException('Comment not found');
-    if (comment.deletedAt) {
-      throw new BadRequestException('Cannot like a deleted comment');
+    if (comment.deletedAt || comment.status !== CommentStatus.PUBLISHED) {
+      throw new BadRequestException('Cannot like this comment');
     }
 
     try {
@@ -345,7 +359,145 @@ export class CommentsService {
     }
   }
 
+  // ─── Admin Methods ─────────────────────────────────────
+
+  async findPendingQueue(page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const [comments, total] = await Promise.all([
+      this.prisma.comment.findMany({
+        where: {
+          status: { in: [CommentStatus.PENDING, CommentStatus.HIDDEN] },
+        },
+        include: {
+          user: { select: { id: true, displayName: true, avatarUrl: true } },
+          reports: {
+            include: {
+              user: { select: { id: true, displayName: true } },
+            },
+            orderBy: { createdAt: 'desc' },
+          },
+        },
+        orderBy: [
+          { reportCount: 'desc' },
+          { createdAt: 'desc' },
+        ],
+        skip,
+        take: limit,
+      }),
+      this.prisma.comment.count({
+        where: {
+          status: { in: [CommentStatus.PENDING, CommentStatus.HIDDEN] },
+        },
+      }),
+    ]);
+
+    return { data: comments, total, page, limit };
+  }
+
+  async adminApprove(commentId: string) {
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment) throw new NotFoundException('Comment not found');
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.comment.update({
+        where: { id: commentId },
+        data: { status: CommentStatus.PUBLISHED },
+      });
+
+      if (comment.status !== CommentStatus.PUBLISHED) {
+        await tx.test.update({
+          where: { id: comment.testId },
+          data: { commentCount: { increment: 1 } },
+        });
+      }
+    });
+
+    this.moderation.incrementTrust(comment.userId, 2).catch(() => {});
+  }
+
+  async adminReject(commentId: string) {
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment) throw new NotFoundException('Comment not found');
+
+    await this.prisma.comment.update({
+      where: { id: commentId },
+      data: { status: CommentStatus.HIDDEN },
+    });
+
+    this.moderation.decrementTrust(comment.userId, 2).catch(() => {});
+  }
+
+  async adminDelete(commentId: string) {
+    const comment = await this.prisma.comment.findUnique({
+      where: { id: commentId },
+    });
+    if (!comment) throw new NotFoundException('Comment not found');
+
+    const wasPublished = comment.status === CommentStatus.PUBLISHED;
+
+    if (comment.replyCount === 0) {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.commentLike.deleteMany({ where: { commentId } });
+        await tx.commentReport.deleteMany({ where: { commentId } });
+        await tx.comment.delete({ where: { id: commentId } });
+
+        if (comment.parentId) {
+          await tx.comment.update({
+            where: { id: comment.parentId },
+            data: { replyCount: { decrement: 1 } },
+          });
+        }
+
+        if (wasPublished) {
+          await tx.test.update({
+            where: { id: comment.testId },
+            data: { commentCount: { decrement: 1 } },
+          });
+        }
+      });
+    } else {
+      await this.prisma.$transaction(async (tx) => {
+        await tx.comment.update({
+          where: { id: commentId },
+          data: { deletedAt: new Date(), status: CommentStatus.DELETED },
+        });
+
+        if (wasPublished) {
+          await tx.test.update({
+            where: { id: comment.testId },
+            data: { commentCount: { decrement: 1 } },
+          });
+        }
+      });
+    }
+
+    this.moderation.decrementTrust(comment.userId, 3).catch(() => {});
+  }
+
   // ─── Helpers ────────────────────────────────────────────
+
+  private visibleFilter(userId?: string) {
+    if (userId) {
+      return {
+        OR: [
+          { status: CommentStatus.PUBLISHED, deletedAt: null },
+          { status: CommentStatus.PUBLISHED, replyCount: { gt: 0 } },
+          { userId, status: CommentStatus.PENDING, deletedAt: null },
+        ],
+      };
+    }
+    return {
+      OR: [
+        { status: CommentStatus.PUBLISHED, deletedAt: null },
+        { status: CommentStatus.PUBLISHED, replyCount: { gt: 0 } },
+      ],
+    };
+  }
 
   private collectCommentIds(comments: any[]): string[] {
     const ids: string[] = [];
@@ -372,26 +524,30 @@ export class CommentsService {
     return new Set(likes.map((l) => l.commentId));
   }
 
-  private mapComment(comment: any, likedSet: Set<string>): any {
-    const isDeleted = !!comment.deletedAt;
+  private mapComment(comment: any, likedSet: Set<string>, userId?: string): any {
+    const isDeleted = !!comment.deletedAt || comment.status === CommentStatus.DELETED;
+    const isPending = comment.status === CommentStatus.PENDING;
+    const isOwn = userId && comment.userId === userId;
 
     return {
       id: comment.id,
       testId: comment.testId,
       parentId: comment.parentId,
       body: isDeleted ? 'This comment has been deleted.' : comment.body,
+      status: comment.status,
       likeCount: isDeleted ? 0 : comment.likeCount,
       replyCount: comment.replyCount,
       depth: comment.depth,
       createdAt: comment.createdAt,
       updatedAt: comment.updatedAt,
       isDeleted,
+      isPending: isPending && isOwn,
       user: isDeleted
         ? { id: comment.userId, displayName: null, avatarUrl: null }
         : comment.user,
       likedByMe: likedSet.has(comment.id),
       replies: comment.replies
-        ? comment.replies.map((r: any) => this.mapComment(r, likedSet))
+        ? comment.replies.map((r: any) => this.mapComment(r, likedSet, userId))
         : [],
     };
   }
