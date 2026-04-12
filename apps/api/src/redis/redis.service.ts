@@ -1,13 +1,15 @@
 import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 
 @Injectable()
 export class RedisService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisService.name);
   private readonly client: Redis;
+  private readonly redisUrl: string;
 
   constructor() {
-    this.client = new Redis(process.env.REDIS_URL || 'redis://localhost:6379', {
+    this.redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+    this.client = new Redis(this.redisUrl, {
       maxRetriesPerRequest: 3,
       retryStrategy(times) {
         return Math.min(times * 200, 2000);
@@ -20,6 +22,22 @@ export class RedisService implements OnModuleDestroy {
 
   getClient(): Redis {
     return this.client;
+  }
+
+  /** Connection options suitable for BullMQ or other libs that create their own connections. */
+  getConnectionOptions(): { host: string; port: number; password?: string; db: number } {
+    const opts = this.client.options;
+    return {
+      host: opts.host || 'localhost',
+      port: opts.port || 6379,
+      password: opts.password,
+      db: opts.db || 0,
+    };
+  }
+
+  /** Create a fresh duplicate ioredis client (for pub/sub adapters). */
+  duplicate(): Redis {
+    return this.client.duplicate();
   }
 
   // ── Key-Value ────────────────────────────────────

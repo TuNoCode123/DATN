@@ -330,7 +330,7 @@ export default function PlayPage({
   }
 
   if (phase === 'INTERSTITIAL' && interstitial) {
-    return <InterstitialView reveal={interstitial} />;
+    return <InterstitialView reveal={interstitial} isLastQuestion={questionIndex + 1 >= totalQuestions} />;
   }
 
   if (!question) return <p>Loading…</p>;
@@ -437,7 +437,7 @@ export default function PlayPage({
       {phase === 'LOCKED' && explanation && (
         <div className="brutal-card p-4 mt-4 bg-yellow-50">
           <div className="text-xs font-bold uppercase mb-1">Explanation</div>
-          <p className="text-sm">{explanation}</p>
+          <div className="text-sm prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: explanation }} />
         </div>
       )}
     </div>
@@ -446,7 +446,9 @@ export default function PlayPage({
 
 function InterstitialView({
   reveal,
+  isLastQuestion,
 }: {
+  isLastQuestion: boolean;
   reveal: {
     top10: LeaderboardRow[];
     yourRank: number | null;
@@ -520,7 +522,7 @@ function InterstitialView({
       </div>
 
       <p className="text-center text-sm text-neutral-500 mt-3">
-        Next question in {reveal.interstitialSec}s…
+        {isLastQuestion ? 'Final results' : 'Next question'} in {reveal.interstitialSec}s…
       </p>
     </div>
   );

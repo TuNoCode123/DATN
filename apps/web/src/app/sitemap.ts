@@ -1,13 +1,13 @@
 import type { MetadataRoute } from 'next';
 import { SITE_URL } from '@/lib/seo';
-import { BLOG_POSTS } from '@/content/blog-posts';
+import { getBlogSitemap } from '@/lib/blog-server';
 import { HSK_LEVELS } from '@/content/hsk-levels';
 
 // Bumped manually when static landing pages get a meaningful content update.
 // Avoids reporting `new Date()` on every crawl, which Google ignores.
 const STATIC_PAGES_LAST_UPDATED = new Date('2026-04-12');
 
-export default function sitemap(): MetadataRoute.Sitemap {
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticRoutes: MetadataRoute.Sitemap = [
     // Homepage
     {
@@ -89,9 +89,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     priority: 0.7,
   }));
 
-  const blogRoutes: MetadataRoute.Sitemap = BLOG_POSTS.map((post) => ({
+  const blogPosts = await getBlogSitemap();
+  const blogRoutes: MetadataRoute.Sitemap = blogPosts.map((post) => ({
     url: `${SITE_URL}/blog/${post.slug}`,
-    lastModified: new Date(post.updatedAt ?? post.publishedAt),
+    lastModified: new Date(post.updatedAt),
     changeFrequency: 'monthly',
     priority: 0.6,
   }));

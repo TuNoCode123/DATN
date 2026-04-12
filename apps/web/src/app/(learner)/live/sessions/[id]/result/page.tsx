@@ -311,7 +311,7 @@ function BreakdownCard({ q }: { q: PlayerResult['breakdown'][number] }) {
       <BreakdownBody q={q} />
       {q.explanation && (
         <div className="mt-2 text-xs text-neutral-600">
-          <strong>Why:</strong> {q.explanation}
+          <strong>Why:</strong> <span dangerouslySetInnerHTML={{ __html: q.explanation }} />
         </div>
       )}
     </div>

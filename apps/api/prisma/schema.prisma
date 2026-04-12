@@ -172,6 +172,12 @@ enum LiveExamQuestionType {
   SENTENCE_REORDER
 }
 
+enum BlogPostStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+}
+
 // ─── Models ──────────────────────────────────────────────
 
 model User {
@@ -203,6 +209,7 @@ model User {
   liveExamSessionsHosted LiveExamSession[]      @relation("LiveExamSessionHost")
   liveExamParticipants   LiveExamParticipant[]
   paymentOrders          PaymentOrder[]
+  blogPosts              BlogPost[]
 
   @@map("users")
 }
@@ -235,7 +242,8 @@ model Tag {
   name String @unique
   slug String @unique
 
-  tests TestTag[]
+  tests     TestTag[]
+  blogPosts BlogPost[] @relation("BlogPostTags")
 
   @@map("tags")
 }
@@ -1039,4 +1047,41 @@ model LiveExamEvent {
 
   @@index([sessionId, createdAt])
   @@map("live_exam_events")
+}
+
+// ─── Blog Models ────────────────────────────────────────
+
+model BlogPost {
+  id              String         @id @default(cuid())
+  slug            String         @unique
+  title           String
+  excerpt         String
+  // Sanitized HTML rendered on the public page (TipTap output, server-sanitized)
+  contentHtml     String
+  // Raw TipTap JSON doc, used to losslessly re-load the editor
+  contentJson     Json
+  thumbnailUrl    String?
+  status          BlogPostStatus @default(DRAFT)
+
+  // SEO
+  metaTitle       String?
+  metaDescription String?
+
+  // Lifecycle
+  publishedAt     DateTime?
+  scheduledFor    DateTime?
+
+  // Stats
+  viewCount       Int            @default(0)
+
+  authorId        String
+  author          User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  tags            Tag[]          @relation("BlogPostTags")
+
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  @@index([status, publishedAt])
+  @@map("blog_posts")
 }

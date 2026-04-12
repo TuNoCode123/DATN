@@ -1,10 +1,13 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import type { Metadata } from 'next';
-import { ArrowRight, Clock } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Navbar, Footer, SectionBadge } from '@/components/landing';
 import { JsonLd } from '@/components/seo/json-ld';
 import { buildMetadata, breadcrumbSchema } from '@/lib/seo';
-import { BLOG_POSTS } from '@/content/blog-posts';
+import { getBlogList } from '@/lib/blog-server';
+
+export const revalidate = 300;
 
 export const metadata: Metadata = buildMetadata({
   title: 'Language Exam Blog — IELTS, TOEIC, HSK Tips & Strategies',
@@ -20,18 +23,8 @@ export const metadata: Metadata = buildMetadata({
   ],
 });
 
-const categoryColors: Record<string, string> = {
-  IELTS: 'bg-rose-100 text-rose-700',
-  TOEIC: 'bg-sky-100 text-sky-700',
-  HSK: 'bg-violet-100 text-violet-700',
-  'AI Tools': 'bg-fuchsia-100 text-fuchsia-700',
-  'Study Tips': 'bg-emerald-100 text-emerald-700',
-};
-
-export default function BlogIndexPage() {
-  const posts = [...BLOG_POSTS].sort(
-    (a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime(),
-  );
+export default async function BlogIndexPage() {
+  const { data: posts } = await getBlogList({ page: 1, limit: 24 });
 
   return (
     <div className="min-h-screen bg-cream">
@@ -43,7 +36,7 @@ export default function BlogIndexPage() {
       />
       <Navbar />
 
-      <section className="pt-32 pb-16 px-4 sm:px-6 lg:px-8">
+      <section className="pt-32 pb-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto text-center">
           <SectionBadge text="Blog" />
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-foreground mt-4 mb-6 leading-[1.1]">
@@ -59,41 +52,70 @@ export default function BlogIndexPage() {
 
       <section className="pb-20 px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto space-y-5">
+          {posts.length === 0 && (
+            <div className="brutal-card p-10 text-center text-slate-500">
+              No posts published yet — check back soon.
+            </div>
+          )}
+
           {posts.map((post) => (
-            <Link
-              key={post.slug}
-              href={`/blog/${post.slug}`}
-              className="brutal-card p-6 block group"
-            >
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <span
-                  className={`text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border border-border-strong/20 ${
-                    categoryColors[post.category] ?? 'bg-slate-100'
-                  }`}
-                >
-                  {post.category}
-                </span>
-                <span className="text-xs text-slate-500 flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> {post.readingMinutes} min read
-                </span>
-                <span className="text-xs text-slate-400">
-                  {new Date(post.publishedAt).toLocaleDateString('en-US', {
-                    month: 'short',
-                    day: 'numeric',
-                    year: 'numeric',
-                  })}
-                </span>
+            <article key={post.slug} className="brutal-card p-6 sm:p-7 group">
+              <div className="flex flex-col sm:flex-row gap-5">
+                {post.thumbnailUrl && (
+                  <Link
+                    href={`/blog/${post.slug}`}
+                    className="relative w-full sm:w-40 h-40 sm:h-32 shrink-0 overflow-hidden rounded-md border-2 border-border"
+                  >
+                    <Image
+                      src={post.thumbnailUrl}
+                      alt={post.title}
+                      fill
+                      unoptimized
+                      className="object-cover"
+                    />
+                  </Link>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-3">
+                    {post.tags.slice(0, 3).map((t) => (
+                      <Link
+                        key={t.id}
+                        href={`/blog/tag/${t.slug}`}
+                        className="text-[10px] font-bold uppercase tracking-wide px-2 py-1 rounded-full bg-secondary text-secondary-foreground border border-teal-200"
+                      >
+                        {t.name}
+                      </Link>
+                    ))}
+                    {post.publishedAt && (
+                      <span className="text-xs text-slate-400">
+                        {new Date(post.publishedAt).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <h2 className="text-2xl font-extrabold text-foreground mb-2 line-clamp-2">
+                    <Link
+                      href={`/blog/${post.slug}`}
+                      className="hover:text-primary transition-colors"
+                    >
+                      {post.title}
+                    </Link>
+                  </h2>
+                  <p className="text-slate-600 leading-relaxed text-sm mb-3 line-clamp-2">
+                    {post.excerpt}
+                  </p>
+                  <Link
+                    href={`/blog/${post.slug}`}
+                    className="inline-flex items-center gap-2 text-primary font-semibold text-sm hover:gap-3 transition-all"
+                  >
+                    Read article <ArrowRight className="w-4 h-4" />
+                  </Link>
+                </div>
               </div>
-              <h2 className="text-2xl font-extrabold text-foreground mb-2 group-hover:text-primary transition-colors">
-                {post.title}
-              </h2>
-              <p className="text-slate-600 leading-relaxed text-sm mb-3">
-                {post.description}
-              </p>
-              <div className="flex items-center gap-2 text-primary font-semibold text-sm group-hover:gap-3 transition-all">
-                Read article <ArrowRight className="w-4 h-4" />
-              </div>
-            </Link>
+            </article>
           ))}
         </div>
       </section>

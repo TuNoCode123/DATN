@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
-import { RedisIoAdapter } from './chat/redis-io.adapter';
+import { RedisIoAdapter } from './redis/redis-io.adapter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { rawBody: true });

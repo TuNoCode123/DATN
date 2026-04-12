@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
-import { ArrowRight, Clock, Calendar } from 'lucide-react';
+import { ArrowRight, Calendar } from 'lucide-react';
 import { Navbar, Footer } from '@/components/landing';
 import { JsonLd } from '@/components/seo/json-ld';
 import {
@@ -9,13 +10,12 @@ import {
   breadcrumbSchema,
   articleSchema,
 } from '@/lib/seo';
-import { BLOG_POSTS, getPostBySlug } from '@/content/blog-posts';
+import { getBlogPost, getRelatedPosts } from '@/lib/blog-server';
+import { PostRenderer } from '@/components/blog/post-renderer';
+
+export const revalidate = 300;
 
 type Params = { slug: string };
-
-export function generateStaticParams(): Params[] {
-  return BLOG_POSTS.map((p) => ({ slug: p.slug }));
-}
 
 export async function generateMetadata({
   params,
@@ -23,17 +23,18 @@ export async function generateMetadata({
   params: Promise<Params>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const post = getPostBySlug(slug);
+  const post = await getBlogPost(slug);
   if (!post) return {};
 
   return buildMetadata({
-    title: post.title,
-    description: post.description,
+    title: post.metaTitle ?? post.title,
+    description: post.metaDescription ?? post.excerpt,
     path: `/blog/${post.slug}`,
-    keywords: post.tags,
+    keywords: post.tags.map((t) => t.name),
     type: 'article',
-    publishedTime: post.publishedAt,
+    publishedTime: post.publishedAt ?? undefined,
     modifiedTime: post.updatedAt,
+    ogImage: post.thumbnailUrl ?? undefined,
   });
 }
 
@@ -43,10 +44,10 @@ export default async function BlogPostPage({
   params: Promise<Params>;
 }) {
   const { slug } = await params;
-  const post = getPostBySlug(slug);
+  const post = await getBlogPost(slug);
   if (!post) notFound();
 
-  const related = BLOG_POSTS.filter((p) => p.slug !== post.slug).slice(0, 3);
+  const related = await getRelatedPosts(slug);
 
   return (
     <div className="min-h-screen bg-cream">
@@ -59,11 +60,12 @@ export default async function BlogPostPage({
           ]),
           articleSchema({
             title: post.title,
-            description: post.description,
+            description: post.metaDescription ?? post.excerpt,
             path: `/blog/${post.slug}`,
-            datePublished: post.publishedAt,
+            datePublished: post.publishedAt ?? post.createdAt,
             dateModified: post.updatedAt,
-            author: post.author,
+            author: post.author.displayName ?? undefined,
+            image: post.thumbnailUrl ?? undefined,
           }),
         ]}
       />
@@ -78,67 +80,58 @@ export default async function BlogPostPage({
             <Link href="/blog" className="hover:text-primary">Blog</Link>
             <span>/</span>
             <span className="text-foreground font-semibold truncate">
-              {post.category}
+              {post.title}
             </span>
           </nav>
 
-          <span className="inline-block text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-secondary text-secondary-foreground border border-teal-200 mb-4">
-            {post.category}
-          </span>
+          <div className="flex flex-wrap gap-2 mb-4">
+            {post.tags.map((t) => (
+              <Link
+                key={t.id}
+                href={`/blog/tag/${t.slug}`}
+                className="inline-block text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-secondary text-secondary-foreground border border-teal-200"
+              >
+                {t.name}
+              </Link>
+            ))}
+          </div>
 
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-foreground mb-4 leading-[1.15]">
             {post.title}
           </h1>
 
           <p className="text-lg text-slate-600 mb-6 leading-relaxed">
-            {post.description}
+            {post.excerpt}
           </p>
 
           <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500 mb-8 pb-8 border-b-2 border-border">
-            <span className="flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5" />
-              {new Date(post.publishedAt).toLocaleDateString('en-US', {
-                month: 'long',
-                day: 'numeric',
-                year: 'numeric',
-              })}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" />
-              {post.readingMinutes} min read
-            </span>
-            <span>by {post.author}</span>
-          </div>
-
-          <div className="prose prose-slate max-w-none">
-            {post.content.map((section) => (
-              <section key={section.heading} className="mb-8">
-                <h2 className="text-2xl font-extrabold text-foreground mb-3">
-                  {section.heading}
-                </h2>
-                {section.body.map((p, i) => (
-                  <p
-                    key={i}
-                    className="text-slate-700 leading-relaxed mb-3 text-base"
-                  >
-                    {p}
-                  </p>
-                ))}
-              </section>
-            ))}
-          </div>
-
-          {/* Tags */}
-          <div className="flex flex-wrap gap-2 mt-10 pt-6 border-t-2 border-border">
-            {post.tags.map((t) => (
-              <span
-                key={t}
-                className="text-xs font-semibold text-slate-600 bg-slate-100 border border-border rounded-full px-3 py-1"
-              >
-                #{t}
+            {post.publishedAt && (
+              <span className="flex items-center gap-1.5">
+                <Calendar className="w-3.5 h-3.5" />
+                {new Date(post.publishedAt).toLocaleDateString('en-US', {
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
               </span>
-            ))}
+            )}
+            <span>by {post.author.displayName ?? 'NEU Study Editorial'}</span>
           </div>
+
+          {post.thumbnailUrl && (
+            <div className="relative w-full aspect-[16/9] mb-8 overflow-hidden rounded-lg border-2 border-border">
+              <Image
+                src={post.thumbnailUrl}
+                alt={post.title}
+                fill
+                unoptimized
+                className="object-cover"
+                priority
+              />
+            </div>
+          )}
+
+          <PostRenderer html={post.contentHtml} />
         </div>
       </article>
 
@@ -175,14 +168,16 @@ export default async function BlogPostPage({
                   href={`/blog/${r.slug}`}
                   className="brutal-card p-5 group"
                 >
-                  <span className="text-xs font-bold text-primary uppercase tracking-wide">
-                    {r.category}
-                  </span>
+                  {r.tags[0] && (
+                    <span className="text-xs font-bold text-primary uppercase tracking-wide">
+                      {r.tags[0].name}
+                    </span>
+                  )}
                   <h3 className="font-bold text-foreground mt-2 mb-2 group-hover:text-primary transition-colors line-clamp-2">
                     {r.title}
                   </h3>
                   <p className="text-xs text-slate-500 line-clamp-2">
-                    {r.description}
+                    {r.excerpt}
                   </p>
                 </Link>
               ))}

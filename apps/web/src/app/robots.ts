@@ -22,6 +22,7 @@ export default function robots(): MetadataRoute.Robots {
           '/admin-credits',
           '/admin-settings',
           '/admin-import',
+          '/admin-blog',
           // Private user areas
           '/dashboard',
           '/credits',
