@@ -2,9 +2,37 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { Send } from 'lucide-react';
+import { Modal } from 'antd';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/auth-store';
 import { getInitials } from './types';
+
+const BLACKLIST_WORDS = [
+  'spam', 'scam', 'viagra', 'casino', 'lottery',
+  'buy now', 'click here', 'free money', 'make money fast',
+  'earn money', 'work from home', 'congratulations you won',
+  'fuck', 'shit', 'asshole', 'bitch', 'bastard',
+  'dick', 'pussy', 'cunt', 'nigger', 'nigga',
+  'faggot', 'retard', 'whore', 'slut', 'cock',
+  'motherfucker', 'bullshit', 'dumbass', 'jackass',
+  'damn', 'stfu', 'wtf', 'lmao die', 'kys',
+  'kill yourself', 'go die',
+  'đụ', 'địt', 'đù', 'đéo', 'địt mẹ', 'đụ má',
+  'đồ chó', 'con chó', 'thằng chó', 'con điếm',
+  'đĩ', 'cave', 'lồn', 'buồi', 'cặc', 'cu',
+  'mẹ mày', 'bố mày', 'ngu', 'óc chó', 'ngu vl',
+  'vãi', 'vkl', 'vcl', 'vl', 'cc', 'clgt',
+  'dmm', 'đmm', 'dkm', 'đkm', 'dcm', 'đcm',
+  'chết đi', 'biến đi', 'cút đi',
+  'thằng ngu', 'con ngu', 'đồ ngu',
+  'khốn nạn', 'mất dạy', 'vô học',
+  'thằng khốn', 'con khốn', 'đồ khốn',
+];
+
+function findBlacklistedWords(text: string): string[] {
+  const lower = text.toLowerCase();
+  return BLACKLIST_WORDS.filter((word) => lower.includes(word));
+}
 
 interface CommentInputProps {
   onSubmit: (body: string) => void;
@@ -36,6 +64,25 @@ export function CommentInput({
   const handleSubmit = () => {
     const trimmed = text.trim();
     if (!trimmed || isPending) return;
+
+    const matched = findBlacklistedWords(trimmed);
+    if (matched.length > 0) {
+      Modal.warning({
+        title: 'Inappropriate content detected',
+        content: (
+          <div>
+            <p>Your comment contains words that violate our community guidelines:</p>
+            <p className="font-semibold text-red-600 my-2">
+              {matched.map((w) => `"${w}"`).join(', ')}
+            </p>
+            <p>Please revise your comment before posting.</p>
+          </div>
+        ),
+        okText: 'Got it',
+      });
+      return;
+    }
+
     onSubmit(trimmed);
     setText('');
   };

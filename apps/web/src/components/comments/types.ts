@@ -4,20 +4,25 @@ export interface CommentUser {
   avatarUrl: string | null;
 }
 
+export type CommentStatus = 'PUBLISHED' | 'PENDING' | 'HIDDEN' | 'DELETED';
+
 export interface Comment {
   id: string;
   testId: string;
   parentId: string | null;
   body: string;
+  status: CommentStatus;
   likeCount: number;
   replyCount: number;
   depth: number;
   createdAt: string;
   updatedAt: string;
   isDeleted: boolean;
+  isPending?: boolean;
   user: CommentUser;
   likedByMe: boolean;
   replies: Comment[];
+  moderationReason?: string;
 }
 
 export interface CommentsResponse {

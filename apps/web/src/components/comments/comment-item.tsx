@@ -8,6 +8,8 @@ import {
   Trash2,
   Check,
   X,
+  Flag,
+  Clock,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/auth-store';
@@ -24,6 +26,7 @@ interface CommentItemProps {
   onEdit: (commentId: string, body: string) => void;
   onDelete: (commentId: string) => void;
   onLike: (commentId: string, liked: boolean) => void;
+  onReport: (commentId: string) => void;
   isReplyPending?: boolean;
   isEditPending?: boolean;
 }
@@ -35,6 +38,7 @@ export function CommentItem({
   onEdit,
   onDelete,
   onLike,
+  onReport,
   isReplyPending,
   isEditPending,
 }: CommentItemProps) {
@@ -86,6 +90,7 @@ export function CommentItem({
               onEdit={onEdit}
               onDelete={onDelete}
               onLike={onLike}
+              onReport={onReport}
               isReplyPending={isReplyPending}
               isEditPending={isEditPending}
             />
@@ -120,6 +125,12 @@ export function CommentItem({
             </span>
             {comment.createdAt !== comment.updatedAt && !comment.isDeleted && (
               <span className="text-xs text-slate-400">(edited)</span>
+            )}
+            {comment.isPending && (
+              <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
+                <Clock className="w-3 h-3" />
+                Pending review
+              </span>
             )}
           </div>
 
@@ -195,7 +206,7 @@ export function CommentItem({
               </button>
 
               {/* Edit / Delete for owner */}
-              {isOwner && (
+              {isOwner ? (
                 <>
                   <button
                     onClick={() => {
@@ -215,6 +226,14 @@ export function CommentItem({
                     Delete
                   </button>
                 </>
+              ) : user && (
+                <button
+                  onClick={() => onReport(comment.id)}
+                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 cursor-pointer transition-colors"
+                >
+                  <Flag className="w-3 h-3" />
+                  Report
+                </button>
               )}
             </div>
           )}
@@ -245,6 +264,7 @@ export function CommentItem({
             onEdit={onEdit}
             onDelete={onDelete}
             onLike={onLike}
+            onReport={onReport}
             isReplyPending={isReplyPending}
             isEditPending={isEditPending}
           />

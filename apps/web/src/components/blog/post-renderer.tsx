@@ -1,10 +1,5 @@
-// Renders sanitized TipTap HTML for the public blog. Performs two transforms:
-//   1. Adds id slugs to <h2>/<h3>/<h4> for anchor links.
-//   2. Replaces <div data-cta="…"> placeholders with React CTA cards.
-// Everything else is rendered as-is via dangerouslySetInnerHTML on safe chunks.
-
 import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Target, UserPlus, Lightbulb } from 'lucide-react';
 
 type Props = { html: string };
 
@@ -29,7 +24,13 @@ function getAttr(attrs: string, name: string): string | null {
 
 type Chunk =
   | { kind: 'html'; html: string }
-  | { kind: 'cta'; ctaType: string; testSlug?: string; href?: string; label?: string };
+  | {
+      kind: 'cta';
+      ctaType: string;
+      testSlug?: string;
+      href?: string;
+      label?: string;
+    };
 
 function splitOnCtas(html: string): Chunk[] {
   const chunks: Chunk[] = [];
@@ -65,6 +66,27 @@ function addHeadingIds(html: string): string {
   });
 }
 
+const CTA_CONFIG = {
+  test: {
+    icon: Target,
+    heading: 'Put it into practice',
+    body: 'Try the related practice test now and apply what you just read.',
+    defaultLabel: 'Try this practice test',
+  },
+  signup: {
+    icon: UserPlus,
+    heading: 'Ready to start?',
+    body: 'Create a free account and unlock AI feedback on every attempt.',
+    defaultLabel: 'Create your free account',
+  },
+  default: {
+    icon: Lightbulb,
+    heading: 'Try it out',
+    body: '',
+    defaultLabel: 'Learn more',
+  },
+} as const;
+
 function CtaCard({
   ctaType,
   testSlug,
@@ -76,6 +98,10 @@ function CtaCard({
   href?: string;
   label?: string;
 }) {
+  const config =
+    CTA_CONFIG[ctaType as keyof typeof CTA_CONFIG] ?? CTA_CONFIG.default;
+  const Icon = config.icon;
+
   const resolvedHref =
     href ??
     (ctaType === 'test'
@@ -83,38 +109,34 @@ function CtaCard({
         ? `/tests/${testSlug}`
         : '/tests'
       : ctaType === 'signup'
-      ? '/register'
-      : '/');
-  const resolvedLabel =
-    label ??
-    (ctaType === 'test'
-      ? 'Try this practice test'
-      : ctaType === 'signup'
-      ? 'Create your free account'
-      : 'Learn more');
-  const heading =
-    ctaType === 'test'
-      ? 'Put it into practice'
-      : ctaType === 'signup'
-      ? 'Ready to start?'
-      : 'Try it out';
-  const body =
-    ctaType === 'test'
-      ? 'Try the related practice test now and apply what you just read.'
-      : ctaType === 'signup'
-      ? 'Create a free account and unlock AI feedback on every attempt.'
-      : '';
+        ? '/register'
+        : '/');
+
+  const resolvedLabel = label ?? config.defaultLabel;
 
   return (
-    <div className="not-prose my-8 brutal-card p-6 bg-white">
-      <h3 className="text-xl font-extrabold text-foreground mb-2">{heading}</h3>
-      {body && <p className="text-slate-600 mb-4">{body}</p>}
-      <Link
-        href={resolvedHref}
-        className="brutal-btn bg-primary text-white px-5 py-2.5 text-sm inline-flex items-center gap-2"
-      >
-        {resolvedLabel} <ArrowRight className="w-4 h-4" />
-      </Link>
+    <div className="not-prose my-10 brutal-card p-6 sm:p-8">
+      <div className="flex items-start gap-4">
+        <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-primary border-2 border-foreground shadow-[2px_2px_0px_var(--foreground)] flex items-center justify-center">
+          <Icon className="w-5 h-5 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-lg font-bold text-foreground mb-1">
+            {config.heading}
+          </h3>
+          {config.body && (
+            <p className="text-sm text-muted-foreground leading-relaxed mb-4">
+              {config.body}
+            </p>
+          )}
+          <Link
+            href={resolvedHref}
+            className="brutal-btn-fill text-sm px-5 py-2 inline-flex items-center gap-2"
+          >
+            {resolvedLabel} <ArrowRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }
@@ -124,19 +146,11 @@ export function PostRenderer({ html }: Props) {
   const chunks = splitOnCtas(withIds);
 
   return (
-    <div className="prose prose-slate max-w-none prose-headings:font-extrabold prose-headings:text-foreground prose-a:text-primary prose-img:rounded-lg">
+    <div className="article-prose">
       {chunks.map((chunk, i) =>
         chunk.kind === 'html' ? (
           <div key={i} dangerouslySetInnerHTML={{ __html: chunk.html }} />
-        ) : (
-          <CtaCard
-            key={i}
-            ctaType={chunk.ctaType}
-            testSlug={chunk.testSlug}
-            href={chunk.href}
-            label={chunk.label}
-          />
-        ),
+        ) : null,
       )}
     </div>
   );

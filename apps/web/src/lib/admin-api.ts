@@ -296,6 +296,19 @@ export const adminBlogApi = {
     api.delete(`/admin/blog/${id}`).then((r) => r.data),
 };
 
+// ── Comments Moderation (Admin) ───────────────────────
+
+export const adminCommentsApi = {
+  getQueue: (params?: { page?: number; limit?: number }) =>
+    api.get('/admin/comments/queue', { params }).then((r) => r.data),
+  approve: (id: string) =>
+    api.post(`/admin/comments/${id}/approve`).then((r) => r.data),
+  reject: (id: string) =>
+    api.post(`/admin/comments/${id}/reject`).then((r) => r.data),
+  delete: (id: string) =>
+    api.delete(`/admin/comments/${id}`).then((r) => r.data),
+};
+
 // ── Credits (Admin) ───────────────────────────────────
 
 export const adminCreditsApi = {

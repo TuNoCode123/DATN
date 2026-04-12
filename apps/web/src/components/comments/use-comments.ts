@@ -111,3 +111,18 @@ export function useLikeComment(testId: string) {
     },
   });
 }
+
+export function useReportComment(testId: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { commentId: string; reason: string }) => {
+      await api.post(`/comments/${params.commentId}/report`, {
+        reason: params.reason,
+      });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['comments', testId] });
+    },
+  });
+}

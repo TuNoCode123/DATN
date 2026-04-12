@@ -46,6 +46,12 @@ export {
   useDeductCredits,
 } from './use-admin-credits';
 export {
+  useAdminCommentQueue,
+  useApproveComment,
+  useRejectComment,
+  useAdminDeleteComment,
+} from './use-admin-comments';
+export {
   useAdminBlogPosts,
   useAdminBlogPost,
   useCreateBlogPost,
