@@ -7,6 +7,8 @@ import { LiveExamTemplateService } from './live-exam-template.service';
 import { LiveExamController, AdminLiveExamController } from './live-exam.controller';
 import { LiveExamScoringService } from './live-exam-scoring.service';
 import { LiveExamLeaderboardService } from './live-exam-leaderboard.service';
+import { LiveExamRedisStateService } from './live-exam-redis-state.service';
+import { LiveExamQueueService } from './live-exam-queue.service';
 import { LiveExamGateway } from './live-exam.gateway';
 
 @Module({
@@ -17,6 +19,8 @@ import { LiveExamGateway } from './live-exam.gateway';
     LiveExamTemplateService,
     LiveExamScoringService,
     LiveExamLeaderboardService,
+    LiveExamRedisStateService,
+    LiveExamQueueService,
     LiveExamGateway,
   ],
   exports: [

@@ -134,14 +134,14 @@ export default function PronunciationPage() {
   if (phase === 'topics') {
     return (
       <div className="max-w-3xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-black">Pronunciation Practice</h1>
+            <h1 className="text-2xl sm:text-3xl font-black">Pronunciation Practice</h1>
             <p className="text-gray-600 text-sm mt-1">
               Pick a topic and start speaking
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Link
               href="/pronunciation/history"
               className="brutal-btn px-4 py-2 text-sm flex items-center gap-2 bg-white hover:bg-gray-50"
@@ -221,7 +221,7 @@ export default function PronunciationPage() {
             <ArrowLeft className="w-4 h-4" />
             Back to Topics
           </button>
-          <h1 className="text-3xl font-black">{selectedTopic.name}</h1>
+          <h1 className="text-2xl sm:text-3xl font-black break-words">{selectedTopic.name}</h1>
           {selectedTopic.description && (
             <p className="text-gray-600 text-sm mt-1">{selectedTopic.description}</p>
           )}
@@ -232,13 +232,13 @@ export default function PronunciationPage() {
           <label className="text-xs font-bold uppercase text-gray-500 mb-3 block">
             Difficulty Level
           </label>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             {DIFFICULTIES.map((d) => (
               <button
                 key={d.value}
                 onClick={() => setSelectedDifficulty(d.value)}
                 className={cn(
-                  'flex-1 py-3 px-4 rounded-lg border-2 font-bold text-sm transition-all',
+                  'flex-1 min-w-[90px] py-3 px-2 sm:px-4 rounded-lg border-2 font-bold text-sm transition-all',
                   selectedDifficulty === d.value
                     ? cn(d.color, 'border-current ring-2 ring-offset-1 ring-current scale-[1.02]')
                     : 'border-gray-200 text-gray-400 hover:border-gray-400',
@@ -303,8 +303,8 @@ export default function PronunciationPage() {
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="min-w-0">
           <button
             onClick={backToTopics}
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-800 mb-1"
@@ -312,9 +312,11 @@ export default function PronunciationPage() {
             <ArrowLeft className="w-4 h-4" />
             Back to Topics
           </button>
-          <h1 className="text-2xl font-black">{selectedTopic?.name}</h1>
+          <h1 className="text-xl sm:text-2xl font-black break-words">{selectedTopic?.name}</h1>
         </div>
-        <CreditBadge />
+        <div className="self-start sm:self-auto">
+          <CreditBadge />
+        </div>
       </div>
 
       {/* Progress */}

@@ -25,7 +25,7 @@ export class CreateLiveExamQuestionDto {
   type!: LiveExamQuestionType;
 
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(20000)
   prompt!: string;
 
   @IsObject()

@@ -1,32 +1,37 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useStartStudy, type Flashcard } from '@/features/flashcards/use-flashcard-queries';
 import { ArrowLeft } from 'lucide-react';
 import FlipCardTab from '@/components/flashcards/flip-card-tab';
+import StudyWithAiTab from '@/components/flashcards/study-with-ai-tab';
+import { LoadingLottie } from '@/components/feedback/loading-lottie';
 
 export default function StudyModePage() {
   const { deckId } = useParams<{ deckId: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get('tab') === 'ai' ? 'ai' : 'flip';
   const startStudy = useStartStudy();
 
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [cards, setCards] = useState<Flashcard[]>([]);
 
   useEffect(() => {
+    if (tab !== 'flip') return;
     startStudy.mutate(deckId, {
       onSuccess: (data) => {
         setSessionId(data.session.id);
         setCards(data.cards);
       },
     });
-  }, [deckId]); // eslint-disable-line
+  }, [deckId, tab]); // eslint-disable-line
 
-  if (startStudy.isPending || cards.length === 0) {
+  if (tab === 'flip' && (startStudy.isPending || cards.length === 0)) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+        <LoadingLottie message="Shuffling your cards..." />
       </div>
     );
   }
@@ -43,8 +48,10 @@ export default function StudyModePage() {
         </button>
       </div>
 
-      {sessionId && (
-        <FlipCardTab deckId={deckId} sessionId={sessionId} cards={cards} />
+      {tab === 'ai' ? (
+        <StudyWithAiTab deckId={deckId} />
+      ) : (
+        sessionId && <FlipCardTab deckId={deckId} sessionId={sessionId} cards={cards} />
       )}
     </div>
   );

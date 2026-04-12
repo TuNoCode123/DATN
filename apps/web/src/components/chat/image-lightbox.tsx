@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { useEffect, useCallback } from 'react';
 import { Button } from 'antd';
 import { CloseOutlined, DownloadOutlined } from '@ant-design/icons';
@@ -52,11 +53,14 @@ export function ImageLightbox({ src, alt, onClose }: Props) {
         />
       </div>
 
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
+      <Image
         src={src}
         alt={alt || 'Image'}
+        width={0}
+        height={0}
+        sizes="90vw"
         className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg"
+        style={{ width: 'auto', height: 'auto', maxWidth: '90vw', maxHeight: '90vh' }}
         onClick={(e) => e.stopPropagation()}
       />
     </div>

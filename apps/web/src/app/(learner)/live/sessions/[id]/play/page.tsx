@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { App } from 'antd';
 import { Clock, Trophy, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+import { LOTTIE } from '@/lib/feedback';
+import { FeedbackBanner } from '@/components/feedback/feedback-banner';
 import {
   connectLiveExamSocket,
   disconnectLiveExamSocket,
@@ -21,6 +24,7 @@ import {
   LiveQuestionView,
   QuestionEnvelope,
 } from '@/components/live-exam/live-question-view';
+import { PromptWithMedia } from '@/components/live-exam/prompt-media';
 
 type Phase =
   | 'WAITING'
@@ -100,6 +104,11 @@ export default function PlayPage({
   } | null>(null);
 
   const { play: playSound } = useQuizSounds();
+  // Inline feedback banner state — shown above the question card during
+  // LOCKED/reveal. revealKey flips per question so the random correct
+  // animation is re-picked.
+  const [feedbackKind, setFeedbackKind] = useState<'correct' | 'wrong' | null>(null);
+  const [feedbackAwarded, setFeedbackAwarded] = useState(0);
   // Ref (not state) → updating the streak shouldn't re-render the component.
   const streakRef = useRef(0);
   // Timestamp of the last LOCKED transition. Used to guarantee the
@@ -157,6 +166,8 @@ export default function PlayPage({
       setReveal(null);
       setExplanation(null);
       setInterstitial(null);
+      setFeedbackKind(null);
+      setFeedbackAwarded(0);
     };
     const onAck = () => setPhase('ANSWERED');
     const onAnswerError = (p: { code: string; message?: string }) => {
@@ -187,9 +198,13 @@ export default function PlayPage({
         const onStreak = next > 0 && next % STREAK_THRESHOLD === 0;
         playSound(onStreak ? 'streak' : 'correct');
         fireCelebration();
+        setFeedbackKind('correct');
+        setFeedbackAwarded(p.yourAwardedPoints);
       } else {
         streakRef.current = 0;
         playSound('wrong');
+        setFeedbackKind('wrong');
+        setFeedbackAwarded(0);
       }
 
       // Hold the LOCKED reveal (correct/wrong highlighting) on screen
@@ -281,6 +296,9 @@ export default function PlayPage({
   if (phase === 'WAITING') {
     return (
       <div className="max-w-xl mx-auto brutal-card p-8 text-center">
+        <div className="w-40 h-40 mx-auto">
+          <DotLottieReact src={LOTTIE.loading} autoplay loop />
+        </div>
         <h1 className="text-2xl font-extrabold mb-2">Hold on…</h1>
         <p className="text-neutral-600">Waiting for the next question.</p>
       </div>
@@ -290,7 +308,9 @@ export default function PlayPage({
   if (phase === 'ENDED') {
     return (
       <div className="max-w-xl mx-auto brutal-card p-8 text-center">
-        <Trophy className="w-12 h-12 mx-auto text-yellow-500 mb-2" />
+        <div className="w-44 h-44 mx-auto -mb-2">
+          <DotLottieReact src={LOTTIE.trophy} autoplay loop />
+        </div>
         <h1 className="text-2xl font-extrabold mb-1">Exam finished!</h1>
         {finalResult && (
           <p className="text-neutral-700">
@@ -310,7 +330,7 @@ export default function PlayPage({
   }
 
   if (phase === 'INTERSTITIAL' && interstitial) {
-    return <InterstitialView reveal={interstitial} />;
+    return <InterstitialView reveal={interstitial} isLastQuestion={questionIndex + 1 >= totalQuestions} />;
   }
 
   if (!question) return <p>Loading…</p>;
@@ -324,6 +344,20 @@ export default function PlayPage({
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Inline feedback banner — shown above the question card during
+          reveal. Uses question.id as revealKey so the random correct
+          animation is re-picked per question. */}
+      <FeedbackBanner
+        kind={feedbackKind}
+        revealKey={question?.id}
+        message={feedbackKind === 'correct' ? 'Correct!' : 'Wrong'}
+        subMessage={
+          feedbackKind === 'correct'
+            ? `+${feedbackAwarded} pts`
+            : 'Better luck next round'
+        }
+      />
+
       <div className="flex items-center justify-between mb-3">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-black text-white rounded-full border-[3px] border-black shadow-[3px_3px_0_0_rgba(0,0,0,0.25)]">
           <span className="text-[11px] uppercase tracking-widest font-black opacity-80">
@@ -364,12 +398,11 @@ export default function PlayPage({
         <div className="inline-block mb-3 px-3 py-1 bg-black text-white text-[10px] font-black uppercase tracking-[0.18em] rounded-full">
           {question.type.replace('_', ' ')}
         </div>
-        <h2
-          className="font-black leading-[1.15] text-neutral-900 break-words"
-          style={{ fontSize: 'clamp(1.35rem, 4.5vw, 2rem)' }}
-        >
-          {question.prompt}
-        </h2>
+        <PromptWithMedia
+          prompt={question.prompt}
+          media={question.dispatch.media}
+          promptClassName="font-black leading-[1.15] text-neutral-900"
+        />
       </div>
 
       <LiveQuestionView
@@ -404,7 +437,7 @@ export default function PlayPage({
       {phase === 'LOCKED' && explanation && (
         <div className="brutal-card p-4 mt-4 bg-yellow-50">
           <div className="text-xs font-bold uppercase mb-1">Explanation</div>
-          <p className="text-sm">{explanation}</p>
+          <div className="text-sm prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: explanation }} />
         </div>
       )}
     </div>
@@ -413,7 +446,9 @@ export default function PlayPage({
 
 function InterstitialView({
   reveal,
+  isLastQuestion,
 }: {
+  isLastQuestion: boolean;
   reveal: {
     top10: LeaderboardRow[];
     yourRank: number | null;
@@ -487,7 +522,7 @@ function InterstitialView({
       </div>
 
       <p className="text-center text-sm text-neutral-500 mt-3">
-        Next question in {reveal.interstitialSec}s…
+        {isLastQuestion ? 'Final results' : 'Next question'} in {reveal.interstitialSec}s…
       </p>
     </div>
   );

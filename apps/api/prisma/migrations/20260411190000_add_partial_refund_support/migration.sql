@@ -1,0 +1,7 @@
+-- AlterEnum
+ALTER TYPE "PaymentOrderStatus" ADD VALUE 'PARTIALLY_REFUNDED' BEFORE 'REFUNDED';
+
+-- AlterTable
+ALTER TABLE "payment_orders"
+  ADD COLUMN "refundedAmountUsd" DECIMAL(10,2) NOT NULL DEFAULT 0,
+  ADD COLUMN "refundedCredits" INTEGER NOT NULL DEFAULT 0;

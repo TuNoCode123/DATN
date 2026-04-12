@@ -10,7 +10,7 @@ export default function RegisterPage() {
         Create Account
       </h1>
       <p className="text-sm text-slate-500 text-center mb-8">
-        Start your IELTS preparation journey today
+        Start your IELTS, TOEIC, HSK & language exam journey today
       </p>
 
       <div className="flex flex-col gap-4">

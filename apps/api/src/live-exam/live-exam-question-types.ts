@@ -17,19 +17,33 @@ export interface McqOption {
   text: string;
 }
 
+/**
+ * Optional attached media rendered alongside the (HTML) prompt.
+ * Stored inside the payload (not a separate column) so we can stay on
+ * the existing schema. Values must be absolute URLs to files uploaded
+ * via the normal file-upload pipeline.
+ */
+export interface QuestionMedia {
+  imageUrl?: string;
+  audioUrl?: string;
+}
+
 export interface McqPayload {
   options: McqOption[];
   correctOptionId: string;
+  media?: QuestionMedia;
 }
 
 export interface ShortAnswerPayload {
   acceptedAnswers: string[];
   caseSensitive: boolean;
+  media?: QuestionMedia;
 }
 
 export interface SentenceReorderPayload {
   fragments: string[]; // stored in CORRECT order
   correctOrder: number[]; // typically [0,1,...,n-1]; kept explicit for forward-compat
+  media?: QuestionMedia;
 }
 
 export type QuestionPayload =
@@ -53,6 +67,34 @@ export type AnswerPayload =
 export class QuestionPayloadError extends Error {}
 
 /**
+ * Parse an untrusted `media` field into a QuestionMedia or undefined.
+ * Only accepts absolute http(s) URLs. Silently drops blank/missing
+ * entries so an empty `{}` doesn't round-trip as a truthy media block.
+ */
+function extractMedia(raw: unknown): QuestionMedia | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const m = raw as Record<string, unknown>;
+  const out: QuestionMedia = {};
+  const urlOf = (v: unknown): string | undefined => {
+    if (typeof v !== 'string') return undefined;
+    const s = v.trim();
+    if (!s) return undefined;
+    if (s.length > 2048) {
+      throw new QuestionPayloadError('media url too long');
+    }
+    if (!/^https?:\/\//i.test(s)) {
+      throw new QuestionPayloadError('media url must be absolute http(s)');
+    }
+    return s;
+  };
+  const img = urlOf(m.imageUrl);
+  const aud = urlOf(m.audioUrl);
+  if (img) out.imageUrl = img;
+  if (aud) out.audioUrl = aud;
+  return out.imageUrl || out.audioUrl ? out : undefined;
+}
+
+/**
  * Validate a question payload for storage. Throws QuestionPayloadError
  * on shape violations. Call from the controller/service on create/update
  * so bad JSON never reaches the DB.
@@ -65,6 +107,7 @@ export function validateQuestionPayload(
     throw new QuestionPayloadError('payload must be an object');
   }
   const p = payload as Record<string, unknown>;
+  const media = extractMedia(p.media);
 
   switch (type) {
     case 'MULTIPLE_CHOICE': {
@@ -97,7 +140,7 @@ export function validateQuestionPayload(
           'MULTIPLE_CHOICE: correctOptionId must match one of the option ids',
         );
       }
-      return { options, correctOptionId: p.correctOptionId };
+      return { options, correctOptionId: p.correctOptionId, media };
     }
 
     case 'SHORT_ANSWER': {
@@ -125,7 +168,7 @@ export function validateQuestionPayload(
         accepted.push(a);
       }
       const caseSensitive = p.caseSensitive === true; // default false
-      return { acceptedAnswers: accepted, caseSensitive };
+      return { acceptedAnswers: accepted, caseSensitive, media };
     }
 
     case 'SENTENCE_REORDER': {
@@ -176,7 +219,7 @@ export function validateQuestionPayload(
           correctOrder.push(raw);
         }
       }
-      return { fragments, correctOrder };
+      return { fragments, correctOrder, media };
     }
 
     default: {
@@ -325,17 +368,19 @@ export function validateAnswerPayload(
 export interface McqDispatchPayload {
   type: 'MULTIPLE_CHOICE';
   options: McqOption[];
+  media?: QuestionMedia;
 }
 
 export interface ShortAnswerDispatchPayload {
   type: 'SHORT_ANSWER';
-  // nothing extra — the prompt carries the question
+  media?: QuestionMedia;
 }
 
 export interface SentenceReorderDispatchPayload {
   type: 'SENTENCE_REORDER';
   /** Fragments in SHUFFLED order (client renders these as chips). */
   shuffledFragments: string[];
+  media?: QuestionMedia;
 }
 
 export type DispatchPayload =
@@ -358,10 +403,11 @@ export function buildDispatchPayload(
     case 'MULTIPLE_CHOICE': {
       const p = payload as McqPayload;
       // Never leak correctOptionId to players — only send the options.
-      return { type: 'MULTIPLE_CHOICE', options: p.options };
+      return { type: 'MULTIPLE_CHOICE', options: p.options, media: p.media };
     }
     case 'SHORT_ANSWER': {
-      return { type: 'SHORT_ANSWER' };
+      const p = payload as ShortAnswerPayload;
+      return { type: 'SHORT_ANSWER', media: p.media };
     }
     case 'SENTENCE_REORDER': {
       const p = payload as SentenceReorderPayload;
@@ -369,6 +415,7 @@ export function buildDispatchPayload(
       return {
         type: 'SENTENCE_REORDER',
         shuffledFragments: perm.map((i) => p.fragments[i]),
+        media: p.media,
       };
     }
     default: {

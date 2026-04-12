@@ -14,7 +14,7 @@ export default function AuthLayout({
           <BookOpen className="w-5 h-5 text-rose-600" />
         </div>
         <span className="text-xl font-bold text-foreground font-heading">
-          IELTS AI
+          NEU Study
         </span>
       </Link>
 
@@ -25,7 +25,7 @@ export default function AuthLayout({
 
       {/* Footer */}
       <p className="text-xs text-slate-400 mt-6">
-        &copy; 2026 IELTS AI Platform. All rights reserved.
+        &copy; 2026 NEU Study Platform. All rights reserved.
       </p>
     </div>
   );

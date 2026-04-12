@@ -65,6 +65,8 @@ export class CreditsService {
     userId: string,
     amount: number,
     reason: CreditReason,
+    referenceId?: string,
+    metadata?: object,
   ): Promise<number> {
     return this.prisma.$transaction(async (tx) => {
       const credit = await tx.userCredit.findUnique({
@@ -88,6 +90,8 @@ export class CreditsService {
           amount,
           balanceAfter: newBalance,
           reason,
+          referenceId,
+          metadata: metadata ?? undefined,
         },
       });
 

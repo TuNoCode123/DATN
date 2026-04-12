@@ -20,22 +20,19 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LiveExamService } from './live-exam.service';
 import { LiveExamLeaderboardService } from './live-exam-leaderboard.service';
 import { LiveExamScoringService } from './live-exam-scoring.service';
+import { LiveExamRedisStateService } from './live-exam-redis-state.service';
+import { LiveExamQueueService } from './live-exam-queue.service';
 import {
   AnswerPayload,
-  DispatchPayload,
   QuestionPayload,
   QuestionPayloadError,
-  RevealPayload,
   SentenceReorderAnswer,
   buildAnswerDisplay,
   buildDispatchPayload,
   buildRevealPayload,
-  randomShufflePermutation,
   validateAnswerPayload,
   validateQuestionPayload,
 } from './live-exam-question-types';
-
-type ExamPhase = 'OPEN' | 'LOCKED' | 'INTERSTITIAL';
 
 type AuthUser = {
   id: string;
@@ -44,20 +41,7 @@ type AuthUser = {
   displayName?: string | null;
 };
 
-/**
- * In-memory runtime state for an active session. One RoomRuntime per
- * active session is held on whichever node first got the host.start
- * message. The Redis adapter fans socket events out to other nodes,
- * but the timer chain runs on exactly one node. Node failure recovery
- * is not implemented — see §14 of the original plan.
- *
- * For SENTENCE_REORDER questions we store the dispatch-time shuffle
- * permutation so:
- *   (a) players who rejoin mid-question see the same shuffled order
- *   (b) we can translate their submitted positions in the shuffled
- *       array back to original fragment indices for grading
- */
-type RuntimeQuestion = {
+interface RuntimeQuestion {
   id: string;
   orderIndex: number;
   type: LiveExamQuestionType;
@@ -65,30 +49,8 @@ type RuntimeQuestion = {
   payload: QuestionPayload;
   explanation: string | null;
   points: number;
-  /**
-   * Shuffle permutation used at dispatch time for SENTENCE_REORDER
-   * questions. Generated fresh in `dispatchNextQuestion`. null for
-   * other types (no shuffle needed).
-   *
-   * Semantics: `shuffle[shuffledIndex] = originalIndex`, i.e. element
-   * at index `shuffledIndex` in the dispatched array corresponds to
-   * fragment `payload.fragments[shuffle[shuffledIndex]]`.
-   */
   shuffle: number[] | null;
-};
-
-type RoomRuntime = {
-  sessionId: string;
-  questions: RuntimeQuestion[];
-  perQuestionSec: number;
-  interstitialSec: number;
-  durationSec: number;
-  qIndex: number;
-  phase: ExamPhase;
-  qStartAt: number;
-  timers: NodeJS.Timeout[];
-  durationCap: NodeJS.Timeout | null;
-};
+}
 
 @WebSocketGateway({
   namespace: '/live-exam',
@@ -108,7 +70,6 @@ export class LiveExamGateway
   server!: Server;
 
   private readonly logger = new Logger('LiveExamGateway');
-  private readonly runtimes = new Map<string, RoomRuntime>();
 
   constructor(
     private readonly cognitoAuth: CognitoAuthService,
@@ -116,24 +77,19 @@ export class LiveExamGateway
     private readonly examService: LiveExamService,
     private readonly leaderboard: LiveExamLeaderboardService,
     private readonly scoring: LiveExamScoringService,
+    private readonly redisState: LiveExamRedisStateService,
+    private readonly queueService: LiveExamQueueService,
   ) {}
 
   onModuleDestroy() {
-    for (const r of this.runtimes.values()) this.cancelTimers(r);
+    // BullMQ handles cleanup via its own onModuleDestroy
   }
 
-  // ─── Init — register auth as namespace middleware ──
-  //
-  // Auth MUST run as `server.use()` middleware, not inside handleConnection.
-  // NestJS does not await handleConnection before @SubscribeMessage handlers
-  // start firing, so doing async auth there creates a race: a client that
-  // emits a message immediately after `connect` (e.g. the play page emitting
-  // `lobby.join` on mount after a lobby→play navigation) can reach a handler
-  // before `socket.data.user` is set, causing userOr401 to silently drop the
-  // message and leave the player stuck on the WAITING screen. Middleware
-  // registered via `server.use()` is awaited before the 'connect' handshake
-  // completes, so by the time any handler runs the user is guaranteed set.
   afterInit(server: Server) {
+    // Socket.IO Redis adapter is configured globally in main.ts via RedisIoAdapter.
+    // Give the BullMQ worker access to the Socket.IO server for emitting events.
+    this.queueService.setServer(server);
+
     server.use(async (socket, next) => {
       try {
         const user = await this.authenticateSocket(socket);
@@ -185,12 +141,7 @@ export class LiveExamGateway
         displayName: participant.displayName,
       });
 
-      // Mid-exam rejoin: the player navigated lobby → play (which tears down
-      // the socket) and re-emitted lobby.join from the play page. At this
-      // point the session is already LIVE, so the fresh socket must be put
-      // into the live room and caught up to the current question, or it
-      // will sit silent waiting for events that are only fanned out to
-      // live:{id}.
+      // Mid-exam rejoin: read state from Redis instead of in-memory runtime
       const session = await this.prisma.liveExamSession.findUnique({
         where: { id: sessionId },
         select: { status: true },
@@ -199,13 +150,15 @@ export class LiveExamGateway
         const liveRoom = `live:${sessionId}`;
         socket.join(liveRoom);
 
-        const runtime = this.runtimes.get(sessionId);
-        if (runtime) {
+        const state = await this.redisState.getState(sessionId);
+        if (state && state.phase !== 'ENDED') {
           socket.emit('exam.started', {
-            serverStartAt: runtime.qStartAt,
-            totalQuestions: runtime.questions.length,
+            serverStartAt: state.qStartAt,
+            totalQuestions: state.totalQ,
           });
-          const q = runtime.questions[runtime.qIndex];
+
+          const questions = await this.redisState.getQuestions<RuntimeQuestion>(sessionId);
+          const q = questions?.[state.qIndex];
           if (q) {
             const dispatch = buildDispatchPayload(
               q.type,
@@ -213,22 +166,22 @@ export class LiveExamGateway
               q.shuffle ?? undefined,
             );
             socket.emit('exam.question', {
-              index: runtime.qIndex,
+              index: state.qIndex,
               question: {
                 id: q.id,
                 type: q.type,
                 prompt: q.prompt,
                 dispatch,
               },
-              dispatchedAt: runtime.qStartAt,
-              perQuestionSec: runtime.perQuestionSec,
-              totalQuestions: runtime.questions.length,
-              phase: runtime.phase,
+              dispatchedAt: state.qStartAt,
+              perQuestionSec: state.perQSec,
+              totalQuestions: state.totalQ,
+              phase: state.phase,
             });
-            if (runtime.phase !== 'OPEN') {
+            if (state.phase !== 'OPEN') {
               const reveal = buildRevealPayload(q.type, q.payload);
               socket.emit('exam.questionLocked', {
-                index: runtime.qIndex,
+                index: state.qIndex,
                 reveal,
                 explanation: q.explanation,
               });
@@ -280,7 +233,6 @@ export class LiveExamGateway
       return { ok: false, error: 'FORBIDDEN' };
     }
     socket.join(`host:${data.sessionId}`);
-    // Also join lobby so the host sees lobby state events.
     socket.join(`lobby:${data.sessionId}`);
     return { ok: true };
   }
@@ -303,8 +255,6 @@ export class LiveExamGateway
         orderBy: { orderIndex: 'asc' },
       });
 
-      // Parse + validate each question payload up-front so we fail
-      // fast on corrupt data rather than mid-exam.
       const runtimeQuestions: RuntimeQuestion[] = questions.map((q) => {
         const payload = validateQuestionPayload(
           q.type as LiveExamQuestionType,
@@ -322,55 +272,46 @@ export class LiveExamGateway
         };
       });
 
-      // Move all lobby sockets into the live room.
+      // Acquire single-dispatch lock
+      const nodeId = `${process.pid}-${Date.now()}`;
+      const locked = await this.redisState.acquireStartLock(sessionId, nodeId);
+      if (!locked) return { ok: false, error: 'ALREADY_STARTING' };
+
+      // Write initial state and frozen questions to Redis
+      await this.redisState.initState(sessionId, {
+        totalQ: runtimeQuestions.length,
+        perQSec: session.perQuestionSec,
+        interSec: session.interstitialSec,
+        durationSec: session.durationSec,
+      });
+      await this.redisState.setQuestions(sessionId, runtimeQuestions);
+
+      // Move lobby sockets into live room
       const lobbyRoom = `lobby:${sessionId}`;
       const liveRoom = `live:${sessionId}`;
       const lobbySockets = await this.server.in(lobbyRoom).fetchSockets();
       for (const s of lobbySockets) {
-        const hostRoom = `host:${sessionId}`;
-        if (s.rooms.has(hostRoom)) continue; // host watcher stays out
+        if (s.rooms.has(`host:${sessionId}`)) continue;
         s.join(liveRoom);
       }
 
-      // Seed leaderboard with every participant.
+      // Seed leaderboard
       const participants = await this.prisma.liveExamParticipant.findMany({
         where: { sessionId },
       });
       for (const p of participants) {
-        await this.leaderboard.initParticipant(
-          sessionId,
-          p.userId,
-          p.displayName,
-        );
+        await this.leaderboard.initParticipant(sessionId, p.userId, p.displayName);
       }
-
-      const runtime: RoomRuntime = {
-        sessionId,
-        questions: runtimeQuestions,
-        perQuestionSec: session.perQuestionSec,
-        interstitialSec: session.interstitialSec,
-        durationSec: session.durationSec,
-        qIndex: -1,
-        phase: 'OPEN',
-        qStartAt: 0,
-        timers: [],
-        durationCap: null,
-      };
-      this.runtimes.set(sessionId, runtime);
 
       this.server.to(liveRoom).emit('exam.started', {
         serverStartAt: Date.now(),
         totalQuestions: runtimeQuestions.length,
       });
 
-      // Hard cap: end the session unconditionally after durationSec.
-      runtime.durationCap = setTimeout(() => {
-        this.finalizeExam(runtime, 'duration_cap').catch((e) =>
-          this.logger.error('duration cap finalize failed', e),
-        );
-      }, session.durationSec * 1000);
-
-      await this.dispatchNextQuestion(runtime);
+      // Enqueue duration cap and first question via BullMQ
+      // version=0 matches the INIT state written by initState()
+      await this.queueService.enqueueDurationCap(sessionId, session.durationSec);
+      await this.queueService.enqueueNextQuestion(sessionId, 0, 0);
 
       await this.prisma.liveExamEvent.create({
         data: { sessionId, userId: user.id, type: 'START' },
@@ -391,18 +332,21 @@ export class LiveExamGateway
     const user = this.userOr401(socket);
     if (!user) return;
     const sessionId = data.sessionId;
-    const runtime = this.runtimes.get(sessionId);
-    if (runtime) {
-      await this.closeOutCurrentQuestion(runtime, /* isForceEnd */ true);
-      await this.finalizeExam(runtime, 'host_force_end', user.id);
+
+    const state = await this.redisState.getState(sessionId);
+    if (state && state.phase !== 'ENDED') {
+      // Lock current question if open and grade unanswered players
+      if (state.phase === 'OPEN') {
+        const lockResult = await this.redisState.transitionToLocked(sessionId, state.qIndex);
+        if (lockResult.ok) {
+          await this.leaderboard.setQuestionState(sessionId, state.qIndex, 'LOCKED');
+          await this.queueService.closeOutQuestionPublic(sessionId, state.qIndex);
+        }
+      }
+      await this.queueService.finalizeExam(sessionId, 'host_force_end', user.id);
     } else {
-      // No runtime (e.g. still LOBBY) — delegate to service.
-      await this.examService.forceEnd(sessionId, user.id, {
-        reason: 'host_force_end',
-      });
-      this.server.to(`lobby:${sessionId}`).emit('exam.ended', {
-        reason: 'host_force_end',
-      });
+      await this.examService.forceEnd(sessionId, user.id, { reason: 'host_force_end' });
+      this.server.to(`lobby:${sessionId}`).emit('exam.ended', { reason: 'host_force_end' });
     }
     return { ok: true };
   }
@@ -457,30 +401,40 @@ export class LiveExamGateway
     const user = this.userOr401(socket);
     if (!user) return;
 
-    const runtime = this.runtimes.get(data.sessionId);
-    if (!runtime) {
+    // Read phase from Redis — source of truth
+    const state = await this.redisState.getState(data.sessionId);
+    if (!state) {
       socket.emit('exam.answerError', { code: 'NO_RUNTIME' });
       return;
     }
-    if (runtime.phase !== 'OPEN') {
+    if (state.phase !== 'OPEN') {
       socket.emit('exam.answerError', { code: 'PHASE_CLOSED' });
       return;
     }
-    // Host watcher cannot answer.
     if (socket.rooms.has(`host:${data.sessionId}`)) {
       socket.emit('exam.answerError', { code: 'FORBIDDEN_ROLE' });
       return;
     }
 
-    const currentQ = runtime.questions[runtime.qIndex];
+    const questions = await this.redisState.getQuestions<RuntimeQuestion>(data.sessionId);
+    if (!questions) {
+      socket.emit('exam.answerError', { code: 'NO_RUNTIME' });
+      return;
+    }
+
+    const currentQ = questions[state.qIndex];
     if (!currentQ || currentQ.id !== data.questionId) {
       socket.emit('exam.answerError', { code: 'STALE_QUESTION' });
       return;
     }
 
-    // Shape-validate the answer against the question type. On malformed
-    // input, reject with a specific error code so the client can surface
-    // it (though normally the client-side player widgets prevent this).
+    // Check time window
+    const now = Date.now();
+    if (now > state.qEndAt) {
+      socket.emit('exam.answerError', { code: 'PHASE_CLOSED' });
+      return;
+    }
+
     let typedAnswer: AnswerPayload;
     try {
       typedAnswer = validateAnswerPayload(currentQ.type, data.answer);
@@ -492,10 +446,7 @@ export class LiveExamGateway
       return;
     }
 
-    // For SENTENCE_REORDER, the client sends positions in the
-    // shuffled array it received; translate back to original indices
-    // BEFORE persisting, so the answerPayload stored in Postgres lives
-    // in the stable "original fragment index" space.
+    // Translate SENTENCE_REORDER shuffled positions to original indices
     if (currentQ.type === 'SENTENCE_REORDER' && currentQ.shuffle) {
       const a = typedAnswer as SentenceReorderAnswer;
       const shuffle = currentQ.shuffle;
@@ -530,13 +481,13 @@ export class LiveExamGateway
       return;
     }
 
-    const answeredMs = Math.max(0, Date.now() - runtime.qStartAt);
+    const answeredMs = Math.max(0, now - state.qStartAt);
     const { isCorrect, awardedPoints } = this.scoring.gradeAndScore({
       type: currentQ.type,
       payload: currentQ.payload,
       answer: typedAnswer,
       answeredMs,
-      perQuestionSec: runtime.perQuestionSec,
+      perQuestionSec: state.perQSec,
       basePoints: currentQ.points,
     });
 
@@ -552,18 +503,12 @@ export class LiveExamGateway
         },
       });
     } catch (err: any) {
-      // Unique constraint = already answered.
       socket.emit('exam.answerError', { code: 'ALREADY_ANSWERED' });
       return;
     }
 
-    // Answer is recorded but NOT yet scored into the leaderboard.
-    // The ZSET is batch-updated in Phase 2 (closeOutCurrentQuestion).
-
-    // Private ack — correctness is NOT revealed here.
     socket.emit('exam.answerAck', { recorded: true, answeredMs });
 
-    // Host telemetry
     const totalPlayers = await this.prisma.liveExamParticipant.count({
       where: { sessionId: data.sessionId },
     });
@@ -571,9 +516,6 @@ export class LiveExamGateway
       where: { questionId: currentQ.id },
     });
 
-    // Human-readable view of what the player picked/wrote, so the host
-    // can see per-player answers in the console. We never reveal this
-    // to players — it goes only to the host room.
     const display = buildAnswerDisplay(currentQ.type, currentQ.payload, typedAnswer);
 
     this.server.to(`host:${data.sessionId}`).emit('host.answerStream', {
@@ -586,305 +528,6 @@ export class LiveExamGateway
       isCorrect,
       display,
     });
-  }
-
-  // ─── Phase loop engine ───────────────────────────
-
-  private async dispatchNextQuestion(runtime: RoomRuntime) {
-    runtime.qIndex++;
-    if (runtime.qIndex >= runtime.questions.length) {
-      await this.finalizeExam(runtime, 'all_questions_done');
-      return;
-    }
-
-    const q = runtime.questions[runtime.qIndex];
-    runtime.phase = 'OPEN';
-    runtime.qStartAt = Date.now();
-
-    // Shuffle fragments at dispatch time for SENTENCE_REORDER. The
-    // permutation is stored on the runtime question so rejoining
-    // players see the same shuffle and so we can translate answer
-    // positions back to original indices at grading time.
-    if (q.type === 'SENTENCE_REORDER') {
-      const p = q.payload as { fragments: string[] };
-      q.shuffle = randomShufflePermutation(p.fragments.length);
-    } else {
-      q.shuffle = null;
-    }
-
-    await this.leaderboard.setQuestionState(
-      runtime.sessionId,
-      runtime.qIndex,
-      'OPEN',
-      runtime.qStartAt,
-    );
-
-    const dispatch: DispatchPayload = buildDispatchPayload(
-      q.type,
-      q.payload,
-      q.shuffle ?? undefined,
-    );
-    const reveal: RevealPayload = buildRevealPayload(q.type, q.payload);
-
-    // Player-facing payload — no correct answer.
-    this.server.to(`live:${runtime.sessionId}`).emit('exam.question', {
-      index: runtime.qIndex,
-      question: {
-        id: q.id,
-        type: q.type,
-        prompt: q.prompt,
-        dispatch,
-      },
-      dispatchedAt: runtime.qStartAt,
-      perQuestionSec: runtime.perQuestionSec,
-      totalQuestions: runtime.questions.length,
-      phase: 'OPEN',
-    });
-
-    // Host-facing payload — includes the reveal so the host can
-    // see the correct answer alongside the question.
-    this.server.to(`host:${runtime.sessionId}`).emit('host.questionView', {
-      index: runtime.qIndex,
-      question: {
-        id: q.id,
-        type: q.type,
-        prompt: q.prompt,
-        dispatch,
-      },
-      reveal,
-      dispatchedAt: runtime.qStartAt,
-      perQuestionSec: runtime.perQuestionSec,
-      phase: 'OPEN',
-    });
-
-    const t = setTimeout(() => {
-      this.lockQuestion(runtime).catch((e) =>
-        this.logger.error('lockQuestion failed', e),
-      );
-    }, runtime.perQuestionSec * 1000);
-    runtime.timers.push(t);
-  }
-
-  private async lockQuestion(runtime: RoomRuntime) {
-    if (runtime.phase !== 'OPEN') return;
-    await this.closeOutCurrentQuestion(runtime, false);
-  }
-
-  /**
-   * Finalize the current question: insert timeout rows for silent players,
-   * batch-update the ZSET, emit `exam.questionLocked`, then schedule the
-   * `INTERSTITIAL` reveal for the next tick.
-   */
-  private async closeOutCurrentQuestion(
-    runtime: RoomRuntime,
-    isForceEnd: boolean,
-  ) {
-    if (runtime.phase !== 'OPEN') return;
-    runtime.phase = 'LOCKED';
-    await this.leaderboard.setQuestionState(
-      runtime.sessionId,
-      runtime.qIndex,
-      'LOCKED',
-    );
-
-    const q = runtime.questions[runtime.qIndex];
-    if (!q) return;
-
-    // Capture ranks BEFORE the ZSET update so delta arrows work.
-    await this.leaderboard.capturePrevRanks(runtime.sessionId);
-
-    // Insert timeout rows for any participant who did not answer.
-    const participants = await this.prisma.liveExamParticipant.findMany({
-      where: { sessionId: runtime.sessionId },
-    });
-    const answered = await this.prisma.liveExamAnswer.findMany({
-      where: { questionId: q.id },
-    });
-    const answeredIds = new Set(answered.map((a) => a.participantId));
-    const missing = participants.filter((p) => !answeredIds.has(p.id));
-    for (const p of missing) {
-      await this.prisma.liveExamAnswer.create({
-        data: {
-          participantId: p.id,
-          questionId: q.id,
-          answerPayload: Prisma.JsonNull,
-          isCorrect: false,
-          answeredMs: runtime.perQuestionSec * 1000,
-          awardedPoints: 0,
-        },
-      });
-    }
-
-    // Batch-apply ZSET updates for every answer on this question.
-    const allAnswers = await this.prisma.liveExamAnswer.findMany({
-      where: { questionId: q.id },
-      include: { participant: true },
-    });
-    for (const a of allAnswers) {
-      if (a.awardedPoints > 0) {
-        await this.leaderboard.addPoints(
-          runtime.sessionId,
-          a.participant.userId,
-          a.awardedPoints,
-          true,
-        );
-      } else {
-        await this.leaderboard.addPoints(
-          runtime.sessionId,
-          a.participant.userId,
-          0,
-          a.isCorrect,
-        );
-      }
-    }
-
-    const reveal = buildRevealPayload(q.type, q.payload);
-
-    // Emit lock event with type-shaped reveal + explanation.
-    this.server.to(`live:${runtime.sessionId}`).emit('exam.questionLocked', {
-      index: runtime.qIndex,
-      reveal,
-      explanation: q.explanation,
-    });
-
-    if (isForceEnd) return; // finalizeExam will handle next steps
-
-    const t = setTimeout(() => {
-      this.revealLeaderboard(runtime).catch((e) =>
-        this.logger.error('revealLeaderboard failed', e),
-      );
-    }, 0);
-    runtime.timers.push(t);
-  }
-
-  private async revealLeaderboard(runtime: RoomRuntime) {
-    runtime.phase = 'INTERSTITIAL';
-    await this.leaderboard.setQuestionState(
-      runtime.sessionId,
-      runtime.qIndex,
-      'INTERSTITIAL',
-    );
-
-    const top10 = await this.leaderboard.getTop(runtime.sessionId, 10);
-    const all = await this.leaderboard.getAll(runtime.sessionId);
-    const q = runtime.questions[runtime.qIndex];
-
-    // Host-only full board
-    this.server.to(`host:${runtime.sessionId}`).emit('host.fullLeaderboard', {
-      rows: all,
-    });
-    this.server.to(`host:${runtime.sessionId}`).emit('leaderboard.update', {
-      top10,
-    });
-
-    // Per-socket personalized reveal.
-    const liveSockets = await this.server
-      .in(`live:${runtime.sessionId}`)
-      .fetchSockets();
-    for (const s of liveSockets) {
-      const userId = (s.data?.user as AuthUser | undefined)?.id;
-      if (!userId) continue;
-      const rank = await this.leaderboard.getRank(runtime.sessionId, userId);
-      const prevRank = await this.leaderboard.getPrevRank(
-        runtime.sessionId,
-        userId,
-      );
-      const score = await this.leaderboard.getScore(runtime.sessionId, userId);
-      const myAnswer = await this.prisma.liveExamAnswer.findFirst({
-        where: {
-          questionId: q.id,
-          participant: { sessionId: runtime.sessionId, userId },
-        },
-      });
-      s.emit('leaderboard.reveal', {
-        top10,
-        yourRank: rank,
-        yourPrevRank: prevRank,
-        yourDelta: prevRank && rank ? prevRank - rank : 0,
-        yourScore: score,
-        yourAwardedPoints: myAnswer?.awardedPoints ?? 0,
-        yourIsCorrect: myAnswer?.isCorrect ?? false,
-        interstitialSec: runtime.interstitialSec,
-      });
-    }
-
-    const t = setTimeout(() => {
-      this.dispatchNextQuestion(runtime).catch((e) =>
-        this.logger.error('dispatchNextQuestion failed', e),
-      );
-    }, runtime.interstitialSec * 1000);
-    runtime.timers.push(t);
-  }
-
-  // ─── Finalize ─────────────────────────────────────
-
-  private async finalizeExam(
-    runtime: RoomRuntime,
-    reason: string,
-    byUserId?: string,
-  ) {
-    if (!this.runtimes.has(runtime.sessionId)) return;
-    this.cancelTimers(runtime);
-    this.runtimes.delete(runtime.sessionId);
-
-    await this.prisma.liveExamSession.updateMany({
-      where: { id: runtime.sessionId, status: LiveExamSessionStatus.LIVE },
-      data: { status: LiveExamSessionStatus.ENDED, endedAt: new Date() },
-    });
-    await this.leaderboard.snapshot(runtime.sessionId);
-
-    const finalTop3 = await this.prisma.liveExamParticipant.findMany({
-      where: { sessionId: runtime.sessionId, finalRank: { lte: 3 } },
-      orderBy: { finalRank: 'asc' },
-    });
-
-    // Per-socket yourResult
-    const liveSockets = await this.server
-      .in(`live:${runtime.sessionId}`)
-      .fetchSockets();
-    for (const s of liveSockets) {
-      const userId = (s.data?.user as AuthUser | undefined)?.id;
-      if (!userId) continue;
-      const me = await this.prisma.liveExamParticipant.findUnique({
-        where: {
-          sessionId_userId: { sessionId: runtime.sessionId, userId },
-        },
-      });
-      s.emit('exam.ended', {
-        reason,
-        finalTop3,
-        yourResult: me
-          ? {
-              finalScore: me.finalScore,
-              finalRank: me.finalRank,
-              correctCount: me.correctCount,
-              wrongCount: me.wrongCount,
-            }
-          : null,
-      });
-    }
-    this.server.to(`host:${runtime.sessionId}`).emit('exam.ended', {
-      reason,
-      finalTop3,
-    });
-
-    await this.prisma.liveExamEvent.create({
-      data: {
-        sessionId: runtime.sessionId,
-        userId: byUserId ?? null,
-        type: 'END',
-        payload: { reason },
-      },
-    });
-  }
-
-  private cancelTimers(runtime: RoomRuntime) {
-    for (const t of runtime.timers) clearTimeout(t);
-    runtime.timers = [];
-    if (runtime.durationCap) {
-      clearTimeout(runtime.durationCap);
-      runtime.durationCap = null;
-    }
   }
 
   // ─── Helpers ──────────────────────────────────────

@@ -203,6 +203,12 @@ export default function TemplateDetailPage({
                   <Play className="w-4 h-4" />
                   {spawnSession.isPending ? 'Starting…' : 'Start new session'}
                 </button>
+                <Link
+                  href={`/live/templates/${id}/edit`}
+                  className="brutal-btn px-3 py-2 bg-white flex items-center gap-2"
+                >
+                  <Edit className="w-4 h-4" /> Edit
+                </Link>
                 <button
                   type="button"
                   onClick={() => archive.mutate()}
@@ -242,8 +248,16 @@ export default function TemplateDetailPage({
               <div className="text-[10px] uppercase text-neutral-500 tracking-wide">
                 {q.type.replace('_', ' ').toLowerCase()}
               </div>
-              <div className="font-bold">
-                {i + 1}. {q.prompt || <em className="text-neutral-400">empty</em>}
+              <div className="font-bold flex gap-1">
+                <span>{i + 1}.</span>
+                {q.prompt ? (
+                  <span
+                    className="prose prose-sm max-w-none break-words"
+                    dangerouslySetInnerHTML={{ __html: q.prompt }}
+                  />
+                ) : (
+                  <em className="text-neutral-400">empty</em>
+                )}
               </div>
             </li>
           ))}

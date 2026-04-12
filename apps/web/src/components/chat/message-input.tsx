@@ -3,10 +3,10 @@
 import { useState, useRef, useCallback } from 'react';
 import { Button, message as antMessage } from 'antd';
 import { SendOutlined, PaperClipOutlined, CloseOutlined } from '@ant-design/icons';
-import { getSocket } from '@/lib/socket';
+import { connectSocket, getSocket } from '@/lib/socket';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/lib/auth-store';
-import { useChatStore, type ChatMessage } from '@/lib/chat-store';
+import { type ChatMessage } from '@/lib/chat-store';
 import { useChatUpload } from '@/features/chat/hooks/use-chat-upload';
 import { UploadPreview } from './upload-preview';
 import { EmojiPickerButton } from './emoji-picker-button';
@@ -24,7 +24,6 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
   const [pendingFile, setPendingFile] = useState<File | null>(null);
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
-  const socketConnected = useChatStore((s) => s.socketConnected);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -54,28 +53,27 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
         const isImage = pendingFile.type.startsWith('image/');
         const msgType = isImage ? 'IMAGE' : 'FILE';
 
-        const socket = getSocket();
-        if (socket?.connected) {
-          socket.emit(
-            'send_message',
-            {
-              conversationId,
-              content: text.trim() || '',
-              type: msgType,
-              clientId,
-              attachmentUrl: result.url,
-              attachmentName: result.name,
-              attachmentSize: result.size,
-              attachmentType: result.type,
-            },
-            (res: { success: boolean; message?: ChatMessage }) => {
-              if (res.success && res.message) {
-                queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
-                queryClient.invalidateQueries({ queryKey: ['conversations'] });
-              }
-            },
-          );
-        }
+        // Always emit — socket.io buffers while disconnected and flushes on reconnect.
+        const socket = connectSocket();
+        socket.emit(
+          'send_message',
+          {
+            conversationId,
+            content: text.trim() || '',
+            type: msgType,
+            clientId,
+            attachmentUrl: result.url,
+            attachmentName: result.name,
+            attachmentSize: result.size,
+            attachmentType: result.type,
+          },
+          (res: { success: boolean; message?: ChatMessage }) => {
+            if (res.success && res.message) {
+              queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+              queryClient.invalidateQueries({ queryKey: ['conversations'] });
+            }
+          },
+        );
         setPendingFile(null);
         setText('');
         resetUpload();
@@ -120,8 +118,10 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
     });
 
     setText('');
-    const socket = getSocket();
-    if (socket) socket.emit('typing_stop', { conversationId });
+    // Ensure a socket exists; emits issued while disconnected are buffered
+    // by socket.io and delivered automatically on reconnect.
+    const socket = connectSocket();
+    socket.emit('typing_stop', { conversationId });
 
     const sendCallback = (res: { success: boolean; message?: ChatMessage; error?: string }) => {
       if (res.success && res.message) {
@@ -162,11 +162,7 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
       }
     };
 
-    if (socket?.connected) {
-      socket.emit('send_message', { conversationId, content, type: 'TEXT', clientId }, sendCallback);
-    } else {
-      sendCallback({ success: false, error: 'NOT_CONNECTED' });
-    }
+    socket.emit('send_message', { conversationId, content, type: 'TEXT', clientId }, sendCallback);
   }, [text, pendingFile, conversationId, queryClient, user, uploadFile, resetUpload]);
 
   // ─── Edit message ──────────────────────────────────
@@ -316,7 +312,7 @@ export function MessageInput({ conversationId, editingMessage, onCancelEdit }: P
 
   const canSend = isEditing
     ? editText.trim().length > 0
-    : (text.trim().length > 0 || !!pendingFile) && socketConnected;
+    : text.trim().length > 0 || !!pendingFile;
 
   return (
     <div className="border-t border-gray-200 bg-white">

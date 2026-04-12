@@ -23,6 +23,8 @@ import { TranslationModule } from './translation/translation.module';
 import { AiChatModule } from './ai-chat/ai-chat.module';
 import { ToeicSwGradingModule } from './toeic-sw-grading/toeic-sw-grading.module';
 import { LiveExamModule } from './live-exam/live-exam.module';
+import { PaymentsModule } from './payments/payments.module';
+import { BlogModule } from './blog/blog.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { LiveExamModule } from './live-exam/live-exam.module';
     AiChatModule,
     ToeicSwGradingModule,
     LiveExamModule,
+    PaymentsModule,
+    BlogModule,
   ],
 })
 export class AppModule {}

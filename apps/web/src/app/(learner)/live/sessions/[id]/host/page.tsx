@@ -26,6 +26,7 @@ import {
   LiveExamSessionStatus,
   RevealPayload,
 } from '@/lib/live-exam-types';
+import { PromptWithMedia } from '@/components/live-exam/prompt-media';
 
 type PlayerAnswerEntry = {
   userId: string;
@@ -517,9 +518,13 @@ function CurrentQuestionPanel({
             {Math.ceil(remainingMs / 1000)}s
           </div>
         </div>
-        <h2 className="text-xl font-extrabold mb-4">
-          {currentQ.question.prompt}
-        </h2>
+        <PromptWithMedia
+          prompt={currentQ.question.prompt}
+          media={currentQ.question.dispatch.media}
+          className="mb-4"
+          promptClassName="text-xl font-extrabold"
+        />
+
 
         <HostRevealView dispatch={currentQ.question.dispatch} reveal={currentQ.reveal} />
 

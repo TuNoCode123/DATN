@@ -10,7 +10,7 @@ export function HeroCard() {
             <Play className="w-5 h-5 text-blue-600" />
           </div>
           <div>
-            <h4 className="font-bold text-foreground text-sm">IELTS Reading</h4>
+            <h4 className="font-bold text-foreground text-sm">IELTS · TOEIC · HSK</h4>
             <p className="text-xs text-slate-500">12 lessons &bull; 4h 30m</p>
           </div>
         </div>
@@ -32,10 +32,16 @@ export function HeroCard() {
       </div>
 
       {/* Floating decorations */}
-      <div className="absolute -top-4 -right-4 w-14 h-14 bg-rose-200 rounded-2xl flex items-center justify-center border-2 border-border-strong rotate-12">
+      <div
+        className="float-slow absolute -top-4 -right-4 w-14 h-14 bg-rose-200 rounded-2xl flex items-center justify-center border-2 border-border-strong rotate-12"
+        style={{ ['--float-base' as string]: 'rotate(12deg)' }}
+      >
         <Target className="w-6 h-6 text-rose-600" />
       </div>
-      <div className="absolute -bottom-3 -right-6 w-12 h-12 bg-amber-200 rounded-2xl flex items-center justify-center border-2 border-border-strong -rotate-6">
+      <div
+        className="float-slower absolute -bottom-3 -right-6 w-12 h-12 bg-amber-200 rounded-2xl flex items-center justify-center border-2 border-border-strong -rotate-6"
+        style={{ ['--float-base' as string]: 'rotate(-6deg)' }}
+      >
         <StarIcon className="w-5 h-5 text-amber-600 fill-amber-600" />
       </div>
     </div>

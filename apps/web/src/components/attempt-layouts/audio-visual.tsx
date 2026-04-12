@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Play, Pause, Volume2, VolumeX } from "lucide-react";
 import { RichContent } from "@/components/rich-content";
@@ -224,11 +225,14 @@ export function AudioVisualLayout({
               {showGroupImage && q.groupImageUrl && (
                 <div className="bg-white px-3 md:px-5 pt-4">
                   <div className="flex justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <Image
                       src={q.groupImageUrl}
                       alt={`Question ${q.questionNumber}`}
+                      width={0}
+                      height={0}
+                      sizes="(max-width: 768px) 100vw, 70vw"
                       className="max-w-full max-h-[60vh] h-auto object-contain"
+                      style={{ width: "auto", height: "auto", maxHeight: "60vh" }}
                     />
                   </div>
                 </div>
@@ -238,11 +242,14 @@ export function AudioVisualLayout({
               {q.imageUrl && (
                 <div className="bg-white px-3 md:px-5 pt-4">
                   <div className="flex justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <Image
                       src={q.imageUrl}
                       alt={`Question ${q.questionNumber}`}
+                      width={0}
+                      height={0}
+                      sizes="(max-width: 768px) 100vw, 70vw"
                       className="max-w-full max-h-[60vh] h-auto object-contain"
+                      style={{ width: "auto", height: "auto", maxHeight: "60vh" }}
                     />
                   </div>
                 </div>

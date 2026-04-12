@@ -24,6 +24,7 @@ import {
   Mic,
   CreditCard,
   Languages,
+  Newspaper,
 } from "lucide-react";
 
 const navItems = [
@@ -33,6 +34,7 @@ const navItems = [
   { icon: HelpCircle, label: "Question Bank", href: "/admin-questions" },
   { icon: Mic, label: "Pronunciation", href: "/admin-pronunciation-topics" },
   { icon: Languages, label: "Translation", href: "/admin-translation-topics" },
+  { icon: Newspaper, label: "Blog", href: "/admin-blog" },
   { icon: BarChart3, label: "Results", href: "/admin-results" },
   { icon: CreditCard, label: "Credits", href: "/admin-credits" },
   { icon: TrendingUp, label: "Analytics", href: "/admin-analytics" },

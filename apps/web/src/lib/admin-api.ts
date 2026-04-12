@@ -259,6 +259,43 @@ export const adminPronunciationTopicsApi = {
     api.delete(`/admin/pronunciation-topics/${id}`).then((r) => r.data),
 };
 
+// ── Blog (Admin) ──────────────────────────────────────
+
+export interface AdminBlogListParams {
+  search?: string;
+  status?: 'DRAFT' | 'PUBLISHED' | 'SCHEDULED';
+  tag?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AdminBlogPostInput {
+  title: string;
+  slug?: string;
+  excerpt: string;
+  contentHtml: string;
+  contentJson?: Record<string, unknown>;
+  thumbnailUrl?: string | null;
+  metaTitle?: string;
+  metaDescription?: string;
+  tagIds?: string[];
+}
+
+export const adminBlogApi = {
+  getAll: (params?: AdminBlogListParams) =>
+    api.get('/admin/blog', { params }).then((r) => r.data),
+  getById: (id: string) =>
+    api.get(`/admin/blog/${id}`).then((r) => r.data),
+  create: (data: AdminBlogPostInput) =>
+    api.post('/admin/blog', data).then((r) => r.data),
+  update: (id: string, data: Partial<AdminBlogPostInput>) =>
+    api.patch(`/admin/blog/${id}`, data).then((r) => r.data),
+  togglePublish: (id: string) =>
+    api.patch(`/admin/blog/${id}/publish`).then((r) => r.data),
+  delete: (id: string) =>
+    api.delete(`/admin/blog/${id}`).then((r) => r.data),
+};
+
 // ── Credits (Admin) ───────────────────────────────────
 
 export const adminCreditsApi = {

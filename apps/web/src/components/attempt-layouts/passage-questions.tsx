@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useState, useCallback, useEffect } from "react";
 import { RichContent } from "@/components/rich-content";
 import { AudioPlayer } from "@/components/ui/audio-player";
@@ -87,11 +88,14 @@ function PassageMedia({
         <div className="space-y-3">
           {passage.images!.map((img, idx) => (
             <div key={idx}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <Image
                 src={img.url}
                 alt={`${passage.title || 'Passage'} - image ${idx + 1}`}
+                width={0}
+                height={0}
+                sizes="(max-width: 768px) 100vw, 70vw"
                 className={`${getImageSizeClasses(img.size)} w-full h-auto rounded-lg object-contain`}
+                style={{ width: "100%", height: "auto" }}
               />
             </div>
           ))}
@@ -133,11 +137,14 @@ function PassageMedia({
       {hasImage && isBeside ? (
         <div className={`flex flex-col md:flex-row gap-4 mb-3 ${layout === 'beside-right' ? 'md:flex-row-reverse' : ''}`}>
           <div className="w-full md:w-2/5 md:shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
+            <Image
               src={passage.imageUrl!}
               alt={passage.title || 'Passage illustration'}
+              width={0}
+              height={0}
+              sizes="(max-width: 768px) 100vw, 30vw"
               className="max-w-full w-full h-auto rounded-lg object-contain"
+              style={{ width: "100%", height: "auto" }}
             />
           </div>
           <div className="w-full md:w-3/5 min-w-0">
@@ -157,11 +164,14 @@ function PassageMedia({
                 <RichContent html={contentHtml} className={contentClassName} />
               </div>
               <div className="mt-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <Image
                   src={passage.imageUrl!}
                   alt={passage.title || 'Passage illustration'}
+                  width={0}
+                  height={0}
+                  sizes="(max-width: 768px) 100vw, 50vw"
                   className={`${sizeClasses} w-full h-auto rounded-lg object-contain`}
+                  style={{ width: "100%", height: "auto" }}
                 />
               </div>
             </>
@@ -170,11 +180,14 @@ function PassageMedia({
               {/* Vertical layout: image above text (default) */}
               {hasImage && (
                 <div className="mb-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
+                  <Image
                     src={passage.imageUrl!}
                     alt={passage.title || 'Passage illustration'}
+                    width={0}
+                    height={0}
+                    sizes="(max-width: 768px) 100vw, 50vw"
                     className={`${sizeClasses} w-full h-auto rounded-lg object-contain`}
+                    style={{ width: "100%", height: "auto" }}
                   />
                 </div>
               )}

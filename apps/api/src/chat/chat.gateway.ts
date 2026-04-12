@@ -16,10 +16,8 @@ import { MessageType } from '@prisma/client';
 
 // ── Redis key helpers (chat-scoped) ─────────────────
 const KEY = {
-  /** User presence: JSON { socketIds, connectedAt } — TTL 120s */
+  /** User presence: JSON { connectedAt, lastSeen } — TTL 120s */
   presence: (uid: string) => `chat:presence:${uid}`,
-  /** All socket IDs for a user (SET) — cleaned on disconnect */
-  userSockets: (uid: string) => `chat:user:${uid}:sockets`,
   /** Typing indicator — TTL 3s */
   typing: (convId: string, uid: string) => `chat:typing:${convId}:${uid}`,
   /** Rate limit: list of timestamps — TTL 10s */
@@ -65,8 +63,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Join personal room — delivers events regardless of which conversation is open
       socket.join(`user:${userId}`);
 
-      // Track this socket in Redis
-      await this.redis.sadd(KEY.userSockets(userId), socket.id);
       await this.redis.sadd(KEY.onlineSet(), userId);
       await this.redis.setJson(
         KEY.presence(userId),
@@ -74,9 +70,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         TTL.PRESENCE,
       );
 
-      const socketCount = (
-        await this.redis.smembers(KEY.userSockets(userId))
-      ).length;
+      // Live count from Socket.IO adapter — works cluster-wide via Redis adapter
+      // and is self-cleaning (no orphans across server restarts).
+      const liveSockets = await this.server
+        .in(`user:${userId}`)
+        .fetchSockets();
+      const socketCount = liveSockets.length;
 
       this.logger.log(
         `[CONNECT] user=${userId} email=${user.email} socket=${socket.id} ` +
@@ -101,15 +100,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const userId = socket.data?.user?.id;
     if (!userId) return;
 
-    // Remove this socket from the user's set
-    await this.redis.srem(KEY.userSockets(userId), socket.id);
-    const remaining = await this.redis.smembers(KEY.userSockets(userId));
+    // Authoritative live count: by the time `disconnect` fires, Socket.IO has
+    // already removed this socket from its rooms in the adapter, so fetchSockets
+    // returns only the OTHER live sockets for this user (across the cluster).
+    const liveSockets = await this.server
+      .in(`user:${userId}`)
+      .fetchSockets();
 
-    if (remaining.length === 0) {
+    if (liveSockets.length === 0) {
       // Last socket — user is offline
       await this.redis.srem(KEY.onlineSet(), userId);
       await this.redis.del(KEY.presence(userId));
-      await this.redis.del(KEY.userSockets(userId));
 
       this.server.emit('user_offline', {
         userId,
@@ -120,7 +121,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       );
     } else {
       this.logger.log(
-        `[DISCONNECT] user=${userId} socket=${socket.id} — still has ${remaining.length} socket(s)`,
+        `[DISCONNECT] user=${userId} socket=${socket.id} — still has ${liveSockets.length} socket(s)`,
       );
     }
 
@@ -528,13 +529,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // ─── Helpers (used by ChatController via injection) ──
 
   emitToUser(userId: string, event: string, data: any) {
-    // Emit to all sockets of this user via their personal room
-    // Each socket joins a user-specific room on connect for targeted delivery
-    this.redis.smembers(KEY.userSockets(userId)).then((socketIds) => {
-      for (const socketId of socketIds) {
-        this.server.to(socketId).emit(event, data);
-      }
-    });
+    // Personal room is joined on connect; the Redis adapter fans this out
+    // to whichever cluster node holds the user's live sockets.
+    this.server.to(`user:${userId}`).emit(event, data);
   }
 
   emitToRoom(conversationId: string, event: string, data: any) {
