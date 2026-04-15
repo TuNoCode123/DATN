@@ -8,6 +8,7 @@ import { useAuthStore } from "@/lib/auth-store";
 import { api } from "@/lib/api";
 import { Toaster } from "sonner";
 import { Spin } from "antd";
+import { AntdProvider } from "@/lib/antd-provider";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -45,30 +46,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   if (checking) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <Spin size="large" />
-      </div>
+      <AntdProvider>
+        <div className="flex h-screen items-center justify-center bg-background">
+          <Spin size="large" />
+        </div>
+      </AntdProvider>
     );
   }
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <Topbar />
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/30">
-          {children}
-        </main>
+    <AntdProvider>
+      <div className="flex h-screen bg-background overflow-hidden">
+        <Sidebar />
+        <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+          <Topbar />
+          <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8 bg-muted/30">
+            {children}
+          </main>
+        </div>
+        <Toaster
+          position="top-right"
+          richColors
+          closeButton
+          toastOptions={{
+            className: "font-sans",
+            style: { fontFamily: "var(--font-body), 'Open Sans', sans-serif" },
+          }}
+        />
       </div>
-      <Toaster
-        position="top-right"
-        richColors
-        closeButton
-        toastOptions={{
-          className: "font-sans",
-          style: { fontFamily: "var(--font-body), 'Open Sans', sans-serif" },
-        }}
-      />
-    </div>
+    </AntdProvider>
   );
 }

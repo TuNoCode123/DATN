@@ -1,20 +1,31 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { Badge } from 'antd';
-import {
-  CloseOutlined,
-  RobotOutlined,
-  MessageOutlined,
-  CommentOutlined,
-} from '@ant-design/icons';
+import dynamic from 'next/dynamic';
+import { Bot, MessageCircle, MessageSquareText, X } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth-store';
 import { useAiChatStore } from '@/lib/ai-chat-store';
 import { useChatStore } from '@/lib/chat-store';
 import { useConversations } from '@/features/chat/hooks/use-chat';
-import { AiChatPanel } from './ai-chat/ai-chat-panel';
-import { ChatLayout } from './chat/chat-layout';
+
+const AiChatPanel = dynamic(
+  () => import('./ai-chat/ai-chat-panel').then((m) => m.AiChatPanel),
+  { ssr: false },
+);
+const ChatLayout = dynamic(
+  () => import('./chat/chat-layout').then((m) => m.ChatLayout),
+  { ssr: false },
+);
+
+function UnreadBadge({ count }: { count: number }) {
+  if (count <= 0) return null;
+  return (
+    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold leading-[18px] text-center border-2 border-white">
+      {count > 99 ? '99+' : count}
+    </span>
+  );
+}
 
 export function FloatingBubbles() {
   const user = useAuthStore((s) => s.user);
@@ -102,7 +113,7 @@ export function FloatingBubbles() {
           }
         `}
       >
-        <RobotOutlined className="text-xl text-white" />
+        <Bot className="w-5 h-5 text-white" />
       </button>
 
       {/* Chat button — slides up when expanded (middle of stack) */}
@@ -121,9 +132,10 @@ export function FloatingBubbles() {
           }
         `}
       >
-        <Badge count={expanded ? 0 : totalUnread} offset={[-4, -4]} size="small">
-          <MessageOutlined className="text-xl text-white" />
-        </Badge>
+        <span className="relative inline-flex">
+          <MessageSquareText className="w-5 h-5 text-white" />
+          <UnreadBadge count={expanded ? 0 : totalUnread} />
+        </span>
       </button>
 
       {/* Trigger FAB — single share/expand button */}
@@ -143,17 +155,14 @@ export function FloatingBubbles() {
         aria-expanded={expanded}
         className="fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full bg-primary hover:bg-emerald-600 text-white shadow-[3px_3px_0px_#1E293B] hover:shadow-[4px_4px_0px_#1E293B] border-2 border-[#1E293B] transition-all duration-200 flex items-center justify-center cursor-pointer hover:-translate-y-0.5"
       >
-        <Badge
-          count={expanded || anyPanelOpen ? 0 : totalUnread}
-          offset={[-4, -4]}
-          size="small"
-        >
+        <span className="relative inline-flex">
           {expanded || anyPanelOpen ? (
-            <CloseOutlined className="text-xl text-white" />
+            <X className="w-5 h-5 text-white" />
           ) : (
-            <CommentOutlined className="text-xl text-white" />
+            <MessageCircle className="w-5 h-5 text-white" />
           )}
-        </Badge>
+          <UnreadBadge count={expanded || anyPanelOpen ? 0 : totalUnread} />
+        </span>
       </button>
     </>
   );

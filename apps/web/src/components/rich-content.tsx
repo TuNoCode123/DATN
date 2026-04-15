@@ -2,6 +2,7 @@
 
 import { useRef, useEffect } from "react";
 import katex from "katex";
+import "katex/dist/katex.min.css";
 
 interface RichContentProps {
   html: string;

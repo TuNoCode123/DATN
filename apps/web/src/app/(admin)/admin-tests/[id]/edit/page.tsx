@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import {
   ArrowLeft, ArrowUp, ArrowDown, Save, Send, Plus, Trash2, Loader2,
@@ -19,8 +20,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import TiptapEditor from '@/components/admin/tiptap-editor';
-import TiptapMiniEditor from '@/components/admin/tiptap-mini-editor';
+const TiptapEditor = dynamic(
+  () => import('@/components/admin/tiptap-editor'),
+  { ssr: false },
+);
+const TiptapMiniEditor = dynamic(
+  () => import('@/components/admin/tiptap-mini-editor'),
+  { ssr: false },
+);
 import { ConfirmDialog } from '@/components/admin/confirm-dialog';
 import {
   useAdminTest,
@@ -1199,6 +1206,7 @@ function SectionEditor({
       transcript: null,
       imageLayout: null,
       imageSize: null,
+      images: null,
       orderIndex: (section.passages || []).length,
     };
     updateField({ passages: [...(section.passages || []), newPassage] });

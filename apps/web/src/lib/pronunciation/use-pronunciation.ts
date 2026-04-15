@@ -33,9 +33,6 @@ export function usePronunciation({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { startSession, sendAudio, stopSession } = useTranscribeSocket({
-    onPartial: (text) => {
-      setPartialText(text);
-    },
     onFinal: (text) => {
       setSpokenText(text);
       mic.stop();
