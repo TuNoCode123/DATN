@@ -1199,6 +1199,7 @@ function SectionEditor({
       transcript: null,
       imageLayout: null,
       imageSize: null,
+      images: null,
       orderIndex: (section.passages || []).length,
     };
     updateField({ passages: [...(section.passages || []), newPassage] });
