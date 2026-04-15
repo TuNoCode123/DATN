@@ -146,7 +146,9 @@ export class LiveExamGateway
         where: { id: sessionId },
         select: { status: true },
       });
-      if (session?.status === LiveExamSessionStatus.LIVE) {
+      if (session?.status === LiveExamSessionStatus.ENDED) {
+        socket.emit('exam.ended', { reason: 'session_already_ended' });
+      } else if (session?.status === LiveExamSessionStatus.LIVE) {
         const liveRoom = `live:${sessionId}`;
         socket.join(liveRoom);
 
@@ -316,6 +318,13 @@ export class LiveExamGateway
       await this.prisma.liveExamEvent.create({
         data: { sessionId, userId: user.id, type: 'START' },
       });
+
+      this.server.to('admin:global').emit('admin.sessionUpdate', {
+        sessionId,
+        status: 'LIVE',
+        title: session.title,
+      });
+
       return { ok: true };
     } catch (err: any) {
       return { ok: false, error: err.message };
@@ -384,6 +393,72 @@ export class LiveExamGateway
       },
     });
     return { ok: true };
+  }
+
+  // ─── Admin WS events ──────────────────────────────
+
+  @SubscribeMessage('admin.watchAll')
+  handleAdminWatchAll(@ConnectedSocket() socket: Socket) {
+    const user = this.userOr401(socket);
+    if (!user || user.role !== 'ADMIN') return { ok: false, error: 'FORBIDDEN' };
+    socket.join('admin:global');
+    return { ok: true };
+  }
+
+  @SubscribeMessage('admin.watch')
+  async handleAdminWatch(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() data: { sessionId: string },
+  ) {
+    const user = this.userOr401(socket);
+    if (!user || user.role !== 'ADMIN') return { ok: false, error: 'FORBIDDEN' };
+    const sid = data.sessionId;
+    socket.join(`lobby:${sid}`);
+    socket.join(`host:${sid}`);
+    socket.join(`live:${sid}`);
+    const snapshot = await this.getLobbySnapshot(sid);
+    socket.emit('lobby.state', snapshot);
+    return { ok: true };
+  }
+
+  @SubscribeMessage('admin.forceEnd')
+  async handleAdminForceEnd(
+    @ConnectedSocket() socket: Socket,
+    @MessageBody() data: { sessionId: string },
+  ) {
+    const user = this.userOr401(socket);
+    if (!user || user.role !== 'ADMIN') return { ok: false, error: 'FORBIDDEN' };
+    const sessionId = data.sessionId;
+
+    try {
+      const state = await this.redisState.getState(sessionId);
+      if (state && state.phase !== 'ENDED') {
+        if (state.phase === 'OPEN') {
+          const lockResult = await this.redisState.transitionToLocked(
+            sessionId,
+            state.qIndex,
+          );
+          if (lockResult.ok) {
+            await this.leaderboard.setQuestionState(sessionId, state.qIndex, 'LOCKED');
+            await this.queueService.closeOutQuestionPublic(sessionId, state.qIndex);
+          }
+        }
+        await this.queueService.finalizeExam(sessionId, 'admin_force_end', user.id);
+      } else {
+        await this.examService.forceEnd(sessionId, user.id, { isAdmin: true });
+        this.server
+          .to(`lobby:${sessionId}`)
+          .emit('exam.ended', { reason: 'admin_force_end' });
+        this.server.to('admin:global').emit('admin.sessionUpdate', {
+          sessionId,
+          status: 'ENDED',
+        });
+      }
+
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, error: err.message };
+    }
   }
 
   // ─── Answer submission ───────────────────────────

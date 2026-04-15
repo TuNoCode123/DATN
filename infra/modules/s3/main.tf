@@ -74,10 +74,10 @@ resource "aws_s3_bucket_cors_configuration" "uploads" {
     allowed_methods = ["GET", "PUT"] # GET for downloads, PUT for uploads
     allowed_origins = [
       "https://web.neu-study.online", # Production frontend
-      "http://localhost:3000",         # Local development
+      "http://localhost:3000",        # Local development
     ]
-    expose_headers  = ["ETag"]       # Allow browser to see ETag header
-    max_age_seconds = 3600           # Cache CORS preflight for 1 hour
+    expose_headers  = ["ETag"] # Allow browser to see ETag header
+    max_age_seconds = 3600     # Cache CORS preflight for 1 hour
   }
 }
 

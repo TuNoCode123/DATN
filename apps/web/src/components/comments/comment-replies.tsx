@@ -8,7 +8,7 @@ import type { Comment } from './types';
 
 interface CommentRepliesProps {
   comment: Comment;
-  testId: string;
+  testId?: string;
   onReply: (body: string, parentId: string) => void;
   onEdit: (commentId: string, body: string) => void;
   onDelete: (commentId: string) => void;

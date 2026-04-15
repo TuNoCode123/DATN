@@ -51,29 +51,20 @@ export class ModerationService {
     if (blacklistHit) return { status: CommentStatus.HIDDEN, reason: blacklistHit };
 
     const rateLimit = await this.checkRateLimit(userId);
-    if (rateLimit) return { status: CommentStatus.PENDING, reason: rateLimit };
+    if (rateLimit) return { status: CommentStatus.PUBLISHED, reason: rateLimit };
 
     const duplicate = await this.checkDuplicate(userId, body);
-    if (duplicate) return { status: CommentStatus.PENDING, reason: duplicate };
+    if (duplicate) return { status: CommentStatus.PUBLISHED, reason: duplicate };
 
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { trustScore: true, createdAt: true },
     });
 
-    if (!user) return { status: CommentStatus.PENDING, reason: 'user_not_found' };
-
-    if (user.trustScore < 0) {
-      return { status: CommentStatus.PENDING, reason: 'flagged_user' };
-    }
+    if (!user) return { status: CommentStatus.PUBLISHED, reason: 'user_not_found' };
 
     if (user.trustScore < TRUST_THRESHOLD) {
-      const commentCount = await this.prisma.comment.count({
-        where: { userId, status: CommentStatus.PUBLISHED },
-      });
-      if (commentCount < TRUST_THRESHOLD) {
-        return { status: CommentStatus.PENDING, reason: 'new_user' };
-      }
+      return { status: CommentStatus.PENDING, reason: user.trustScore < 0 ? 'flagged_user' : 'new_user' };
     }
 
     return { status: CommentStatus.PUBLISHED };

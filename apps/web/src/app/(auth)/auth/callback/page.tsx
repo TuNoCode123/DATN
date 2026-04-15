@@ -52,11 +52,13 @@ function CallbackContent() {
         setUser(data);
         clearCodeVerifier();
 
-        // If a social login was linked to an existing email account, let user know
+        const returnUrl = sessionStorage.getItem('auth_return_url');
+        sessionStorage.removeItem('auth_return_url');
+
         if (data.linkedExisting) {
           router.replace('/tests?linked=1');
         } else {
-          router.replace('/tests');
+          router.replace(returnUrl || '/tests');
         }
       })
       .catch((err) => {

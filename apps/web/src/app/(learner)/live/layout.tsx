@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { buildMetadata } from '@/lib/seo';
+import { RequireAuth } from '@/components/require-auth';
 
 export const metadata: Metadata = buildMetadata({
   title: 'Live Exams — Real-Time Multiplayer Quiz Battles for Language Learners',
@@ -20,5 +21,5 @@ export default function LiveLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return <RequireAuth>{children}</RequireAuth>;
 }

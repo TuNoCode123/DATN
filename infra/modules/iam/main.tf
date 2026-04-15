@@ -97,12 +97,12 @@ resource "aws_iam_role_policy" "ecr_push" {
         Effect = "Allow"
         Action = [
           "ecr:BatchCheckLayerAvailability", # Check if image layers already exist
-          "ecr:GetDownloadUrlForLayer",       # Download existing layers (for caching)
-          "ecr:BatchGetImage",                # Get image metadata
-          "ecr:PutImage",                     # Push a new image
-          "ecr:InitiateLayerUpload",          # Start uploading a new layer
-          "ecr:UploadLayerPart",              # Upload layer data
-          "ecr:CompleteLayerUpload",          # Finish uploading a layer
+          "ecr:GetDownloadUrlForLayer",      # Download existing layers (for caching)
+          "ecr:BatchGetImage",               # Get image metadata
+          "ecr:PutImage",                    # Push a new image
+          "ecr:InitiateLayerUpload",         # Start uploading a new layer
+          "ecr:UploadLayerPart",             # Upload layer data
+          "ecr:CompleteLayerUpload",         # Finish uploading a layer
         ]
         Resource = var.ecr_arns # Only our specific ECR repositories
       }
@@ -123,13 +123,13 @@ resource "aws_iam_role_policy" "ecs_deploy" {
         # ECS actions needed for deployment
         Effect = "Allow"
         Action = [
-          "ecs:DescribeTaskDefinition",   # Read current task definition
-          "ecs:RegisterTaskDefinition",   # Create new task definition revision
-          "ecs:UpdateService",            # Update service with new task definition
-          "ecs:DescribeServices",         # Check service status
-          "ecs:RunTask",                  # Run one-off tasks (migrations)
-          "ecs:DescribeTasks",            # Check task status
-          "ecs:ListTasks",               # List tasks in a cluster
+          "ecs:DescribeTaskDefinition", # Read current task definition
+          "ecs:RegisterTaskDefinition", # Create new task definition revision
+          "ecs:UpdateService",          # Update service with new task definition
+          "ecs:DescribeServices",       # Check service status
+          "ecs:RunTask",                # Run one-off tasks (migrations)
+          "ecs:DescribeTasks",          # Check task status
+          "ecs:ListTasks",              # List tasks in a cluster
         ]
         Resource = "*" # ECS actions often need broad access
       },

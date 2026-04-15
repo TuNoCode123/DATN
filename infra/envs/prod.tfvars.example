@@ -42,3 +42,19 @@ mfa_configuration     = "OPTIONAL"
 
 # Lambda
 pre_signup_lambda_zip = "./modules/cognito/lambda/pre-signup/pre-signup.zip"
+
+# App runtime config (plain ECS env)
+# PayPal (optional — payments)
+paypal_client_id     = ""
+paypal_client_secret = ""
+paypal_webhook_id    = ""
+paypal_base_url      = "https://api-m.paypal.com"
+next_public_paypal_client_id = ""
+
+# OpenRouter (optional — AI grading, falls back to Bedrock)
+openrouter_api_key = ""
+
+# AI service regions
+aws_bedrock_region    = "us-east-1"
+aws_transcribe_region = "ap-southeast-2"
+aws_polly_region      = "ap-southeast-2"

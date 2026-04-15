@@ -9,7 +9,6 @@ import {
   Check,
   X,
   Flag,
-  Clock,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/auth-store';
@@ -21,7 +20,7 @@ import { timeAgo, getInitials } from './types';
 
 interface CommentItemProps {
   comment: Comment;
-  testId: string;
+  testId?: string;
   onReply: (body: string, parentId: string) => void;
   onEdit: (commentId: string, body: string) => void;
   onDelete: (commentId: string) => void;
@@ -126,9 +125,9 @@ export function CommentItem({
             {comment.createdAt !== comment.updatedAt && !comment.isDeleted && (
               <span className="text-xs text-slate-400">(edited)</span>
             )}
-            {comment.isPending && (
-              <span className="inline-flex items-center gap-1 text-xs text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded font-medium">
-                <Clock className="w-3 h-3" />
+            {comment.status === 'PENDING' && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-700 border border-amber-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                 Pending review
               </span>
             )}

@@ -25,6 +25,7 @@ import { ToeicSwGradingModule } from './toeic-sw-grading/toeic-sw-grading.module
 import { LiveExamModule } from './live-exam/live-exam.module';
 import { PaymentsModule } from './payments/payments.module';
 import { BlogModule } from './blog/blog.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -54,6 +55,7 @@ import { BlogModule } from './blog/blog.module';
     LiveExamModule,
     PaymentsModule,
     BlogModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

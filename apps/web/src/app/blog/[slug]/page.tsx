@@ -27,6 +27,7 @@ import { PostRenderer } from '@/components/blog/post-renderer';
 import { ReadingProgress } from '@/components/blog/reading-progress';
 import { TableOfContents } from '@/components/blog/table-of-contents';
 import { BlogCta } from '@/components/blog/blog-cta';
+import { CommentSection } from '@/components/comments/comment-section';
 
 export const revalidate = 300;
 
@@ -205,7 +206,7 @@ export default async function BlogPostPage({
                   src={post.thumbnailUrl}
                   alt={post.title}
                   fill
-                  unoptimized
+                  sizes="(min-width: 1024px) 720px, 100vw"
                   className="object-cover"
                   priority
                 />
@@ -235,6 +236,11 @@ export default async function BlogPostPage({
                   </Link>
                 ))}
               </div>
+            </div>
+
+            {/* Comments */}
+            <div className="mt-14 pt-8 border-t-[2.5px] border-foreground/10">
+              <CommentSection blogSlug={slug} />
             </div>
           </div>
 

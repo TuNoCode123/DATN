@@ -76,17 +76,17 @@ resource "aws_route53_record" "cert_validation" {
     # Create a map where each key is the domain name
     # and the value is the validation record details
     for dvo in aws_acm_certificate.wildcard.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name   # The CNAME record name ACM wants
-      record = dvo.resource_record_value  # The CNAME record value ACM wants
-      type   = dvo.resource_record_type   # Always "CNAME" for DNS validation
+      name   = dvo.resource_record_name  # The CNAME record name ACM wants
+      record = dvo.resource_record_value # The CNAME record value ACM wants
+      type   = dvo.resource_record_type  # Always "CNAME" for DNS validation
     }
   }
 
-  zone_id = var.zone_id                # Route 53 hosted zone ID
-  name    = each.value.name            # e.g., "_abc123.neu-study.online"
-  type    = each.value.type            # "CNAME"
-  records = [each.value.record]        # e.g., "_xyz789.acm-validations.aws"
-  ttl     = 60                         # Time-to-live in seconds (how long DNS caches this)
+  zone_id = var.zone_id         # Route 53 hosted zone ID
+  name    = each.value.name     # e.g., "_abc123.neu-study.online"
+  type    = each.value.type     # "CNAME"
+  records = [each.value.record] # e.g., "_xyz789.acm-validations.aws"
+  ttl     = 60                  # Time-to-live in seconds (how long DNS caches this)
 
   # Allow overwriting if the record already exists (from a previous cert)
   allow_overwrite = true

@@ -90,8 +90,8 @@ resource "aws_internet_gateway" "main" {
 # Public subnet in Availability Zone A (e.g., ap-southeast-2a)
 resource "aws_subnet" "public_a" {
   vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.1.0/24"             # 256 IPs for this subnet
-  availability_zone = "${var.aws_region}a"       # e.g., "ap-southeast-2a"
+  cidr_block        = "10.0.1.0/24"        # 256 IPs for this subnet
+  availability_zone = "${var.aws_region}a" # e.g., "ap-southeast-2a"
 
   # Instances launched here automatically get a public IP address
   # This is what makes it a "public" subnet (along with IGW routing)
@@ -103,8 +103,8 @@ resource "aws_subnet" "public_a" {
 # Public subnet in Availability Zone B (e.g., ap-southeast-2b)
 resource "aws_subnet" "public_b" {
   vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.2.0/24"             # Different CIDR — no overlap!
-  availability_zone = "${var.aws_region}b"       # Different AZ for redundancy
+  cidr_block        = "10.0.2.0/24"        # Different CIDR — no overlap!
+  availability_zone = "${var.aws_region}b" # Different AZ for redundancy
 
   map_public_ip_on_launch = true
 
@@ -129,7 +129,7 @@ resource "aws_subnet" "public_b" {
 # Private subnet in Availability Zone A
 resource "aws_subnet" "private_a" {
   vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.10.0/24"            # 256 IPs
+  cidr_block        = "10.0.10.0/24" # 256 IPs
   availability_zone = "${var.aws_region}a"
 
   # Note: NO map_public_ip_on_launch — this makes it private
@@ -167,7 +167,7 @@ resource "aws_subnet" "private_b" {
 # Production would use one per AZ for high availability.
 # =============================================================================
 
-# Elastic IP — a static public IP address for the NAT Gateway
+# Ela 
 # NAT Gateway needs a fixed public IP so return traffic knows where to go
 resource "aws_eip" "nat" {
   domain = "vpc" # Allocate this EIP for use in a VPC (not EC2-Classic)
@@ -206,8 +206,8 @@ resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
   route {
-    cidr_block = "0.0.0.0/0"                    # Destination: anywhere on the internet
-    gateway_id = aws_internet_gateway.main.id    # Next hop: Internet Gateway
+    cidr_block = "0.0.0.0/0"                  # Destination: anywhere on the internet
+    gateway_id = aws_internet_gateway.main.id # Next hop: Internet Gateway
   }
 
   tags = { Name = "${var.project_name}-public-rt" }
@@ -217,8 +217,8 @@ resource "aws_route_table" "public" {
 # Without this association, the subnets would use the VPC's default route table
 # (which has no internet route)
 resource "aws_route_table_association" "public_a" {
-  subnet_id      = aws_subnet.public_a.id      # Which subnet
-  route_table_id = aws_route_table.public.id    # Which route table
+  subnet_id      = aws_subnet.public_a.id    # Which subnet
+  route_table_id = aws_route_table.public.id # Which route table
 }
 
 resource "aws_route_table_association" "public_b" {
@@ -235,8 +235,8 @@ resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
   route {
-    cidr_block     = "0.0.0.0/0"                  # Destination: internet
-    nat_gateway_id = aws_nat_gateway.main.id       # Next hop: NAT Gateway (not IGW!)
+    cidr_block     = "0.0.0.0/0"             # Destination: internet
+    nat_gateway_id = aws_nat_gateway.main.id # Next hop: NAT Gateway (not IGW!)
   }
 
   tags = { Name = "${var.project_name}-private-rt" }
@@ -293,9 +293,9 @@ resource "aws_security_group" "alb" {
   # Port 80 traffic will be redirected to HTTPS (443) by the ALB listener
   ingress {
     description = "HTTP from internet (redirected to HTTPS)"
-    from_port   = 80          # Start of port range
-    to_port     = 80          # End of port range (same = single port)
-    protocol    = "tcp"       # TCP protocol (HTTP uses TCP)
+    from_port   = 80            # Start of port range
+    to_port     = 80            # End of port range (same = single port)
+    protocol    = "tcp"         # TCP protocol (HTTP uses TCP)
     cidr_blocks = ["0.0.0.0/0"] # 0.0.0.0/0 = allow from ALL IP addresses
   }
 
@@ -313,9 +313,9 @@ resource "aws_security_group" "alb" {
   # ALB needs to forward traffic to ECS targets and do health checks
   egress {
     description = "Allow all outbound"
-    from_port   = 0           # 0 = all ports
+    from_port   = 0 # 0 = all ports
     to_port     = 0
-    protocol    = "-1"        # "-1" = all protocols (TCP, UDP, ICMP, etc.)
+    protocol    = "-1" # "-1" = all protocols (TCP, UDP, ICMP, etc.)
     cidr_blocks = ["0.0.0.0/0"]
   }
 
@@ -337,8 +337,8 @@ resource "aws_security_group" "ecs" {
   # and sends traffic to that specific port.
   ingress {
     description     = "ALB to ECS dynamic ports (bridge networking)"
-    from_port       = 32768   # Start of ephemeral port range
-    to_port         = 65535   # End of ephemeral port range
+    from_port       = 32768 # Start of ephemeral port range
+    to_port         = 65535 # End of ephemeral port range
     protocol        = "tcp"
     security_groups = [aws_security_group.alb.id]
     # "security_groups" = only allow traffic from resources in sg-alb
@@ -379,10 +379,10 @@ resource "aws_security_group" "rds" {
   # Inbound: PostgreSQL from ECS only
   ingress {
     description     = "PostgreSQL from ECS"
-    from_port       = 5432    # PostgreSQL default port
+    from_port       = 5432 # PostgreSQL default port
     to_port         = 5432
     protocol        = "tcp"
-    security_groups = [aws_security_group.ecs.id]  # Only from ECS security group
+    security_groups = [aws_security_group.ecs.id] # Only from ECS security group
   }
 
   # Inbound: PostgreSQL from Lambda (for future async workers)
@@ -411,7 +411,7 @@ resource "aws_security_group" "redis" {
   # Inbound: Redis from ECS only
   ingress {
     description     = "Redis from ECS only"
-    from_port       = 6379    # Redis default port
+    from_port       = 6379 # Redis default port
     to_port         = 6379
     protocol        = "tcp"
     security_groups = [aws_security_group.ecs.id]

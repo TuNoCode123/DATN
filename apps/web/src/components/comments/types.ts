@@ -8,7 +8,8 @@ export type CommentStatus = 'PUBLISHED' | 'PENDING' | 'HIDDEN' | 'DELETED';
 
 export interface Comment {
   id: string;
-  testId: string;
+  testId?: string;
+  blogPostId?: string;
   parentId: string | null;
   body: string;
   status: CommentStatus;

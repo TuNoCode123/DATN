@@ -26,6 +26,8 @@ import {
   Languages,
   Newspaper,
   ShieldAlert,
+  Radio,
+  Bell,
 } from "lucide-react";
 
 const navItems = [
@@ -33,10 +35,12 @@ const navItems = [
   { icon: Users, label: "Users", href: "/admin-users" },
   { icon: ClipboardList, label: "Tests", href: "/admin-tests" },
   { icon: HelpCircle, label: "Question Bank", href: "/admin-questions" },
+  { icon: Radio, label: "Live Exam", href: "/admin-live-exams" },
   { icon: Mic, label: "Pronunciation", href: "/admin-pronunciation-topics" },
   { icon: Languages, label: "Translation", href: "/admin-translation-topics" },
   { icon: Newspaper, label: "Blog", href: "/admin-blog" },
   { icon: ShieldAlert, label: "Comments", href: "/admin-comments" },
+  { icon: Bell, label: "Notifications", href: "/admin-notifications" },
   { icon: BarChart3, label: "Results", href: "/admin-results" },
   { icon: CreditCard, label: "Credits", href: "/admin-credits" },
   { icon: TrendingUp, label: "Analytics", href: "/admin-analytics" },
@@ -87,7 +91,7 @@ function NavContent({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
                   "transition-all duration-200",
                   "hover:bg-sidebar-accent hover:text-white",
                   isActive
-                    ? "bg-sidebar-primary text-white shadow-lg shadow-sidebar-primary/25"
+                    ? "!bg-yellow-400 !text-indigo-950 !font-bold shadow-lg shadow-yellow-400/30"
                     : "text-sidebar-foreground/70",
                   collapsed && "justify-center px-2"
                 )}
@@ -95,7 +99,7 @@ function NavContent({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?
                 <item.icon className={cn(
                   "w-[18px] h-[18px] shrink-0 transition-transform duration-200",
                   "group-hover:scale-110",
-                  isActive && "drop-shadow-sm"
+                  isActive && "!text-indigo-950 drop-shadow-sm"
                 )} />
                 {!collapsed && <span>{item.label}</span>}
               </Link>

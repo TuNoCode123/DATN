@@ -15,10 +15,12 @@ export const metadata: Metadata = buildMetadata({
   ],
 });
 
+import { RequireAuth } from '@/components/require-auth';
+
 export default function PronunciationLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return <RequireAuth>{children}</RequireAuth>;
 }

@@ -3,11 +3,19 @@
 import { Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { loginWithCognito } from '@/lib/cognito';
+import { loginWithCognito, forgotPasswordWithCognito } from '@/lib/cognito';
 
 function LoginContent() {
   const searchParams = useSearchParams();
   const error = searchParams.get('error');
+  const returnUrl = searchParams.get('returnUrl');
+
+  const handleLogin = (provider?: 'Google' | 'Facebook') => {
+    if (returnUrl) {
+      sessionStorage.setItem('auth_return_url', returnUrl);
+    }
+    loginWithCognito(provider);
+  };
 
   return (
     <div>
@@ -40,7 +48,7 @@ function LoginContent() {
       <div className="flex flex-col gap-4">
         {/* ── Sign in with Google ── */}
         <button
-          onClick={() => loginWithCognito('Google')}
+          onClick={() => handleLogin('Google')}
           className="brutal-btn bg-white text-foreground py-3 text-sm flex items-center justify-center gap-2 border-2 border-border-strong hover:bg-slate-50"
         >
           <svg className="w-4 h-4" viewBox="0 0 24 24">
@@ -54,10 +62,17 @@ function LoginContent() {
 
         {/* ── Sign in with Email/Password (Cognito Hosted UI) ── */}
         <button
-          onClick={() => loginWithCognito()}
+          onClick={() => handleLogin()}
           className="brutal-btn bg-primary text-white py-3 text-sm flex items-center justify-center gap-2"
         >
           Sign in with Email
+        </button>
+
+        <button
+          onClick={() => forgotPasswordWithCognito()}
+          className="text-center text-sm text-primary font-semibold hover:underline cursor-pointer bg-transparent border-0 p-0"
+        >
+          Forgot password?
         </button>
 
         <p className="text-center text-sm text-slate-500 mt-2">

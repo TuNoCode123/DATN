@@ -68,6 +68,25 @@ export async function signupWithCognito(provider?: 'Google' | 'Facebook') {
 }
 
 /**
+ * Redirect to Cognito Hosted UI's Forgot Password page.
+ * After the user sets a new password, Cognito redirects back to the
+ * callback URL with an authorization code — same flow as normal login,
+ * so PKCE is generated here too.
+ */
+export async function forgotPasswordWithCognito() {
+  const challenge = await generatePKCE();
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    scope: 'openid email profile',
+    redirect_uri: getRedirectUri(),
+    code_challenge: challenge,
+    code_challenge_method: 'S256',
+  });
+  window.location.href = `https://${COGNITO_DOMAIN}/forgotPassword?${params}`;
+}
+
+/**
  * Redirect to Cognito for logout, then back to /login.
  */
 export function logoutFromCognito() {

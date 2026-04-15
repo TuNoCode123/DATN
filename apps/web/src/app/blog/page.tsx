@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { Navbar, Footer } from '@/components/landing';
 import { JsonLd } from '@/components/seo/json-ld';
-import { buildMetadata, breadcrumbSchema } from '@/lib/seo';
+import { buildMetadata, breadcrumbSchema, blogSchema } from '@/lib/seo';
 import { getBlogList, type BlogPostSummary, type BlogTag } from '@/lib/blog-server';
 import { BlogControls } from '@/components/blog/blog-controls';
 import { SidebarTags } from '@/components/blog/sidebar-tags';
@@ -90,10 +90,23 @@ export default async function BlogIndexPage({
   return (
     <div className="min-h-screen bg-cream">
       <JsonLd
-        data={breadcrumbSchema([
-          { name: 'Home', path: '/' },
-          { name: 'Blog', path: '/blog' },
-        ])}
+        data={[
+          breadcrumbSchema([
+            { name: 'Home', path: '/' },
+            { name: 'Blog', path: '/blog' },
+          ]),
+          blogSchema({
+            path: '/blog',
+            title: 'Language Exam Blog',
+            description:
+              'Evergreen guides, study plans, and exam strategies for IELTS, TOEIC, and HSK.',
+            posts: allPosts.slice(0, 20).map((p) => ({
+              title: p.title,
+              path: `/blog/${p.slug}`,
+              datePublished: p.publishedAt,
+            })),
+          }),
+        ]}
       />
       <Navbar />
 
@@ -236,8 +249,9 @@ function FeaturedCard({ post }: { post: BlogPostSummary }) {
             src={post.thumbnailUrl}
             alt={post.title}
             fill
-            unoptimized
+            sizes="(min-width: 1024px) 700px, 100vw"
             className="object-cover transition-transform duration-500 group-hover:scale-105"
+            priority
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
           <div className="absolute bottom-4 left-4 flex gap-2">
@@ -292,7 +306,7 @@ function SecondaryCard({ post }: { post: BlogPostSummary }) {
             src={post.thumbnailUrl}
             alt={post.title}
             fill
-            unoptimized
+            sizes="(min-width: 1024px) 400px, 100vw"
             className="object-cover transition-transform duration-500 group-hover:scale-105"
           />
         </div>
@@ -339,7 +353,7 @@ function ArticleCard({ post }: { post: BlogPostSummary }) {
               src={post.thumbnailUrl}
               alt={post.title}
               fill
-              unoptimized
+              sizes="(min-width: 640px) 208px, 100vw"
               className="object-cover transition-transform duration-500 group-hover:scale-105"
             />
           </Link>

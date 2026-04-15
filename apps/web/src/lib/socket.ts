@@ -1,8 +1,8 @@
-import { io, Socket } from 'socket.io-client';
+import { Socket } from 'socket.io-client';
 import axios from 'axios';
 import { useChatStore } from './chat-store';
+import { getSocketManager } from './socket-manager';
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:4000';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 let socket: Socket | null = null;
@@ -28,13 +28,8 @@ async function refreshTokens(): Promise<boolean> {
 export function connectSocket(): Socket {
   if (socket && !socket.disconnected) return socket;
 
-  socket = io(`${SOCKET_URL}/chat`, {
-    withCredentials: true,
-    transports: ['websocket', 'polling'],
-    reconnection: true,
-    reconnectionDelay: 1000,
-    reconnectionAttempts: 10,
-  });
+  socket = getSocketManager().socket('/chat');
+  socket.connect();
 
   socket.on('connect', () => {
     console.log('[WS] Connected:', socket!.id);

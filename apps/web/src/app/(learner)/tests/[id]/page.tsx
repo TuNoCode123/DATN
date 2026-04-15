@@ -151,6 +151,12 @@ export default function TestDetailPage() {
   const handleStart = async () => {
     if (!test) return;
 
+    if (!user) {
+      const returnUrl = encodeURIComponent(`/tests/${testId}`);
+      router.push(`/login?returnUrl=${returnUrl}`);
+      return;
+    }
+
     setStarting(true);
     try {
       const sectionIds = mode === 'full' ? test.sections.map((s) => s.id) : selectedSections;

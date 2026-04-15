@@ -1,10 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adminCommentsApi } from '@/lib/admin-api';
 
-export function useAdminCommentQueue(page = 1, limit = 20) {
+export function useAdminCommentQueue(
+  page = 1,
+  limit = 20,
+  filters?: { status?: string; search?: string },
+) {
   return useQuery({
-    queryKey: ['admin', 'comments', 'queue', page, limit],
-    queryFn: () => adminCommentsApi.getQueue({ page, limit }),
+    queryKey: ['admin', 'comments', 'queue', page, limit, filters],
+    queryFn: () =>
+      adminCommentsApi.getQueue({
+        page,
+        limit,
+        status: filters?.status,
+        search: filters?.search,
+      }),
   });
 }
 

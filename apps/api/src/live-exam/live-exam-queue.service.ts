@@ -413,6 +413,11 @@ export class LiveExamQueueService implements OnModuleInit, OnModuleDestroy {
       });
     }
     this.server.to(`host:${sid}`).emit('exam.ended', { reason, finalTop3 });
+    this.server.to(`lobby:${sid}`).emit('exam.ended', { reason, finalTop3 });
+    this.server.to('admin:global').emit('admin.sessionUpdate', {
+      sessionId: sid,
+      status: 'ENDED',
+    });
 
     await this.prisma.liveExamEvent.create({
       data: {
@@ -424,5 +429,15 @@ export class LiveExamQueueService implements OnModuleInit, OnModuleDestroy {
     });
 
     await this.redisState.cleanup(sid);
+  }
+
+  emitSessionEnded(sid: string, reason: string) {
+    this.server.to(`host:${sid}`).emit('exam.ended', { reason, finalTop3: [] });
+    this.server
+      .to(`lobby:${sid}`)
+      .emit('exam.ended', { reason, finalTop3: [] });
+    this.server
+      .to('admin:global')
+      .emit('admin.sessionUpdate', { sessionId: sid, status: 'ENDED' });
   }
 }

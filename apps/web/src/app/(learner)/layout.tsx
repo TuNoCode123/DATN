@@ -3,12 +3,15 @@
 import { Navbar } from '@/components/landing/navbar';
 import { Footer } from '@/components/landing/footer';
 import { FloatingBubbles } from '@/components/floating-bubbles';
+import { useSocketLifecycle } from '@/features/chat/hooks/use-socket-lifecycle';
 
 export default function LearnerLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  useSocketLifecycle();
+
   return (
     <div className="min-h-screen bg-cream flex flex-col">
       <Navbar />

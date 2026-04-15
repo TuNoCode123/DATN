@@ -26,15 +26,15 @@
 #   - API responses are user-specific and can't be cached
 #   - Lower latency for API calls (one fewer hop)
 resource "aws_route53_record" "api" {
-  zone_id = var.zone_id                    # Route 53 hosted zone
-  name    = "api.${var.domain_name}"       # "api.neu-study.online"
-  type    = "A"                            # A record (maps hostname to IPv4)
+  zone_id = var.zone_id              # Route 53 hosted zone
+  name    = "api.${var.domain_name}" # "api.neu-study.online"
+  type    = "A"                      # A record (maps hostname to IPv4)
 
   # Alias configuration: point to the ALB
   alias {
-    name                   = var.alb_dns_name  # ALB hostname
-    zone_id                = var.alb_zone_id   # ALB's Route 53 zone ID
-    evaluate_target_health = true              # Route 53 health checks the ALB
+    name                   = var.alb_dns_name # ALB hostname
+    zone_id                = var.alb_zone_id  # ALB's Route 53 zone ID
+    evaluate_target_health = true             # Route 53 health checks the ALB
     # If evaluate_target_health = true and ALB has no healthy targets,
     # Route 53 won't return this record (DNS-level failover)
   }
@@ -48,7 +48,7 @@ resource "aws_route53_record" "api" {
 #   - Global edge locations (faster for users worldwide)
 resource "aws_route53_record" "web" {
   zone_id = var.zone_id
-  name    = "web.${var.domain_name}"       # "web.neu-study.online"
+  name    = "web.${var.domain_name}" # "web.neu-study.online"
   type    = "A"
 
   alias {
