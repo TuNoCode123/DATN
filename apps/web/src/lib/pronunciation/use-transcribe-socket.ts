@@ -20,7 +20,6 @@ interface UseTranscribeSocketOptions {
 }
 
 export function useTranscribeSocket({
-  onPartial,
   onFinal,
   onAssessing,
   onAssessment,
