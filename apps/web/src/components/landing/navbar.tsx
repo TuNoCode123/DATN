@@ -232,8 +232,8 @@ export function Navbar() {
                 </span>
               </div>
               <button
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   window.location.href = '/login';
                 }}
                 title="Log out"
@@ -354,8 +354,8 @@ export function Navbar() {
                     </span>
                   </div>
                   <button
-                    onClick={() => {
-                      logout();
+                    onClick={async () => {
+                      await logout();
                       window.location.href = '/login';
                     }}
                     className="flex items-center gap-2 text-sm text-red-500 text-left px-3 py-2 cursor-pointer"

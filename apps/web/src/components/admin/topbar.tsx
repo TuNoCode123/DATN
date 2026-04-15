@@ -13,7 +13,6 @@ import {
 import { useAuthStore } from "@/lib/auth-store";
 import { Bell, LogOut, Settings, User, ChevronDown } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 
 const pageTitles: Record<string, { title: string; description: string }> = {
   "/admin-dashboard": { title: "Dashboard", description: "Platform overview and key metrics" },
@@ -28,16 +27,15 @@ const pageTitles: Record<string, { title: string; description: string }> = {
 
 export function Topbar() {
   const pathname = usePathname();
-  const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const displayName = user?.displayName || user?.email || "Admin";
   const avatarUrl = "";
   const page = pageTitles[pathname] ?? { title: "Admin", description: "" };
 
-  const handleLogout = () => {
-    logout();
-    router.push("/login");
+  const handleLogout = async () => {
+    await logout();
+    window.location.href = "/login";
   };
 
   return (
