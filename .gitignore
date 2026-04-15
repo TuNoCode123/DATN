@@ -26,3 +26,6 @@ infra/plan.out
 infra/terraform.tfvars
 infra/envs/*.tfvars
 infra/.terraform.lock.hcl
+
+# Claude Code local permissions (may contain secrets)
+.claude/settings.local.json
