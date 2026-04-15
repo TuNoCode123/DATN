@@ -12,7 +12,11 @@ import {
 } from 'lucide-react';
 import { Navbar, Footer } from '@/components/landing';
 import { JsonLd } from '@/components/seo/json-ld';
-import { buildMetadata, breadcrumbSchema } from '@/lib/seo';
+import {
+  buildMetadata,
+  breadcrumbSchema,
+  collectionPageSchema,
+} from '@/lib/seo';
 import { getBlogList } from '@/lib/blog-server';
 
 export const revalidate = 300;
@@ -65,11 +69,22 @@ export default async function BlogTagPage({
   return (
     <div className="min-h-screen bg-cream">
       <JsonLd
-        data={breadcrumbSchema([
-          { name: 'Home', path: '/' },
-          { name: 'Blog', path: '/blog' },
-          { name: tagName, path: `/blog/tag/${tag}` },
-        ])}
+        data={[
+          breadcrumbSchema([
+            { name: 'Home', path: '/' },
+            { name: 'Blog', path: '/blog' },
+            { name: tagName, path: `/blog/tag/${tag}` },
+          ]),
+          collectionPageSchema({
+            path: `/blog/tag/${tag}`,
+            title: `${tagName} — Blog`,
+            description: `All blog posts tagged ${tagName}.`,
+            items: posts.map((p) => ({
+              name: p.title,
+              path: `/blog/${p.slug}`,
+            })),
+          }),
+        ]}
       />
       <Navbar />
 
@@ -112,8 +127,9 @@ export default async function BlogTagPage({
                     src={featured.thumbnailUrl}
                     alt={featured.title}
                     fill
-                    unoptimized
+                    sizes="(min-width: 640px) 320px, 100vw"
                     className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    priority
                   />
                 </div>
               )}
@@ -171,7 +187,7 @@ export default async function BlogTagPage({
                         src={post.thumbnailUrl}
                         alt={post.title}
                         fill
-                        unoptimized
+                        sizes="(min-width: 1024px) 300px, (min-width: 640px) 50vw, 100vw"
                         className="object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     </div>

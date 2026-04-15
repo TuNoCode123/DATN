@@ -165,20 +165,20 @@ export default function AdminTranslationTopicsPage() {
           <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
         </div>
       ) : (
-        <div className="brutal-card overflow-hidden">
+        <div className="overflow-hidden">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b-2 border-black bg-gray-50">
-                <th className="text-left px-4 py-3 font-bold">Name</th>
-                <th className="text-left px-4 py-3 font-bold">Difficulty</th>
-                <th className="text-left px-4 py-3 font-bold">Status</th>
-                <th className="text-left px-4 py-3 font-bold">Tags</th>
-                <th className="text-right px-4 py-3 font-bold">Actions</th>
+              <tr className="border-b bg-secondary/50">
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Name</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Difficulty</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tags</th>
+                <th className="text-right px-4 py-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
               </tr>
             </thead>
             <tbody>
               {topics.map((topic: any) => (
-                <tr key={topic.id} className="border-b border-gray-200 hover:bg-gray-50/50">
+                <tr key={topic.id} className="border-b transition-colors duration-150 hover:bg-secondary/30">
                   <td className="px-4 py-3">
                     <div className="font-bold">{topic.name}</div>
                     {topic.description && (

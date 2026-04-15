@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PayPalScriptProvider, PayPalButtons } from '@paypal/react-paypal-js';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/auth-store';
-import { Coins, Check, Clock, AlertCircle, Sparkles } from 'lucide-react';
+import { Coins, Check, Clock, AlertCircle, Sparkles, Zap, TrendingUp } from 'lucide-react';
 
 interface CreditPackage {
   id: string;
@@ -89,21 +89,23 @@ export default function CreditsPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground font-heading">Credits</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground font-heading">Credits</h1>
           <p className="text-sm text-slate-600 mt-1">
             Top up credits to unlock AI features: pronunciation, grading, chat, translation & more.
           </p>
         </div>
-        <div className="brutal-card bg-yellow-100 px-5 py-3 inline-flex items-center gap-3">
-          <Coins className="w-6 h-6 text-yellow-700" />
+        <div className="brutal-card bg-gradient-to-br from-yellow-100 to-amber-200 px-4 sm:px-5 py-3 inline-flex items-center gap-3 self-start sm:self-auto">
+          <div className="w-10 h-10 rounded-full bg-yellow-300 border-2 border-border-strong flex items-center justify-center shrink-0">
+            <Coins className="w-5 h-5 text-yellow-900" />
+          </div>
           <div>
-            <div className="text-xs font-bold uppercase text-yellow-800">Balance</div>
-            <div className="text-2xl font-bold text-yellow-900 leading-none">
-              {balanceQuery.isLoading ? '…' : balanceQuery.data ?? 0}
+            <div className="text-[11px] font-bold uppercase tracking-wide text-yellow-800">Balance</div>
+            <div className="text-2xl sm:text-3xl font-bold text-yellow-900 leading-none tabular-nums">
+              {balanceQuery.isLoading ? '…' : (balanceQuery.data ?? 0).toLocaleString()}
             </div>
           </div>
         </div>
@@ -136,17 +138,29 @@ export default function CreditsPage() {
               const total = pkg.baseCredits + pkg.bonusCredits;
               const isSelected = selectedPackageId === pkg.id;
               const isBestValue = pkg.sortOrder === 5;
+              const perDollar = Math.round(total / Math.max(1, parseFloat(pkg.priceUsd)));
               return (
                 <button
                   key={pkg.id}
                   onClick={() => setSelectedPackageId(pkg.id)}
                   className={`brutal-card text-left p-5 transition-all cursor-pointer relative ${
-                    isSelected ? 'bg-rose-100 translate-x-[-2px] translate-y-[-2px]' : 'bg-white'
+                    isSelected
+                      ? 'bg-rose-100 translate-x-[-2px] translate-y-[-2px]'
+                      : isBestValue
+                        ? 'bg-gradient-to-br from-fuchsia-50 to-rose-50'
+                        : 'bg-white'
                   }`}
                 >
                   {isBestValue && (
-                    <div className="absolute -top-3 left-4 bg-primary text-white text-[10px] font-bold uppercase px-2 py-1 border-2 border-border-strong rounded">
+                    <div className="absolute -top-3 left-4 bg-primary text-white text-[10px] font-bold uppercase px-2 py-1 border-2 border-border-strong rounded flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3" />
                       Best Value
+                    </div>
+                  )}
+                  {isSelected && (
+                    <div className="absolute -top-3 right-4 bg-emerald-400 text-emerald-900 text-[10px] font-bold uppercase px-2 py-1 border-2 border-border-strong rounded flex items-center gap-1">
+                      <Check className="w-3 h-3" />
+                      Selected
                     </div>
                   )}
                   <div className="text-xs font-bold uppercase text-slate-500">{pkg.name}</div>
@@ -156,14 +170,18 @@ export default function CreditsPage() {
                   </div>
                   <div className="mt-3 flex items-center gap-1.5">
                     <Coins className="w-4 h-4 text-yellow-600" />
-                    <span className="text-lg font-bold">{total.toLocaleString()}</span>
+                    <span className="text-lg font-bold tabular-nums">{total.toLocaleString()}</span>
                     <span className="text-xs text-slate-500">credits</span>
                   </div>
                   {pkg.bonusCredits > 0 && (
                     <div className="mt-1 inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700">
-                      <Sparkles className="w-3 h-3" />+{pkg.bonusCredits} bonus
+                      <Sparkles className="w-3 h-3" />+{pkg.bonusCredits.toLocaleString()} bonus
                     </div>
                   )}
+                  <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                    <Zap className="w-3 h-3" />
+                    {perDollar.toLocaleString()} credits / $1
+                  </div>
                   {pkg.description && (
                     <p className="mt-3 text-xs text-slate-500 line-clamp-2">{pkg.description}</p>
                   )}
@@ -254,43 +272,77 @@ export default function CreditsPage() {
           ) : !historyQuery.data?.items.length ? (
             <div className="p-6 text-slate-500 text-center">No purchases yet.</div>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="bg-slate-50 border-b-2 border-border-strong">
-                <tr>
-                  <th className="text-left px-4 py-2 font-bold">Date</th>
-                  <th className="text-left px-4 py-2 font-bold">Package</th>
-                  <th className="text-left px-4 py-2 font-bold">Amount</th>
-                  <th className="text-left px-4 py-2 font-bold">Credits</th>
-                  <th className="text-left px-4 py-2 font-bold">Status</th>
-                </tr>
-              </thead>
-              <tbody>
+            <>
+              {/* Desktop table */}
+              <table className="hidden sm:table w-full text-sm">
+                <thead className="bg-slate-50 border-b-2 border-border-strong">
+                  <tr>
+                    <th className="text-left px-4 py-2 font-bold">Date</th>
+                    <th className="text-left px-4 py-2 font-bold">Package</th>
+                    <th className="text-left px-4 py-2 font-bold">Amount</th>
+                    <th className="text-left px-4 py-2 font-bold">Credits</th>
+                    <th className="text-left px-4 py-2 font-bold">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyQuery.data.items.map((order) => (
+                    <tr key={order.id} className="border-b border-slate-100">
+                      <td className="px-4 py-3 text-slate-600">
+                        <div className="flex items-center gap-1.5">
+                          <Clock className="w-3 h-3" />
+                          {new Date(order.createdAt).toLocaleDateString()}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-medium">{order.package.name}</td>
+                      <td className="px-4 py-3">${order.amountUsd}</td>
+                      <td className="px-4 py-3 font-bold tabular-nums">
+                        {order.status === 'CAPTURED' ? `+${order.creditsGranted.toLocaleString()}` : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`text-[11px] font-bold uppercase px-2 py-1 rounded border border-border-strong ${
+                            STATUS_STYLES[order.status]
+                          }`}
+                        >
+                          {order.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Mobile cards */}
+              <ul className="sm:hidden divide-y-2 divide-slate-100">
                 {historyQuery.data.items.map((order) => (
-                  <tr key={order.id} className="border-b border-slate-100">
-                    <td className="px-4 py-3 text-slate-600">
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="w-3 h-3" />
-                        {new Date(order.createdAt).toLocaleDateString()}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 font-medium">{order.package.name}</td>
-                    <td className="px-4 py-3">${order.amountUsd}</td>
-                    <td className="px-4 py-3 font-bold">
-                      {order.status === 'CAPTURED' ? `+${order.creditsGranted}` : '—'}
-                    </td>
-                    <td className="px-4 py-3">
+                  <li key={order.id} className="p-4 flex flex-col gap-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-semibold text-foreground">{order.package.name}</div>
                       <span
-                        className={`text-[11px] font-bold uppercase px-2 py-1 rounded border border-border-strong ${
+                        className={`text-[10px] font-bold uppercase px-2 py-1 rounded border border-border-strong shrink-0 ${
                           STATUS_STYLES[order.status]
                         }`}
                       >
                         {order.status}
                       </span>
-                    </td>
-                  </tr>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-slate-600">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Clock className="w-3 h-3" />
+                        {new Date(order.createdAt).toLocaleDateString()}
+                      </span>
+                      <span className="font-bold text-slate-800">${order.amountUsd}</span>
+                    </div>
+                    {order.status === 'CAPTURED' && (
+                      <div className="inline-flex items-center gap-1 text-sm font-bold text-emerald-700">
+                        <Coins className="w-3.5 h-3.5" />
+                        +{order.creditsGranted.toLocaleString()} credits
+                      </div>
+                    )}
+                  </li>
                 ))}
-              </tbody>
-            </table>
+              </ul>
+            </>
           )}
         </div>
       </section>

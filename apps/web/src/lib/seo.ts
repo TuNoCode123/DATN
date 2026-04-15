@@ -35,6 +35,16 @@ type BuildMetadataInput = {
   modifiedTime?: string;
 };
 
+const META_DESCRIPTION_MAX = 160;
+
+function truncateDescription(text: string): string {
+  const clean = text.replace(/\s+/g, ' ').trim();
+  if (clean.length <= META_DESCRIPTION_MAX) return clean;
+  const cut = clean.slice(0, META_DESCRIPTION_MAX - 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  return `${(lastSpace > 80 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
 export function buildMetadata({
   title,
   description,
@@ -48,10 +58,11 @@ export function buildMetadata({
 }: BuildMetadataInput): Metadata {
   const url = new URL(path, SITE_URL).toString();
   const image = ogImage ?? '/opengraph-image';
+  const safeDescription = truncateDescription(description);
 
   return {
     title,
-    description,
+    description: safeDescription,
     keywords: keywords ?? SITE_KEYWORDS,
     alternates: { canonical: url },
     robots: noindex
@@ -72,7 +83,7 @@ export function buildMetadata({
       url,
       siteName: SITE_NAME,
       title,
-      description,
+      description: safeDescription,
       locale: SITE_LOCALE,
       images: [{ url: image, width: 1200, height: 630, alt: title }],
       ...(type === 'article' && { publishedTime, modifiedTime }),
@@ -80,7 +91,7 @@ export function buildMetadata({
     twitter: {
       card: 'summary_large_image',
       title,
-      description,
+      description: safeDescription,
       site: TWITTER_HANDLE,
       creator: TWITTER_HANDLE,
       images: [image],
@@ -177,26 +188,81 @@ export function articleSchema(input: {
   author?: string;
   image?: string;
 }) {
+  const url = new URL(input.path, SITE_URL).toString();
+  const img = input.image ?? `${SITE_URL}/opengraph-image`;
+
+  const author = input.author
+    ? { '@type': 'Person' as const, name: input.author }
+    : { '@type': 'Organization' as const, name: SITE_NAME, url: SITE_URL };
+
   return {
     '@context': 'https://schema.org',
     '@type': 'Article',
-    headline: input.title,
+    headline: input.title.slice(0, 110),
     description: input.description,
-    url: new URL(input.path, SITE_URL).toString(),
+    url,
     datePublished: input.datePublished,
     dateModified: input.dateModified ?? input.datePublished,
-    author: {
-      '@type': 'Organization',
-      name: input.author ?? SITE_NAME,
-      url: SITE_URL,
-    },
+    author,
     publisher: {
       '@type': 'Organization',
       name: SITE_NAME,
       logo: { '@type': 'ImageObject', url: `${SITE_URL}/icon.png` },
     },
-    image: input.image ?? `${SITE_URL}/opengraph-image`,
-    mainEntityOfPage: new URL(input.path, SITE_URL).toString(),
+    image: [img],
+    mainEntityOfPage: url,
+  };
+}
+
+export function blogSchema(input: {
+  path: string;
+  title: string;
+  description: string;
+  posts: { title: string; path: string; datePublished?: string | null }[];
+}) {
+  const url = new URL(input.path, SITE_URL).toString();
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Blog',
+    name: input.title,
+    description: input.description,
+    url,
+    publisher: {
+      '@type': 'Organization',
+      name: SITE_NAME,
+      url: SITE_URL,
+    },
+    blogPost: input.posts.map((p) => ({
+      '@type': 'BlogPosting',
+      headline: p.title,
+      url: new URL(p.path, SITE_URL).toString(),
+      ...(p.datePublished ? { datePublished: p.datePublished } : {}),
+    })),
+  };
+}
+
+export function collectionPageSchema(input: {
+  path: string;
+  title: string;
+  description: string;
+  items: { name: string; path: string }[];
+}) {
+  const url = new URL(input.path, SITE_URL).toString();
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: input.title,
+    description: input.description,
+    url,
+    mainEntity: {
+      '@type': 'ItemList',
+      itemListElement: input.items.map((item, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        name: item.name,
+        url: new URL(item.path, SITE_URL).toString(),
+      })),
+    },
   };
 }
 

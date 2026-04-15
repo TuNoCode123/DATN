@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { buildMetadata } from '@/lib/seo';
+import { RequireAuth } from '@/components/require-auth';
 
 export const metadata: Metadata = buildMetadata({
   title: 'AI Flashcards — Smart Vocabulary Decks for IELTS, TOEIC & HSK',
@@ -21,5 +22,5 @@ export default function FlashcardsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return <RequireAuth>{children}</RequireAuth>;
 }

@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { SITE_URL } from '@/lib/seo';
-import { getBlogSitemap } from '@/lib/blog-server';
+import { getBlogList, getBlogSitemap } from '@/lib/blog-server';
 import { HSK_LEVELS } from '@/content/hsk-levels';
 
 // Bumped manually when static landing pages get a meaningful content update.
@@ -97,5 +97,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.6,
   }));
 
-  return [...staticRoutes, ...hskRoutes, ...blogRoutes];
+  const { data: taggedPosts } = await getBlogList({ limit: 100 });
+  const tagSlugs = Array.from(
+    new Set(taggedPosts.flatMap((p) => p.tags.map((t) => t.slug))),
+  );
+  const tagRoutes: MetadataRoute.Sitemap = tagSlugs.map((slug) => ({
+    url: `${SITE_URL}/blog/tag/${slug}`,
+    lastModified: STATIC_PAGES_LAST_UPDATED,
+    changeFrequency: 'weekly',
+    priority: 0.5,
+  }));
+
+  return [...staticRoutes, ...hskRoutes, ...blogRoutes, ...tagRoutes];
 }

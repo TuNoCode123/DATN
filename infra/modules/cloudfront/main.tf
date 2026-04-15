@@ -24,8 +24,8 @@
 
 # ── CloudFront Distribution ─────────────────────────────────────────────────
 resource "aws_cloudfront_distribution" "web" {
-  enabled         = true   # Distribution is active (set false to disable without deleting)
-  is_ipv6_enabled = true   # Support IPv6 connections
+  enabled         = true                        # Distribution is active (set false to disable without deleting)
+  is_ipv6_enabled = true                        # Support IPv6 connections
   comment         = "CDN for ${var.web_domain}" # Description shown in AWS Console
 
   # CNAME: which domain names this distribution serves
@@ -36,18 +36,18 @@ resource "aws_cloudfront_distribution" "web" {
   # An "origin" is the source server. CloudFront forwards requests here
   # when it doesn't have a cached copy (cache miss).
   origin {
-    domain_name = var.alb_dns_name  # ALB hostname (e.g., ielts-ai-alb-xxx.elb.amazonaws.com)
-    origin_id   = "alb-web"         # A label we give this origin (referenced by behaviors)
+    domain_name = var.alb_dns_name # ALB hostname (e.g., ielts-ai-alb-xxx.elb.amazonaws.com)
+    origin_id   = "alb-web"        # A label we give this origin (referenced by behaviors)
 
     # How CloudFront connects to the ALB
     custom_origin_config {
-      http_port              = 80    # ALB HTTP port (for redirect)
-      https_port             = 443   # ALB HTTPS port (actual traffic)
+      http_port              = 80           # ALB HTTP port (for redirect)
+      https_port             = 443          # ALB HTTPS port (actual traffic)
       origin_protocol_policy = "https-only" # Always use HTTPS to talk to ALB
       # "https-only" = CloudFront → ALB is encrypted
       # "match-viewer" = use whatever the viewer (browser) used
       # "http-only" = unencrypted (never use this in production)
-      origin_ssl_protocols   = ["TLSv1.2"] # Minimum TLS version to ALB
+      origin_ssl_protocols = ["TLSv1.2"] # Minimum TLS version to ALB
     }
   }
 
@@ -55,10 +55,10 @@ resource "aws_cloudfront_distribution" "web" {
   # This handles ALL requests that don't match a specific path pattern.
   # For Next.js SSR, we DON'T cache — every request hits the origin (ALB).
   default_cache_behavior {
-    target_origin_id       = "alb-web" # Route to our ALB origin
-    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    target_origin_id = "alb-web" # Route to our ALB origin
+    allowed_methods  = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     # Allow all HTTP methods (SSR pages may need POST for forms)
-    cached_methods         = ["GET", "HEAD"] # Only cache GET and HEAD responses
+    cached_methods         = ["GET", "HEAD"]     # Only cache GET and HEAD responses
     viewer_protocol_policy = "redirect-to-https" # Force HTTPS
     # "redirect-to-https" = if user visits http://, redirect to https://
     # "https-only" = block HTTP entirely (returns 403)
@@ -77,9 +77,9 @@ resource "aws_cloudfront_distribution" "web" {
       }
     }
 
-    min_ttl     = 0  # Minimum cache time: 0 seconds (don't force caching)
-    default_ttl = 0  # Default cache time: 0 seconds (don't cache)
-    max_ttl     = 0  # Maximum cache time: 0 seconds (never cache)
+    min_ttl     = 0    # Minimum cache time: 0 seconds (don't force caching)
+    default_ttl = 0    # Default cache time: 0 seconds (don't cache)
+    max_ttl     = 0    # Maximum cache time: 0 seconds (never cache)
     compress    = true # Enable gzip/brotli compression (saves bandwidth)
   }
 
@@ -88,14 +88,14 @@ resource "aws_cloudfront_distribution" "web" {
   #   /_next/static/chunks/abc123.js → filename changes if content changes
   # These are SAFE to cache forever because the filename IS the cache key.
   ordered_cache_behavior {
-    path_pattern           = "/_next/static/*"  # Match Next.js static assets
+    path_pattern           = "/_next/static/*" # Match Next.js static assets
     target_origin_id       = "alb-web"
-    allowed_methods        = ["GET", "HEAD"]     # Static assets are read-only
+    allowed_methods        = ["GET", "HEAD"] # Static assets are read-only
     cached_methods         = ["GET", "HEAD"]
     viewer_protocol_policy = "redirect-to-https"
 
     forwarded_values {
-      query_string = false # No query strings for static files
+      query_string = false    # No query strings for static files
       headers      = ["Host"] # Forward Host header so ALB/Next.js receives
       # the correct hostname (web.neu-study.online) instead of ALB's internal DNS.
       # Without this, CloudFront sends ALB's DNS name as Host, causing 502 errors.
@@ -106,18 +106,18 @@ resource "aws_cloudfront_distribution" "web" {
       }
     }
 
-    min_ttl     = 31536000  # 365 days in seconds
-    default_ttl = 31536000  # Cache for 1 year by default
-    max_ttl     = 31536000  # Maximum 1 year
-    compress    = true       # Compress JS/CSS files (significant bandwidth savings)
+    min_ttl     = 31536000 # 365 days in seconds
+    default_ttl = 31536000 # Cache for 1 year by default
+    max_ttl     = 31536000 # Maximum 1 year
+    compress    = true     # Compress JS/CSS files (significant bandwidth savings)
   }
 
   # ── SSL Certificate ──────────────────────────────────────────────────────
   # CloudFront REQUIRES the ACM certificate to be in us-east-1
   # (this is why we created a separate ACM module for CloudFront)
   viewer_certificate {
-    acm_certificate_arn      = var.acm_certificate_arn # Must be us-east-1!
-    ssl_support_method       = "sni-only" # SNI (Server Name Indication)
+    acm_certificate_arn = var.acm_certificate_arn # Must be us-east-1!
+    ssl_support_method  = "sni-only"              # SNI (Server Name Indication)
     # "sni-only" = free, works with modern browsers (99.9%+)
     # "vip" = dedicated IP per edge location ($600/month!) — only for legacy clients
     minimum_protocol_version = "TLSv1.2_2021" # Minimum TLS 1.2 (secure)

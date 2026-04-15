@@ -18,8 +18,8 @@ export class CommentsService {
     private moderation: ModerationService,
   ) {}
 
-  async findByTest(
-    testId: string,
+  async findByEntity(
+    filter: { testId: string } | { blogPostId: string },
     page = 1,
     limit = 20,
     sort: 'newest' | 'oldest' = 'newest',
@@ -33,7 +33,7 @@ export class CommentsService {
     const [comments, total] = await Promise.all([
       this.prisma.comment.findMany({
         where: {
-          testId,
+          ...filter,
           parentId: null,
           ...visibleFilter,
         },
@@ -62,7 +62,7 @@ export class CommentsService {
       }),
       this.prisma.comment.count({
         where: {
-          testId,
+          ...filter,
           parentId: null,
           ...visibleFilter,
         },
@@ -134,18 +134,27 @@ export class CommentsService {
 
   async create(
     userId: string,
-    testId: string,
+    entityRef: { testId: string } | { blogPostId: string },
     body: string,
     parentId?: string,
   ) {
     let depth = 0;
     let actualParentId = parentId || null;
 
+    const isTest = 'testId' in entityRef;
+
     if (parentId) {
       const parent = await this.prisma.comment.findUnique({
         where: { id: parentId },
       });
-      if (!parent || parent.testId !== testId) {
+      if (!parent) {
+        throw new NotFoundException('Parent comment not found');
+      }
+      // Validate parent belongs to same entity
+      if (isTest && parent.testId !== entityRef.testId) {
+        throw new NotFoundException('Parent comment not found');
+      }
+      if (!isTest && parent.blogPostId !== (entityRef as any).blogPostId) {
         throw new NotFoundException('Parent comment not found');
       }
 
@@ -178,7 +187,7 @@ export class CommentsService {
       const created = await tx.comment.create({
         data: {
           userId,
-          testId,
+          ...entityRef,
           body,
           parentId: actualParentId,
           depth,
@@ -197,10 +206,17 @@ export class CommentsService {
       }
 
       if (status === CommentStatus.PUBLISHED) {
-        await tx.test.update({
-          where: { id: testId },
-          data: { commentCount: { increment: 1 } },
-        });
+        if (isTest) {
+          await tx.test.update({
+            where: { id: entityRef.testId },
+            data: { commentCount: { increment: 1 } },
+          });
+        } else {
+          await tx.blogPost.update({
+            where: { id: (entityRef as any).blogPostId },
+            data: { commentCount: { increment: 1 } },
+          });
+        }
       }
 
       return created;
@@ -279,10 +295,7 @@ export class CommentsService {
         }
 
         if (comment.status === CommentStatus.PUBLISHED) {
-          await tx.test.update({
-            where: { id: comment.testId },
-            data: { commentCount: { decrement: 1 } },
-          });
+          await this.decrementEntityCommentCount(tx, comment);
         }
       });
     } else {
@@ -361,16 +374,38 @@ export class CommentsService {
 
   // ─── Admin Methods ─────────────────────────────────────
 
-  async findPendingQueue(page = 1, limit = 20) {
+  async findPendingQueue(
+    page = 1,
+    limit = 20,
+    status?: 'PENDING' | 'HIDDEN' | 'PUBLISHED',
+    search?: string,
+  ) {
     const skip = (page - 1) * limit;
+
+    const conditions: any[] = [];
+
+    if (status) {
+      conditions.push({ status: CommentStatus[status] });
+    }
+
+    if (search) {
+      conditions.push({
+        OR: [
+          { body: { contains: search, mode: 'insensitive' as const } },
+          { user: { displayName: { contains: search, mode: 'insensitive' as const } } },
+        ],
+      });
+    }
+
+    const where = { AND: conditions };
 
     const [comments, total] = await Promise.all([
       this.prisma.comment.findMany({
-        where: {
-          status: { in: [CommentStatus.PENDING, CommentStatus.HIDDEN] },
-        },
+        where,
         include: {
           user: { select: { id: true, displayName: true, avatarUrl: true } },
+          test: { select: { id: true, title: true } },
+          blogPost: { select: { id: true, title: true } },
           reports: {
             include: {
               user: { select: { id: true, displayName: true } },
@@ -385,11 +420,7 @@ export class CommentsService {
         skip,
         take: limit,
       }),
-      this.prisma.comment.count({
-        where: {
-          status: { in: [CommentStatus.PENDING, CommentStatus.HIDDEN] },
-        },
-      }),
+      this.prisma.comment.count({ where }),
     ]);
 
     return { data: comments, total, page, limit };
@@ -408,10 +439,7 @@ export class CommentsService {
       });
 
       if (comment.status !== CommentStatus.PUBLISHED) {
-        await tx.test.update({
-          where: { id: comment.testId },
-          data: { commentCount: { increment: 1 } },
-        });
+        await this.incrementEntityCommentCount(tx, comment);
       }
     });
 
@@ -454,10 +482,7 @@ export class CommentsService {
         }
 
         if (wasPublished) {
-          await tx.test.update({
-            where: { id: comment.testId },
-            data: { commentCount: { decrement: 1 } },
-          });
+          await this.decrementEntityCommentCount(tx, comment);
         }
       });
     } else {
@@ -468,10 +493,7 @@ export class CommentsService {
         });
 
         if (wasPublished) {
-          await tx.test.update({
-            where: { id: comment.testId },
-            data: { commentCount: { decrement: 1 } },
-          });
+          await this.decrementEntityCommentCount(tx, comment);
         }
       });
     }
@@ -524,6 +546,34 @@ export class CommentsService {
     return new Set(likes.map((l) => l.commentId));
   }
 
+  private async incrementEntityCommentCount(tx: any, comment: any) {
+    if (comment.testId) {
+      await tx.test.update({
+        where: { id: comment.testId },
+        data: { commentCount: { increment: 1 } },
+      });
+    } else if (comment.blogPostId) {
+      await tx.blogPost.update({
+        where: { id: comment.blogPostId },
+        data: { commentCount: { increment: 1 } },
+      });
+    }
+  }
+
+  private async decrementEntityCommentCount(tx: any, comment: any) {
+    if (comment.testId) {
+      await tx.test.update({
+        where: { id: comment.testId },
+        data: { commentCount: { decrement: 1 } },
+      });
+    } else if (comment.blogPostId) {
+      await tx.blogPost.update({
+        where: { id: comment.blogPostId },
+        data: { commentCount: { decrement: 1 } },
+      });
+    }
+  }
+
   private mapComment(comment: any, likedSet: Set<string>, userId?: string): any {
     const isDeleted = !!comment.deletedAt || comment.status === CommentStatus.DELETED;
     const isPending = comment.status === CommentStatus.PENDING;
@@ -532,6 +582,7 @@ export class CommentsService {
     return {
       id: comment.id,
       testId: comment.testId,
+      blogPostId: comment.blogPostId,
       parentId: comment.parentId,
       body: isDeleted ? 'This comment has been deleted.' : comment.body,
       status: comment.status,

@@ -71,15 +71,15 @@ resource "aws_ecr_lifecycle_policy" "api" {
   policy = jsonencode({
     rules = [
       {
-        rulePriority = 1            # Lower number = higher priority
+        rulePriority = 1                          # Lower number = higher priority
         description  = "Keep only last 10 images" # Human-readable description
         selection = {
-          tagStatus   = "any"       # Apply to ALL images (tagged + untagged)
-          countType   = "imageCountMoreThan"  # Trigger when image count exceeds...
-          countNumber = 10          # ...10 images. Delete the oldest ones.
+          tagStatus   = "any"                # Apply to ALL images (tagged + untagged)
+          countType   = "imageCountMoreThan" # Trigger when image count exceeds...
+          countNumber = 10                   # ...10 images. Delete the oldest ones.
         }
         action = {
-          type = "expire"           # "expire" = delete the matched images
+          type = "expire" # "expire" = delete the matched images
         }
       }
     ]

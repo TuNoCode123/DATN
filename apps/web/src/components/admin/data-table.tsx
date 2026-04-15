@@ -23,7 +23,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Card } from "@/components/ui/card";
 import { EmptyState } from "./empty-state";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, ArrowUpDown } from "lucide-react";
 
@@ -70,7 +69,7 @@ export function DataTable<TData, TValue>({
           <Skeleton className="h-10 w-full max-w-sm rounded-lg" />
           <Skeleton className="h-10 w-32 rounded-lg" />
         </div>
-        <Card className="border-0 shadow-sm overflow-hidden">
+        <div className="overflow-hidden">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="flex gap-4 p-4 border-b last:border-b-0">
               {Array.from({ length: Math.min(columns.length, 5) }).map((_, j) => (
@@ -78,7 +77,7 @@ export function DataTable<TData, TValue>({
               ))}
             </div>
           ))}
-        </Card>
+        </div>
       </div>
     );
   }
@@ -101,8 +100,8 @@ export function DataTable<TData, TValue>({
         {filterBar}
       </div>
 
-      {/* Table card */}
-      <Card className="border-0 shadow-sm overflow-hidden">
+      {/* Table */}
+      <div className="overflow-hidden">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
@@ -150,7 +149,7 @@ export function DataTable<TData, TValue>({
             )}
           </TableBody>
         </Table>
-      </Card>
+      </div>
 
       {/* Pagination */}
       <div className="flex items-center justify-between">

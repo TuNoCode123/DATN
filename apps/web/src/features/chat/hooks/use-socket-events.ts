@@ -2,20 +2,18 @@
 
 import { useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { connectSocket, disconnectSocket, getSocket } from '@/lib/socket';
+import { connectSocket, getSocket } from '@/lib/socket';
 import { useChatStore, type ChatMessage } from '@/lib/chat-store';
 
 /**
- * Owns the full socket lifecycle: connect, register listeners, disconnect.
- * Must be called once at the top-level chat layout.
+ * Registers chat-specific listeners (messages, typing, reactions, membership)
+ * on the app-wide socket. Does NOT own connect/disconnect — the connection
+ * lifecycle lives in `useSocketLifecycle` so presence persists across pages.
  */
 export function useSocketEvents() {
   const queryClient = useQueryClient();
   const addTypingUser = useChatStore((s) => s.addTypingUser);
   const removeTypingUser = useChatStore((s) => s.removeTypingUser);
-  const setUserOnline = useChatStore((s) => s.setUserOnline);
-  const setUserOffline = useChatStore((s) => s.setUserOffline);
-  const setOnlineUsers = useChatStore((s) => s.setOnlineUsers);
 
   useEffect(() => {
     let socket;
@@ -59,14 +57,6 @@ export function useSocketEvents() {
 
     const handleUserStopTyping = (data: { conversationId: string; userId: string }) => {
       removeTypingUser(data.conversationId, data.userId);
-    };
-
-    const handleUserOnline = (data: { userId: string }) => {
-      setUserOnline(data.userId);
-    };
-
-    const handleUserOffline = (data: { userId: string }) => {
-      setUserOffline(data.userId);
     };
 
     const handleConversationAdded = () => {
@@ -154,23 +144,11 @@ export function useSocketEvents() {
       });
     };
 
-    // Fetch online users once connected
-    const fetchOnlineUsers = () => {
-      socket.emit('get_online_users', {}, (res: { success: boolean; userIds: string[] }) => {
-        if (res.success) {
-          console.log('[WS] Online users:', res.userIds.length);
-          setOnlineUsers(res.userIds);
-        }
-      });
-    };
-
     // Register event listeners
     socket.on('new_message', handleNewMessage);
     socket.on('message_read', handleMessageRead);
     socket.on('user_typing', handleUserTyping);
     socket.on('user_stop_typing', handleUserStopTyping);
-    socket.on('user_online', handleUserOnline);
-    socket.on('user_offline', handleUserOffline);
     socket.on('conversation_added', handleConversationAdded);
     socket.on('member_removed', handleMemberRemoved);
     socket.on('member_added', handleMemberAdded);
@@ -179,12 +157,9 @@ export function useSocketEvents() {
     socket.on('message_deleted', handleMessageDeleted);
     socket.on('reaction_updated', handleReactionUpdated);
 
-    // On connect/reconnect: catch up on missed messages and re-join active room
+    // On reconnect: catch up on missed messages and re-join active room
     const handleConnect = () => {
-      fetchOnlineUsers();
-      // Refetch conversation list to catch up on anything missed
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
-      // Re-join active conversation room if viewing one
       const activeConv = useChatStore.getState().activeConversationId;
       if (activeConv) {
         socket.emit('join_conversation', { conversationId: activeConv });
@@ -192,9 +167,6 @@ export function useSocketEvents() {
       }
     };
 
-    if (socket.connected) {
-      fetchOnlineUsers();
-    }
     socket.on('connect', handleConnect);
 
     return () => {
@@ -202,8 +174,6 @@ export function useSocketEvents() {
       socket.off('message_read', handleMessageRead);
       socket.off('user_typing', handleUserTyping);
       socket.off('user_stop_typing', handleUserStopTyping);
-      socket.off('user_online', handleUserOnline);
-      socket.off('user_offline', handleUserOffline);
       socket.off('conversation_added', handleConversationAdded);
       socket.off('member_removed', handleMemberRemoved);
       socket.off('member_added', handleMemberAdded);
@@ -212,9 +182,8 @@ export function useSocketEvents() {
       socket.off('message_deleted', handleMessageDeleted);
       socket.off('reaction_updated', handleReactionUpdated);
       socket.off('connect', handleConnect);
-      disconnectSocket();
     };
-  }, [queryClient, addTypingUser, removeTypingUser, setUserOnline, setUserOffline, setOnlineUsers]);
+  }, [queryClient, addTypingUser, removeTypingUser]);
 
   const joinConversation = useCallback((conversationId: string) => {
     const socket = getSocket();

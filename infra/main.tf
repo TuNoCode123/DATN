@@ -55,8 +55,8 @@ provider "aws" {
   default_tags {
     tags = {
       Project     = "ielts-ai-platform"
-      ManagedBy   = "terraform"       # So humans know not to edit manually
-      Environment = var.environment    # "prod"
+      ManagedBy   = "terraform"     # So humans know not to edit manually
+      Environment = var.environment # "prod"
     }
   }
 }
@@ -69,8 +69,8 @@ provider "aws" {
 # We use "alias" to create a second provider config for that region.
 # Any resource that needs us-east-1 will specify: providers = { aws = aws.us_east_1 }
 provider "aws" {
-  alias  = "us_east_1"  # Name for this provider config (used when calling modules)
-  region = "us-east-1"  # N. Virginia — required for CloudFront certs
+  alias  = "us_east_1" # Name for this provider config (used when calling modules)
+  region = "us-east-1" # N. Virginia — required for CloudFront certs
 
   default_tags {
     tags = {
@@ -92,8 +92,8 @@ provider "aws" {
 # This module uses a "data source" to LOOK UP the zone ID, which other
 # modules need for creating DNS records and validating SSL certificates.
 module "dns" {
-  source      = "./modules/dns"       # Path to the module's folder
-  domain_name = var.domain_name       # "neu-study.online"
+  source      = "./modules/dns" # Path to the module's folder
+  domain_name = var.domain_name # "neu-study.online"
 }
 
 # -----------------------------------------------------------------------------
@@ -106,8 +106,8 @@ module "dns" {
 # and when it sees the record, it knows you own the domain.
 module "acm" {
   source      = "./modules/acm"
-  domain_name = var.domain_name       # "neu-study.online" → cert for *.neu-study.online
-  zone_id     = module.dns.zone_id    # Route 53 zone ID for DNS validation
+  domain_name = var.domain_name    # "neu-study.online" → cert for *.neu-study.online
+  zone_id     = module.dns.zone_id # Route 53 zone ID for DNS validation
   # This cert is created in ap-southeast-2 (default provider region)
   # Used by: ALB (for api.neu-study.online HTTPS)
 }
@@ -144,10 +144,10 @@ module "acm_cloudfront" {
 #   - Security groups (firewalls: "who can talk to whom on which ports?")
 module "networking" {
   source       = "./modules/networking"
-  project_name = var.project_name   # "ielts-ai" — used as name prefix
-  environment  = var.environment    # "prod"
-  aws_region   = var.aws_region     # "ap-southeast-2"
-  my_ip        = var.my_ip          # Your IP for SSH access (e.g., "1.2.3.4/32")
+  project_name = var.project_name # "ielts-ai" — used as name prefix
+  environment  = var.environment  # "prod"
+  aws_region   = var.aws_region   # "ap-southeast-2"
+  my_ip        = var.my_ip        # Your IP for SSH access (e.g., "1.2.3.4/32")
 }
 
 # -----------------------------------------------------------------------------
@@ -194,10 +194,10 @@ module "rds" {
 #   4. Typing indicators — "user X is typing..." (TTL 3s, auto-expires)
 #   5. Unread counts — fast increment counter per user per conversation
 module "elasticache" {
-  source             = "./modules/elasticache"
-  project_name       = var.project_name
-  environment        = var.environment
-  node_type          = var.redis_node_type  # "cache.t3.micro"
+  source       = "./modules/elasticache"
+  project_name = var.project_name
+  environment  = var.environment
+  node_type    = var.redis_node_type # "cache.t3.micro"
 
   private_subnet_ids      = module.networking.private_subnet_ids
   redis_security_group_id = module.networking.redis_security_group_id
@@ -213,13 +213,13 @@ module "elasticache" {
 # Also handles: SSL termination, health checks, HTTP→HTTPS redirect,
 # sticky sessions (required for Socket.IO WebSocket handshake).
 module "alb" {
-  source            = "./modules/alb"
-  project_name      = var.project_name
-  vpc_id            = module.networking.vpc_id
-  public_subnet_ids = module.networking.public_subnet_ids
+  source                = "./modules/alb"
+  project_name          = var.project_name
+  vpc_id                = module.networking.vpc_id
+  public_subnet_ids     = module.networking.public_subnet_ids
   alb_security_group_id = module.networking.alb_security_group_id
-  acm_certificate_arn   = module.acm.certificate_arn   # SSL cert for HTTPS
-  api_domain            = "api.${var.domain_name}"      # "api.neu-study.online"
+  acm_certificate_arn   = module.acm.certificate_arn # SSL cert for HTTPS
+  api_domain            = "api.${var.domain_name}"   # "api.neu-study.online"
 }
 
 # -----------------------------------------------------------------------------
@@ -264,27 +264,27 @@ module "cognito" {
 #   - IAM Roles (permissions for EC2 instances and ECS tasks)
 #   - CloudWatch Log Groups (where container logs are stored)
 module "ecs" {
-  source             = "./modules/ecs"
-  project_name       = var.project_name
-  environment        = var.environment
-  aws_region         = var.aws_region
-  vpc_id             = module.networking.vpc_id
-  private_subnet_ids = module.networking.private_subnet_ids
+  source                = "./modules/ecs"
+  project_name          = var.project_name
+  environment           = var.environment
+  aws_region            = var.aws_region
+  vpc_id                = module.networking.vpc_id
+  private_subnet_ids    = module.networking.private_subnet_ids
   ecs_security_group_id = module.networking.ecs_security_group_id
-  instance_type      = var.ecs_instance_type  # "t3.medium"
-  key_name           = var.key_name            # SSH key pair (optional)
+  instance_type         = var.ecs_instance_type # "t3.medium"
+  key_name              = var.key_name          # SSH key pair (optional)
 
   # Target groups from ALB — ECS registers its containers here
   api_target_group_arn = module.alb.api_target_group_arn
   web_target_group_arn = module.alb.web_target_group_arn
 
   # Container image URLs from ECR
-  ecr_api_url = module.ecr.api_repository_url  # e.g., "123456789.dkr.ecr.ap-southeast-2.amazonaws.com/ielts-ai-api"
+  ecr_api_url = module.ecr.api_repository_url # e.g., "123456789.dkr.ecr.ap-southeast-2.amazonaws.com/ielts-ai-api"
   ecr_web_url = module.ecr.web_repository_url
 
   # Database and Redis connection info — passed as environment variables to containers
-  rds_endpoint   = module.rds.endpoint           # "ielts-ai-postgres.xxx.rds.amazonaws.com"
-  redis_endpoint = module.elasticache.endpoint    # "ielts-ai-redis.xxx.cache.amazonaws.com:6379"
+  rds_endpoint   = module.rds.endpoint         # "ielts-ai-postgres.xxx.rds.amazonaws.com"
+  redis_endpoint = module.elasticache.endpoint # "ielts-ai-redis.xxx.cache.amazonaws.com:6379"
   db_name        = var.db_name
   db_username    = var.db_username
   db_password    = var.db_password
@@ -297,6 +297,21 @@ module "ecs" {
 
   # S3 bucket name for presigned URLs
   s3_bucket_name = module.s3.uploads_bucket_name
+
+  # App runtime config (plain env injection from prod.tfvars)
+  paypal_client_id     = var.paypal_client_id
+  paypal_client_secret = var.paypal_client_secret
+  paypal_webhook_id    = var.paypal_webhook_id
+  paypal_base_url      = var.paypal_base_url
+  openrouter_api_key   = var.openrouter_api_key
+
+  # Web — baked into Next.js build but also surfaced at runtime for SSR
+  next_public_paypal_client_id = var.next_public_paypal_client_id
+
+  # AI service regions (Polly/Transcribe/Bedrock — reached via NAT Gateway)
+  aws_bedrock_region    = var.aws_bedrock_region
+  aws_transcribe_region = var.aws_transcribe_region
+  aws_polly_region      = var.aws_polly_region
 }
 
 # -----------------------------------------------------------------------------
@@ -321,11 +336,11 @@ module "s3" {
 #   /_next/static/* → cached 365 days (hashed filenames = immutable)
 #   /* (default)    → no cache (SSR pages must hit the server every time)
 module "cloudfront" {
-  source          = "./modules/cloudfront"
-  project_name    = var.project_name
-  web_domain      = "web.${var.domain_name}"  # "web.neu-study.online"
-  alb_dns_name    = module.alb.dns_name       # ALB's hostname (CloudFront's origin)
-  acm_certificate_arn = module.acm_cloudfront.certificate_arn  # Must be us-east-1 cert!
+  source              = "./modules/cloudfront"
+  project_name        = var.project_name
+  web_domain          = "web.${var.domain_name}"              # "web.neu-study.online"
+  alb_dns_name        = module.alb.dns_name                   # ALB's hostname (CloudFront's origin)
+  acm_certificate_arn = module.acm_cloudfront.certificate_arn # Must be us-east-1 cert!
 }
 
 # -----------------------------------------------------------------------------
@@ -338,13 +353,13 @@ module "cloudfront" {
 # "Alias" records are AWS-specific — they work like CNAME but at the zone apex
 # and don't incur extra DNS query costs.
 module "dns_records" {
-  source         = "./modules/dns-records"
-  domain_name    = var.domain_name
-  zone_id        = module.dns.zone_id
+  source      = "./modules/dns-records"
+  domain_name = var.domain_name
+  zone_id     = module.dns.zone_id
 
   # ALB details for api.neu-study.online
-  alb_dns_name   = module.alb.dns_name
-  alb_zone_id    = module.alb.zone_id
+  alb_dns_name = module.alb.dns_name
+  alb_zone_id  = module.alb.zone_id
 
   # CloudFront details for web.neu-study.online
   cloudfront_domain  = module.cloudfront.domain_name
@@ -362,9 +377,9 @@ module "dns_records" {
 module "iam" {
   source       = "./modules/iam"
   project_name = var.project_name
-  github_org   = var.github_org    # "royden"
-  github_repo  = var.github_repo   # "ielts-ai-platform"
-  ecr_arns     = module.ecr.repository_arns  # ECR repo ARNs for push permissions
+  github_org   = var.github_org             # "royden"
+  github_repo  = var.github_repo            # "ielts-ai-platform"
+  ecr_arns     = module.ecr.repository_arns # ECR repo ARNs for push permissions
 }
 
 # =============================================================================

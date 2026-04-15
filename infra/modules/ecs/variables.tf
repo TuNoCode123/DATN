@@ -129,3 +129,56 @@ variable "s3_bucket_name" {
   description = "S3 uploads bucket name (passed as S3_BUCKET_NAME env var to API)"
   type        = string
 }
+
+# =============================================================================
+# APP RUNTIME CONFIG (injected directly into ECS task env from prod.tfvars)
+# =============================================================================
+variable "paypal_client_id" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "paypal_client_secret" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "paypal_webhook_id" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "paypal_base_url" {
+  type    = string
+  default = "https://api-m.paypal.com"
+}
+
+variable "openrouter_api_key" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+
+variable "next_public_paypal_client_id" {
+  type    = string
+  default = ""
+}
+
+# AI service region overrides
+variable "aws_bedrock_region" {
+  type    = string
+  default = "us-east-1"
+}
+
+variable "aws_transcribe_region" {
+  type    = string
+  default = "ap-southeast-2"
+}
+
+variable "aws_polly_region" {
+  type    = string
+  default = "ap-southeast-2"
+}

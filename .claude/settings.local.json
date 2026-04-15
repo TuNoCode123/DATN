@@ -16,7 +16,14 @@
       "Bash(python3:*)",
       "Bash(cmd:*)",
       "Bash(powershell:*)",
-      "Bash(python3 $SCRIPT:*)"
+      "Bash(python3 $SCRIPT:*)",
+      "Bash(xargs grep:*)",
+      "Bash(find:*)",
+      "Bash(export AWS_ACCESS_KEY_ID=\"REDACTED\")",
+      "Bash(export AWS_SECRET_ACCESS_KEY=\"REDACTED\")",
+      "Bash(terraform plan:*)",
+      "Bash(terraform apply:*)",
+      "Bash(aws ecs:*)"
     ]
   }
 }

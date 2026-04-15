@@ -11,6 +11,7 @@ import type { CommentsResponse } from './types';
 export function useComments(
   testId: string,
   sort: 'newest' | 'oldest' = 'newest',
+  enabled = true,
 ) {
   return useInfiniteQuery<CommentsResponse>({
     queryKey: ['comments', testId, sort],
@@ -26,6 +27,30 @@ export function useComments(
       return lastPage.page < totalPages ? lastPage.page + 1 : undefined;
     },
     refetchInterval: 30000,
+    enabled,
+  });
+}
+
+export function useBlogComments(
+  slug: string,
+  sort: 'newest' | 'oldest' = 'newest',
+  enabled = true,
+) {
+  return useInfiniteQuery<CommentsResponse>({
+    queryKey: ['blog-comments', slug, sort],
+    queryFn: async ({ pageParam }) => {
+      const { data } = await api.get(`/blog/${slug}/comments`, {
+        params: { page: pageParam, limit: 10, sort },
+      });
+      return data;
+    },
+    initialPageParam: 1,
+    getNextPageParam: (lastPage) => {
+      const totalPages = Math.ceil(lastPage.total / lastPage.limit);
+      return lastPage.page < totalPages ? lastPage.page + 1 : undefined;
+    },
+    refetchInterval: 30000,
+    enabled,
   });
 }
 
@@ -66,7 +91,24 @@ export function useCreateComment(testId: string) {
   });
 }
 
-export function useUpdateComment(testId: string) {
+export function useCreateBlogComment(slug: string) {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (params: { body: string; parentId?: string }) => {
+      const { data } = await api.post(`/blog/${slug}/comments`, params);
+      return data;
+    },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['blog-comments', slug] });
+      if (variables.parentId) {
+        qc.invalidateQueries({ queryKey: ['replies', variables.parentId] });
+      }
+    },
+  });
+}
+
+export function useUpdateComment(invalidateKey: string[]) {
   const qc = useQueryClient();
 
   return useMutation({
@@ -77,12 +119,12 @@ export function useUpdateComment(testId: string) {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['comments', testId] });
+      qc.invalidateQueries({ queryKey: invalidateKey });
     },
   });
 }
 
-export function useDeleteComment(testId: string) {
+export function useDeleteComment(invalidateKey: string[]) {
   const qc = useQueryClient();
 
   return useMutation({
@@ -90,12 +132,12 @@ export function useDeleteComment(testId: string) {
       await api.delete(`/comments/${commentId}`);
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['comments', testId] });
+      qc.invalidateQueries({ queryKey: invalidateKey });
     },
   });
 }
 
-export function useLikeComment(testId: string) {
+export function useLikeComment(invalidateKey: string[]) {
   const qc = useQueryClient();
 
   return useMutation({
@@ -107,12 +149,12 @@ export function useLikeComment(testId: string) {
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['comments', testId] });
+      qc.invalidateQueries({ queryKey: invalidateKey });
     },
   });
 }
 
-export function useReportComment(testId: string) {
+export function useReportComment(invalidateKey: string[]) {
   const qc = useQueryClient();
 
   return useMutation({
@@ -122,7 +164,7 @@ export function useReportComment(testId: string) {
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['comments', testId] });
+      qc.invalidateQueries({ queryKey: invalidateKey });
     },
   });
 }

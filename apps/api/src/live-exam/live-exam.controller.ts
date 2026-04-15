@@ -14,6 +14,9 @@ import type { Response } from 'express';
 import * as QRCode from 'qrcode';
 import { LiveExamService } from './live-exam.service';
 import { LiveExamTemplateService } from './live-exam-template.service';
+import { LiveExamRedisStateService } from './live-exam-redis-state.service';
+import { LiveExamLeaderboardService } from './live-exam-leaderboard.service';
+import { LiveExamQueueService } from './live-exam-queue.service';
 import { CreateLiveExamTemplateDto } from './dto/create-live-exam.dto';
 import { UpdateLiveExamTemplateDto } from './dto/update-live-exam.dto';
 import { CreateLiveExamQuestionDto } from './dto/create-live-exam-question.dto';
@@ -228,21 +231,34 @@ export class LiveExamController {
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('ADMIN')
 export class AdminLiveExamController {
-  constructor(private readonly service: LiveExamService) {}
+  constructor(
+    private readonly service: LiveExamService,
+    private readonly redisState: LiveExamRedisStateService,
+    private readonly leaderboard: LiveExamLeaderboardService,
+    private readonly queueService: LiveExamQueueService,
+  ) {}
 
   @Get('templates')
-  listTemplates(@Query('take') take?: string) {
-    return this.service.adminListTemplates(take ? parseInt(take, 10) : undefined);
+  listTemplates(
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    return this.service.adminListTemplates(
+      page ? parseInt(page, 10) : undefined,
+      pageSize ? parseInt(pageSize, 10) : undefined,
+    );
   }
 
   @Get('sessions')
   listSessions(
     @Query('status') status?: LiveExamSessionStatus,
-    @Query('take') take?: string,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
   ) {
     return this.service.adminListSessions({
       status,
-      take: take ? parseInt(take, 10) : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
     });
   }
 
@@ -262,7 +278,21 @@ export class AdminLiveExamController {
   }
 
   @Post('sessions/:id/force-end')
-  forceEnd(@Param('id') id: string, @CurrentUser() user: AuthUser) {
-    return this.service.forceEnd(id, user.id, { isAdmin: true });
+  async forceEnd(@Param('id') id: string, @CurrentUser() user: AuthUser) {
+    const state = await this.redisState.getState(id);
+    if (state && state.phase !== 'ENDED') {
+      if (state.phase === 'OPEN') {
+        const lockResult = await this.redisState.transitionToLocked(id, state.qIndex);
+        if (lockResult.ok) {
+          await this.leaderboard.setQuestionState(id, state.qIndex, 'LOCKED');
+          await this.queueService.closeOutQuestionPublic(id, state.qIndex);
+        }
+      }
+      await this.queueService.finalizeExam(id, 'admin_force_end', user.id);
+    } else {
+      await this.service.forceEnd(id, user.id, { isAdmin: true });
+      this.queueService.emitSessionEnded(id, 'admin_force_end');
+    }
+    return { ok: true };
   }
 }

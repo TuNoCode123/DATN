@@ -14,11 +14,11 @@
 
 terraform {
   backend "s3" {
-    bucket       = "ielts-ai-terraform-state"  # S3 bucket name (from bootstrap)
-    key          = "infra/terraform.tfstate"    # Path inside the bucket where state is stored
-    region       = "ap-southeast-2"             # AWS region where the bucket lives
-    use_lockfile = true                         # Use S3-native .tflock file for locking
+    bucket       = "ielts-ai-terraform-state" # S3 bucket name (from bootstrap)
+    key          = "infra/terraform.tfstate"  # Path inside the bucket where state is stored
+    region       = "ap-southeast-2"           # AWS region where the bucket lives
+    use_lockfile = true                       # Use S3-native .tflock file for locking
     # (replaces the old dynamodb_table approach — no DynamoDB table needed!)
-    encrypt      = true                         # Encrypt the state file in S3
+    encrypt = true # Encrypt the state file in S3
   }
 }

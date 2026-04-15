@@ -127,7 +127,7 @@ export default function PlayPage({
   const MIN_REVEAL_MS = 2200;
   // How long to hold on the "Exam finished!" screen before redirecting
   // to the results page — long enough for the complete sound to land.
-  const ENDED_HOLD_MS = 2500;
+  const ENDED_HOLD_MS = 2000;
 
   useEffect(() => {
     const s: Socket = connectLiveExamSocket();
@@ -324,7 +324,9 @@ export default function PlayPage({
             </span>
           </p>
         )}
-        <p className="text-sm text-neutral-500 mt-2">Loading results…</p>
+        <p className="text-sm text-neutral-500 mt-2">
+          Redirecting to full results…
+        </p>
       </div>
     );
   }

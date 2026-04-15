@@ -31,13 +31,13 @@
 
 # ── The ALB itself ──────────────────────────────────────────────────────────
 resource "aws_lb" "main" {
-  name               = "${var.project_name}-alb" # "ielts-ai-alb"
-  internal           = false                      # "external" — accessible from internet
+  name     = "${var.project_name}-alb" # "ielts-ai-alb"
+  internal = false                     # "external" — accessible from internet
   # internal = true would make it VPC-only (for internal microservice communication)
   load_balancer_type = "application" # ALB (Layer 7 — understands HTTP/HTTPS)
   # Alternative: "network" (NLB, Layer 4 — faster but no host/path routing)
-  security_groups    = [var.alb_security_group_id] # Firewall: allow 80/443 from internet
-  subnets            = var.public_subnet_ids       # Must be in 2+ AZs (public subnets)
+  security_groups = [var.alb_security_group_id] # Firewall: allow 80/443 from internet
+  subnets         = var.public_subnet_ids       # Must be in 2+ AZs (public subnets)
 
   tags = { Name = "${var.project_name}-alb" }
 }
@@ -52,21 +52,21 @@ resource "aws_lb" "main" {
 # ── API Target Group ────────────────────────────────────────────────────────
 resource "aws_lb_target_group" "api" {
   name        = "${var.project_name}-api-tg" # "ielts-ai-api-tg"
-  port        = 4000        # Container port (NestJS listens on 4000)
-  protocol    = "HTTP"      # ALB → ECS communication is HTTP (SSL terminates at ALB)
-  vpc_id      = var.vpc_id  # Must be in the same VPC as the containers
-  target_type = "instance"  # Targets are EC2 instances (ECS EC2 launch type)
+  port        = 4000                         # Container port (NestJS listens on 4000)
+  protocol    = "HTTP"                       # ALB → ECS communication is HTTP (SSL terminates at ALB)
+  vpc_id      = var.vpc_id                   # Must be in the same VPC as the containers
+  target_type = "instance"                   # Targets are EC2 instances (ECS EC2 launch type)
   # Alternative: "ip" (for Fargate or awsvpc networking mode)
 
   # ── Health Check ──────────────────────────────────────────────────────────
   # ALB periodically sends requests to this path to check if the container
   # is healthy. If a container fails health checks, ALB stops sending traffic.
   health_check {
-    path                = "/api/health"   # The URL path to check
-    healthy_threshold   = 2               # 2 consecutive successes → mark healthy
-    unhealthy_threshold = 3               # 3 consecutive failures → mark unhealthy
-    interval            = 30              # Check every 30 seconds
-    timeout             = 5               # Wait 5 seconds for response
+    path                = "/api/health" # The URL path to check
+    healthy_threshold   = 2             # 2 consecutive successes → mark healthy
+    unhealthy_threshold = 3             # 3 consecutive failures → mark unhealthy
+    interval            = 30            # Check every 30 seconds
+    timeout             = 5             # Wait 5 seconds for response
     # If /api/health returns 200 OK → healthy
     # If it returns 5xx or times out → unhealthy
   }
@@ -81,9 +81,9 @@ resource "aws_lb_target_group" "api" {
   # All subsequent requests from that client include the cookie,
   # and ALB routes them to the same target.
   stickiness {
-    type            = "lb_cookie"  # ALB generates the cookie (not the app)
-    cookie_duration = 86400        # Cookie lasts 24 hours (in seconds)
-    enabled         = true         # Turn on sticky sessions
+    type            = "lb_cookie" # ALB generates the cookie (not the app)
+    cookie_duration = 86400       # Cookie lasts 24 hours (in seconds)
+    enabled         = true        # Turn on sticky sessions
   }
 
   # Time to wait before deregistering a target (during deployments)
@@ -96,13 +96,13 @@ resource "aws_lb_target_group" "api" {
 # ── Web Target Group ────────────────────────────────────────────────────────
 resource "aws_lb_target_group" "web" {
   name        = "${var.project_name}-web-tg" # "ielts-ai-web-tg"
-  port        = 3000        # Container port (Next.js listens on 3000)
+  port        = 3000                         # Container port (Next.js listens on 3000)
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "instance"
 
   health_check {
-    path                = "/"     # Next.js root page
+    path                = "/" # Next.js root page
     healthy_threshold   = 2
     unhealthy_threshold = 3
     interval            = 30
@@ -122,9 +122,9 @@ resource "aws_lb_target_group" "web" {
 # ── HTTPS Listener (port 443) — Main entry point ───────────────────────────
 # This listener receives ALL HTTPS traffic and decides where to send it.
 resource "aws_lb_listener" "https" {
-  load_balancer_arn = aws_lb.main.arn  # Attach to our ALB
-  port              = 443              # Listen on HTTPS port
-  protocol          = "HTTPS"          # HTTPS protocol (encrypted)
+  load_balancer_arn = aws_lb.main.arn # Attach to our ALB
+  port              = 443             # Listen on HTTPS port
+  protocol          = "HTTPS"         # HTTPS protocol (encrypted)
 
   # SSL/TLS policy — determines which TLS versions and ciphers are supported
   # "ELBSecurityPolicy-TLS13-1-2-2021-06" supports TLS 1.2 and 1.3
@@ -138,8 +138,8 @@ resource "aws_lb_listener" "https" {
   # DEFAULT action: if no listener rules match, send to Web target group
   # This handles web.neu-study.online and any other hostname
   default_action {
-    type             = "forward"                     # Forward to a target group
-    target_group_arn = aws_lb_target_group.web.arn   # → Next.js containers
+    type             = "forward"                   # Forward to a target group
+    target_group_arn = aws_lb_target_group.web.arn # → Next.js containers
   }
 }
 
@@ -148,7 +148,7 @@ resource "aws_lb_listener" "https" {
 # Priority 10 means it's evaluated before the default action (priority 99999).
 resource "aws_lb_listener_rule" "api_host" {
   listener_arn = aws_lb_listener.https.arn # Attach to the HTTPS listener
-  priority     = 10  # Lower number = higher priority (evaluated first)
+  priority     = 10                        # Lower number = higher priority (evaluated first)
 
   # Action: forward matching traffic to the API target group
   action {
@@ -177,9 +177,9 @@ resource "aws_lb_listener" "http_redirect" {
     type = "redirect" # Redirect (not forward)
 
     redirect {
-      port        = "443"       # Redirect to port 443
-      protocol    = "HTTPS"     # Redirect to HTTPS
-      status_code = "HTTP_301"  # 301 = Permanent redirect (browsers cache this)
+      port        = "443"      # Redirect to port 443
+      protocol    = "HTTPS"    # Redirect to HTTPS
+      status_code = "HTTP_301" # 301 = Permanent redirect (browsers cache this)
       # 302 would be temporary redirect (browsers don't cache)
     }
   }

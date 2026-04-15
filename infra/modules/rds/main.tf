@@ -64,8 +64,8 @@ resource "aws_db_instance" "postgres" {
   identifier = "${var.project_name}-postgres" # "ielts-ai-postgres"
 
   # ── Engine settings ───────────────────────────────────────────────────────
-  engine         = "postgres"   # Database engine (could be mysql, mariadb, etc.)
-  engine_version = "16"         # Let AWS pick the latest 16.x patch available in the region
+  engine         = "postgres" # Database engine (could be mysql, mariadb, etc.)
+  engine_version = "16"       # Let AWS pick the latest 16.x patch available in the region
 
   # ── Instance size ─────────────────────────────────────────────────────────
   instance_class = var.db_instance_class # "db.t3.micro" — 2 vCPU, 1 GB RAM
@@ -73,20 +73,20 @@ resource "aws_db_instance" "postgres" {
   # For production: db.t3.small (2 vCPU, 2 GB) or db.r6g.large (2 vCPU, 16 GB)
 
   # ── Storage ───────────────────────────────────────────────────────────────
-  allocated_storage = 20      # 20 GB initial storage
-  storage_type      = "gp3"   # General Purpose SSD (gp3) — best price/performance
+  allocated_storage = 20    # 20 GB initial storage
+  storage_type      = "gp3" # General Purpose SSD (gp3) — best price/performance
   # gp3: 3000 IOPS baseline, 125 MB/s throughput — included in the price
   # Alternative: "io1" for high IOPS workloads (much more expensive)
-  storage_encrypted = true    # Encrypt data at rest using AWS KMS
+  storage_encrypted = true # Encrypt data at rest using AWS KMS
 
   # ── Database settings ─────────────────────────────────────────────────────
-  db_name  = var.db_name      # "ielts_platform" — the database name created on launch
-  username = var.db_username   # "ielts_user" — master username
-  password = var.db_password   # From terraform.tfvars (sensitive, not logged)
+  db_name  = var.db_name     # "ielts_platform" — the database name created on launch
+  username = var.db_username # "ielts_user" — master username
+  password = var.db_password # From terraform.tfvars (sensitive, not logged)
 
   # ── Network ───────────────────────────────────────────────────────────────
-  db_subnet_group_name   = aws_db_subnet_group.main.name     # Which subnets RDS can use
-  vpc_security_group_ids = [var.rds_security_group_id]         # Firewall: ECS + Lambda only
+  db_subnet_group_name   = aws_db_subnet_group.main.name        # Which subnets RDS can use
+  vpc_security_group_ids = [var.rds_security_group_id]          # Firewall: ECS + Lambda only
   parameter_group_name   = aws_db_parameter_group.postgres.name # Our custom config
 
   # "publicly_accessible = false" means: NO public IP, cannot connect from internet
@@ -105,7 +105,7 @@ resource "aws_db_instance" "postgres" {
   # The maintenance window is when AWS is allowed to restart the DB for updates.
 
   # ── Deletion settings ─────────────────────────────────────────────────────
-  skip_final_snapshot      = true  # Don't create a snapshot when deleting
+  skip_final_snapshot = true # Don't create a snapshot when deleting
   # In production, set this to false (creates a backup before deletion).
   # For a thesis project, we skip it to make `terraform destroy` faster.
   delete_automated_backups = true  # Delete backups when DB is deleted

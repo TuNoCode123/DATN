@@ -201,3 +201,69 @@ variable "pre_signup_lambda_zip" {
   type        = string
   default     = ""
 }
+
+# -----------------------------------------------------------------------------
+# Application runtime config (injected directly into ECS task env from tfvars)
+# -----------------------------------------------------------------------------
+
+variable "paypal_client_id" {
+  description = "PayPal OAuth client ID (server-side)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "paypal_client_secret" {
+  description = "PayPal OAuth client secret"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "paypal_webhook_id" {
+  description = "PayPal webhook ID for signature verification"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "paypal_base_url" {
+  description = "PayPal API base URL (sandbox vs live)"
+  type        = string
+  default     = "https://api-m.paypal.com"
+}
+
+variable "openrouter_api_key" {
+  description = "OpenRouter API key (optional — falls back to AWS Bedrock)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "next_public_paypal_client_id" {
+  description = "PayPal public client ID exposed to the browser (baked into Next.js at build)"
+  type        = string
+  default     = ""
+}
+
+# -----------------------------------------------------------------------------
+# AWS AI service region overrides (Polly/Transcribe/Bedrock)
+# -----------------------------------------------------------------------------
+
+variable "aws_bedrock_region" {
+  description = "AWS region for Bedrock (Claude models). Defaults to us-east-1 for broader model availability."
+  type        = string
+  default     = "us-east-1"
+}
+
+variable "aws_transcribe_region" {
+  description = "AWS region for Transcribe Streaming"
+  type        = string
+  default     = "ap-southeast-2"
+}
+
+variable "aws_polly_region" {
+  description = "AWS region for Polly TTS"
+  type        = string
+  default     = "ap-southeast-2"
+}

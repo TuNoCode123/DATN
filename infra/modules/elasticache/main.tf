@@ -48,11 +48,11 @@ resource "aws_elasticache_cluster" "redis" {
   cluster_id = "${var.project_name}-redis" # "ielts-ai-redis"
 
   # ── Engine settings ───────────────────────────────────────────────────────
-  engine         = "redis"   # Could be "memcached" — we use Redis for pub/sub
-  engine_version = "7.1"     # Redis 7.1 — latest stable version
+  engine         = "redis" # Could be "memcached" — we use Redis for pub/sub
+  engine_version = "7.1"   # Redis 7.1 — latest stable version
 
   # ── Instance size ─────────────────────────────────────────────────────────
-  node_type       = var.node_type # "cache.t3.micro" — 0.5 GB RAM
+  node_type = var.node_type # "cache.t3.micro" — 0.5 GB RAM
   # Free tier: 750 hours/month of cache.t3.micro for 12 months
   # 0.5 GB RAM is plenty for:
   #   - Socket.IO pub/sub channels (very small memory footprint)

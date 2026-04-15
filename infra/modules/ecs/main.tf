@@ -83,8 +83,8 @@ resource "aws_launch_template" "ecs" {
   # name_prefix: Terraform adds a random suffix to avoid conflicts
 
   image_id      = data.aws_ssm_parameter.ecs_ami.value # Latest ECS-optimized AMI
-  instance_type = var.instance_type                      # "t3.medium" (2 vCPU, 4 GB)
-  key_name      = var.key_name                           # SSH key pair (optional)
+  instance_type = var.instance_type                    # "t3.medium" (2 vCPU, 4 GB)
+  key_name      = var.key_name                         # SSH key pair (optional)
 
   # IAM Instance Profile: gives the EC2 instance permissions to:
   #   - Register with ECS cluster
@@ -103,9 +103,9 @@ resource "aws_launch_template" "ecs" {
     device_name = "/dev/xvda" # Root volume device name (Linux convention)
 
     ebs {
-      volume_size = 30     # 30 GB disk
-      volume_type = "gp3"  # General Purpose SSD (3000 IOPS baseline)
-      encrypted   = true   # Encrypt the disk at rest
+      volume_size = 30    # 30 GB disk
+      volume_type = "gp3" # General Purpose SSD (3000 IOPS baseline)
+      encrypted   = true  # Encrypt the disk at rest
       # 30 GB is enough for Docker images + container data
       # Docker images are typically 200-500 MB each
     }
@@ -121,7 +121,7 @@ resource "aws_launch_template" "ecs" {
   # Tags applied to each EC2 instance created from this template
   tag_specifications {
     resource_type = "instance"
-    tags = { Name = "${var.project_name}-ecs-instance" }
+    tags          = { Name = "${var.project_name}-ecs-instance" }
   }
 }
 
@@ -139,9 +139,9 @@ resource "aws_launch_template" "ecs" {
 #   - Scales in (removes instances) when capacity is underutilized
 resource "aws_autoscaling_group" "ecs" {
   name             = "${var.project_name}-ecs-asg"
-  min_size         = 1  # Always at least 1 instance running
-  max_size         = 3  # Never more than 3 (cost protection)
-  desired_capacity = 1  # Start with 1 instance
+  min_size         = 1 # Always at least 1 instance running
+  max_size         = 3 # Never more than 3 (cost protection)
+  desired_capacity = 1 # Start with 1 instance
 
   # Place instances in private subnets (across 2 AZs for availability)
   vpc_zone_identifier = var.private_subnet_ids
@@ -241,8 +241,8 @@ resource "aws_iam_role" "ecs_instance" {
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
-      Action    = "sts:AssumeRole"            # Permission to assume the role
-      Effect    = "Allow"                     # Allow (not Deny)
+      Action    = "sts:AssumeRole"                  # Permission to assume the role
+      Effect    = "Allow"                           # Allow (not Deny)
       Principal = { Service = "ec2.amazonaws.com" } # Only EC2 can assume this
     }]
   })
@@ -350,6 +350,27 @@ resource "aws_iam_role_policy" "ecs_task_permissions" {
         Effect   = "Allow"
         Action   = ["ses:SendEmail", "ses:SendTemplatedEmail"]
         Resource = "*" # SES doesn't support resource-level restrictions
+      },
+      {
+        # Polly: text-to-speech for pronunciation practice reference audio
+        # Reached via NAT Gateway → polly.<region>.amazonaws.com
+        Effect   = "Allow"
+        Action   = ["polly:SynthesizeSpeech", "polly:DescribeVoices"]
+        Resource = "*" # Polly doesn't support resource-level restrictions
+      },
+      {
+        # Transcribe Streaming: real-time speech-to-text (pronunciation + speaking grading)
+        # WebSocket to transcribestreaming.<region>.amazonaws.com via NAT
+        Effect   = "Allow"
+        Action   = ["transcribe:StartStreamTranscription", "transcribe:StartStreamTranscriptionWebSocket"]
+        Resource = "*"
+      },
+      {
+        # Bedrock: AI grading / model invocation (Claude via Bedrock Runtime)
+        # Reached via NAT → bedrock-runtime.<region>.amazonaws.com
+        Effect   = "Allow"
+        Action   = ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"]
+        Resource = "*"
       }
     ]
   })
@@ -363,8 +384,8 @@ resource "aws_iam_role_policy" "ecs_task_permissions" {
 # Retention: 14 days (then auto-deleted to save costs).
 
 resource "aws_cloudwatch_log_group" "api" {
-  name              = "/ecs/${var.project_name}/api"  # e.g., "/ecs/ielts-ai/api"
-  retention_in_days = 14 # Keep logs for 14 days, then delete
+  name              = "/ecs/${var.project_name}/api" # e.g., "/ecs/ielts-ai/api"
+  retention_in_days = 14                             # Keep logs for 14 days, then delete
 
   tags = { Name = "${var.project_name}-api-logs" }
 }
@@ -395,26 +416,26 @@ resource "aws_ecs_task_definition" "api" {
 
   execution_role_arn = aws_iam_role.ecs_task_execution.arn # For ECS agent (pull images, logs)
   task_role_arn      = aws_iam_role.ecs_task.arn           # For app code (S3, SES, etc.)
-  network_mode       = "bridge" # Docker bridge networking (dynamic port mapping)
+  network_mode       = "bridge"                            # Docker bridge networking (dynamic port mapping)
   # "bridge" = containers get a random host port mapped to their container port
   # "awsvpc" = each task gets its own ENI and IP (used with Fargate)
 
   # Container definition — the Docker container configuration
   # This is a JSON array (can have multiple containers per task, but we use 1)
   container_definitions = jsonencode([{
-    name      = "api"                          # Container name (referenced by ALB)
-    image     = "${var.ecr_api_url}:latest"    # Docker image from ECR
-    cpu       = 512                            # 512 CPU units = 0.5 vCPU
+    name  = "api"                       # Container name (referenced by ALB)
+    image = "${var.ecr_api_url}:latest" # Docker image from ECR
+    cpu   = 512                         # 512 CPU units = 0.5 vCPU
     # 1 vCPU = 1024 CPU units. t3.medium has 2048 total (2 vCPU).
-    memory    = 1024                           # 1024 MB = 1 GB RAM
-    essential = true                           # If this container dies, stop the whole task
+    memory    = 1024 # 1024 MB = 1 GB RAM
+    essential = true # If this container dies, stop the whole task
 
     # Port mapping: container port → random host port
     portMappings = [{
-      containerPort = 4000  # NestJS listens on 4000 inside the container
-      hostPort      = 0     # 0 = dynamic port (let Docker pick a random port)
+      containerPort = 4000 # NestJS listens on 4000 inside the container
+      hostPort      = 0    # 0 = dynamic port (let Docker pick a random port)
       # ALB discovers the random port via ECS service discovery
-      protocol      = "tcp"
+      protocol = "tcp"
     }]
 
     # Environment variables passed to the container
@@ -440,18 +461,29 @@ resource "aws_ecs_task_definition" "api" {
       { name = "COGNITO_DOMAIN", value = var.cognito_domain },
       # S3 bucket name for file uploads (presigned URLs)
       { name = "S3_BUCKET_NAME", value = var.s3_bucket_name },
+      # AI service region overrides (Bedrock/Transcribe/Polly reached via NAT GW)
+      { name = "AWS_BEDROCK_REGION", value = var.aws_bedrock_region },
+      { name = "AWS_TRANSCRIBE_REGION", value = var.aws_transcribe_region },
+      { name = "AWS_POLLY_REGION", value = var.aws_polly_region },
+      # PayPal — injected directly from prod.tfvars (no Secrets Manager)
+      { name = "PAYPAL_BASE_URL", value = var.paypal_base_url },
+      { name = "PAYPAL_CLIENT_ID", value = var.paypal_client_id },
+      { name = "PAYPAL_CLIENT_SECRET", value = var.paypal_client_secret },
+      { name = "PAYPAL_WEBHOOK_ID", value = var.paypal_webhook_id },
+      # OpenRouter — optional AI grading provider (falls back to Bedrock if empty)
+      { name = "OPENROUTER_API_KEY", value = var.openrouter_api_key },
     ]
 
     # Health check: ECS runs this command periodically to check container health
     # If the health check fails, ECS kills and replaces the container
     healthCheck = {
-      command     = ["CMD-SHELL", "curl -f http://localhost:4000/api/health || exit 1"]
+      command = ["CMD-SHELL", "curl -f http://localhost:4000/api/health || exit 1"]
       # "curl -f" fails with exit code 22 if HTTP response is 4xx/5xx
       # "|| exit 1" ensures the health check reports failure
-      interval    = 30  # Check every 30 seconds
-      timeout     = 5   # Wait up to 5 seconds for a response
-      retries     = 3   # Allow 3 consecutive failures before marking unhealthy
-      startPeriod = 60  # Grace period: don't check for the first 60 seconds
+      interval    = 30 # Check every 30 seconds
+      timeout     = 5  # Wait up to 5 seconds for a response
+      retries     = 3  # Allow 3 consecutive failures before marking unhealthy
+      startPeriod = 60 # Grace period: don't check for the first 60 seconds
       # startPeriod gives the app time to boot (NestJS startup + Prisma migration)
     }
 
@@ -481,8 +513,8 @@ resource "aws_ecs_task_definition" "web" {
   container_definitions = jsonencode([{
     name      = "web"
     image     = "${var.ecr_web_url}:latest"
-    cpu       = 512   # 0.5 vCPU
-    memory    = 1024  # 1 GB RAM
+    cpu       = 512  # 0.5 vCPU
+    memory    = 1024 # 1 GB RAM
     essential = true
 
     portMappings = [{
@@ -501,6 +533,7 @@ resource "aws_ecs_task_definition" "web" {
       { name = "NEXT_PUBLIC_WS_URL", value = "https://api.${var.domain_name}" },
       { name = "NEXT_PUBLIC_COGNITO_DOMAIN", value = var.cognito_domain },
       { name = "NEXT_PUBLIC_COGNITO_CLIENT_ID", value = var.cognito_frontend_client_id },
+      { name = "NEXT_PUBLIC_PAYPAL_CLIENT_ID", value = var.next_public_paypal_client_id },
     ]
 
     healthCheck = {
@@ -533,10 +566,10 @@ resource "aws_ecs_task_definition" "web" {
 
 # ── API Service ─────────────────────────────────────────────────────────────
 resource "aws_ecs_service" "api" {
-  name            = "${var.project_name}-api"     # "ielts-ai-api"
-  cluster         = aws_ecs_cluster.main.id       # Run in our cluster
+  name            = "${var.project_name}-api"       # "ielts-ai-api"
+  cluster         = aws_ecs_cluster.main.id         # Run in our cluster
   task_definition = aws_ecs_task_definition.api.arn # Which task def to run
-  desired_count   = 1                              # Run 1 copy of this task
+  desired_count   = 1                               # Run 1 copy of this task
 
   # Use our EC2 capacity provider (not Fargate)
   capacity_provider_strategy {

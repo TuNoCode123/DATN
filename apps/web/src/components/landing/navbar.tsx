@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/lib/auth-store';
 import { api } from '@/lib/api';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 import {
   Menu,
   X,
@@ -208,6 +209,7 @@ export function Navbar() {
         <div className="hidden lg:flex items-center gap-2 shrink-0">
           {isAuthenticated && user ? (
             <>
+              <NotificationBell />
               {creditBalance !== null && (
                 <Link
                   href="/credits"
@@ -258,17 +260,9 @@ export function Navbar() {
           )}
         </div>
 
-        {/* Mobile credit + menu */}
-        <div className="flex lg:hidden items-center gap-2">
-          {isAuthenticated && creditBalance !== null && (
-            <Link
-              href="/credits"
-              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold border-2 border-border-strong rounded-full bg-gradient-to-r from-amber-200 to-yellow-200 shadow-[2px_2px_0_0_#1e293b] cursor-pointer"
-            >
-              <Coins className="w-3.5 h-3.5 text-amber-700" />
-              <span className="text-amber-900 tabular-nums">{creditBalance.toLocaleString()}</span>
-            </Link>
-          )}
+        {/* Mobile: notification bell + menu */}
+        <div className="flex lg:hidden items-center gap-1">
+          {isAuthenticated && <NotificationBell />}
           <button
             onClick={() => setMobileOpen(!mobileOpen)}
             className="p-2 cursor-pointer"

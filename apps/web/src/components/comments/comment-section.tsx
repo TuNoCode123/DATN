@@ -9,35 +9,41 @@ import { CommentItem } from './comment-item';
 import { CommentSkeleton } from './comment-skeleton';
 import {
   useComments,
+  useBlogComments,
   useCreateComment,
+  useCreateBlogComment,
   useUpdateComment,
   useDeleteComment,
   useLikeComment,
   useReportComment,
 } from './use-comments';
 
-interface CommentSectionProps {
-  testId: string;
-}
+type CommentSectionProps =
+  | { testId: string; blogSlug?: never }
+  | { testId?: never; blogSlug: string };
 
-export function CommentSection({ testId }: CommentSectionProps) {
+export function CommentSection({ testId, blogSlug }: CommentSectionProps) {
   const { message } = App.useApp();
   const [sort, setSort] = useState<'newest' | 'oldest'>('newest');
   const user = useAuthStore((s) => s.user);
 
-  const {
-    data,
-    isLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-  } = useComments(testId, sort);
+  const isBlog = !!blogSlug;
+  const invalidateKey = isBlog
+    ? ['blog-comments', blogSlug]
+    : ['comments', testId!];
 
-  const createMutation = useCreateComment(testId);
-  const updateMutation = useUpdateComment(testId);
-  const deleteMutation = useDeleteComment(testId);
-  const likeMutation = useLikeComment(testId);
-  const reportMutation = useReportComment(testId);
+  const testQuery = useComments(testId ?? '', sort, !isBlog);
+  const blogQuery = useBlogComments(blogSlug ?? '', sort, isBlog);
+  const { data, isLoading, fetchNextPage, hasNextPage, isFetchingNextPage } =
+    isBlog ? blogQuery : testQuery;
+
+  const testCreateMutation = useCreateComment(testId ?? '');
+  const blogCreateMutation = useCreateBlogComment(blogSlug ?? '');
+  const createMutation = isBlog ? blogCreateMutation : testCreateMutation;
+  const updateMutation = useUpdateComment(invalidateKey);
+  const deleteMutation = useDeleteComment(invalidateKey);
+  const likeMutation = useLikeComment(invalidateKey);
+  const reportMutation = useReportComment(invalidateKey);
 
   const comments = data?.pages.flatMap((p) => p.data) ?? [];
   const total = data?.pages[0]?.total ?? 0;

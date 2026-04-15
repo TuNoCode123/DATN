@@ -299,7 +299,7 @@ export const adminBlogApi = {
 // ── Comments Moderation (Admin) ───────────────────────
 
 export const adminCommentsApi = {
-  getQueue: (params?: { page?: number; limit?: number }) =>
+  getQueue: (params?: { page?: number; limit?: number; status?: string; search?: string }) =>
     api.get('/admin/comments/queue', { params }).then((r) => r.data),
   approve: (id: string) =>
     api.post(`/admin/comments/${id}/approve`).then((r) => r.data),

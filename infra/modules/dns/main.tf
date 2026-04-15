@@ -20,8 +20,8 @@
 
 # Look up the existing hosted zone by domain name
 data "aws_route53_zone" "main" {
-  name         = var.domain_name  # "neu-study.online"
-  private_zone = false            # This is a PUBLIC hosted zone (not VPC-private)
+  name         = var.domain_name # "neu-study.online"
+  private_zone = false           # This is a PUBLIC hosted zone (not VPC-private)
   # public zone = resolves for everyone on the internet
   # private zone = resolves only within a specific VPC
 }

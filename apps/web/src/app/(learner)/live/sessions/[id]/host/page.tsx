@@ -127,6 +127,8 @@ export default function HostConsolePage({
       setPhase(ph);
     } else if (data.session.status === 'ENDED') {
       setPhase('ENDED');
+      router.push(`/live/sessions/${sessionId}/result?mode=host`);
+      return;
     } else {
       setPhase('LOBBY');
     }
@@ -138,6 +140,7 @@ export default function HostConsolePage({
     );
     setTotalPlayers(data.session.participants.length);
     setLeaderboard(data.leaderboard);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   useEffect(() => {
@@ -219,7 +222,7 @@ export default function HostConsolePage({
       });
       setTimeout(
         () => router.push(`/live/sessions/${sessionId}/result?mode=host`),
-        800,
+        2000,
       );
     };
 
@@ -354,9 +357,11 @@ export default function HostConsolePage({
             />
           ) : phase === 'ENDED' ? (
             <div className="brutal-card p-8 text-center">
-              <Trophy className="w-12 h-12 mx-auto text-yellow-500 mb-2" />
-              <h2 className="text-xl font-bold mb-1">Session ended</h2>
-              <p className="text-neutral-600">Loading results…</p>
+              <Trophy className="w-16 h-16 mx-auto text-yellow-500 mb-4 animate-bounce" />
+              <h2 className="text-2xl font-black mb-2">Session ended!</h2>
+              <p className="text-neutral-600 text-lg">
+                Redirecting to results in a moment…
+              </p>
             </div>
           ) : (
             <CurrentQuestionPanel

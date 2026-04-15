@@ -551,29 +551,43 @@ export class LiveExamService {
 
   async adminListSessions(filters: {
     status?: LiveExamSessionStatus;
-    take?: number;
+    page?: number;
+    pageSize?: number;
   }) {
-    return this.prisma.liveExamSession.findMany({
-      where: filters.status ? { status: filters.status } : {},
-      orderBy: { createdAt: 'desc' },
-      take: filters.take ?? 50,
-      include: {
-        createdBy: { select: { id: true, displayName: true, email: true } },
-        template: { select: { id: true, title: true } },
-        _count: { select: { participants: true, questions: true } },
-      },
-    });
+    const page = filters.page ?? 1;
+    const pageSize = filters.pageSize ?? 12;
+    const where = filters.status ? { status: filters.status } : {};
+    const [data, total] = await Promise.all([
+      this.prisma.liveExamSession.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          createdBy: { select: { id: true, displayName: true, email: true } },
+          template: { select: { id: true, title: true } },
+          _count: { select: { participants: true, questions: true } },
+        },
+      }),
+      this.prisma.liveExamSession.count({ where }),
+    ]);
+    return { data, total, page, pageSize };
   }
 
-  async adminListTemplates(take = 50) {
-    return this.prisma.liveExamTemplate.findMany({
-      orderBy: { createdAt: 'desc' },
-      take,
-      include: {
-        createdBy: { select: { id: true, displayName: true, email: true } },
-        _count: { select: { questions: true, sessions: true } },
-      },
-    });
+  async adminListTemplates(page = 1, pageSize = 12) {
+    const [data, total] = await Promise.all([
+      this.prisma.liveExamTemplate.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          createdBy: { select: { id: true, displayName: true, email: true } },
+          _count: { select: { questions: true, sessions: true } },
+        },
+      }),
+      this.prisma.liveExamTemplate.count(),
+    ]);
+    return { data, total, page, pageSize };
   }
 
   async adminStats() {
