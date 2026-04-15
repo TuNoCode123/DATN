@@ -11,17 +11,15 @@ import {
   BarChart3,
   Smartphone,
 } from 'lucide-react';
-import {
-  Navbar,
-  Footer,
-  SectionBadge,
-  FeatureCard,
-  TestCard,
-  TestimonialCard,
-  WelcomeAnimation,
-  Reveal,
-  CtaSection,
-} from '@/components/landing';
+import { Navbar } from '@/components/landing/navbar';
+import { Footer } from '@/components/landing/footer';
+import { SectionBadge } from '@/components/landing/section-badge';
+import { FeatureCard } from '@/components/landing/feature-card';
+import { TestCard } from '@/components/landing/test-card';
+import { TestimonialCard } from '@/components/landing/testimonial-card';
+import { Reveal } from '@/components/landing/reveal';
+import { CtaSection } from '@/components/landing/cta-section';
+import { WelcomeAnimation } from '@/components/landing/welcome-animation-lazy';
 import { JsonLd } from '@/components/seo/json-ld';
 import {
   buildMetadata,
@@ -72,6 +70,7 @@ export default function Home() {
       />
       <Navbar />
 
+      <main id="main-content">
       {/* ===== HERO SECTION ===== */}
       <section className="pt-28 pb-16 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
@@ -325,6 +324,7 @@ export default function Home() {
 
       {/* ===== CTA SECTION ===== */}
       <CtaSection />
+      </main>
 
       {/* ===== FOOTER ===== */}
       <Footer />

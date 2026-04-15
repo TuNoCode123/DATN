@@ -3,7 +3,6 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/lib/auth-store";
-import { Spin } from "antd";
 
 export default function NotFound() {
   const router = useRouter();
@@ -19,7 +18,11 @@ export default function NotFound() {
 
   return (
     <div className="flex h-screen items-center justify-center bg-cream">
-      <Spin size="large" />
+      <div
+        className="h-10 w-10 rounded-full border-[3px] border-slate-200 border-t-slate-700 animate-spin"
+        role="status"
+        aria-label="Loading"
+      />
     </div>
   );
 }

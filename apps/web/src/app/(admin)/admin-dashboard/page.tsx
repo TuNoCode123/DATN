@@ -1,8 +1,8 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { PageHeader } from "@/components/admin/page-header";
 import { StatCard } from "@/components/admin/stat-card";
-import { ChartCard } from "@/components/admin/chart-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -14,24 +14,19 @@ import {
   useRecentActivity,
 } from "@/features/admin/hooks";
 import { Users, FileText, ClipboardList, TrendingUp } from "lucide-react";
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Area,
-  AreaChart,
-} from "recharts";
 
-const chartTooltipStyle = {
-  borderRadius: "10px",
-  border: "none",
-  boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-  fontSize: "12px",
-};
+const DashboardCharts = dynamic(
+  () => import("@/components/admin/dashboard-charts"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
+        <Skeleton className="h-[320px] w-full rounded-lg" />
+        <Skeleton className="h-[320px] w-full rounded-lg" />
+      </div>
+    ),
+  },
+);
 
 export default function AdminDashboardPage() {
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
@@ -80,50 +75,12 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8">
-        <ChartCard title="Student Growth" isLoading={userGrowthLoading}>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={userGrowth ?? []}>
-              <defs>
-                <linearGradient id="userGrowthGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#4F46E5" stopOpacity={0.2} />
-                  <stop offset="100%" stopColor="#4F46E5" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748B" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: "#64748B" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={chartTooltipStyle} />
-              <Area
-                type="monotone"
-                dataKey="value"
-                stroke="#4F46E5"
-                strokeWidth={2.5}
-                fill="url(#userGrowthGrad)"
-                name="Students"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </ChartCard>
-
-        <ChartCard title="Test Activity" isLoading={testActivityLoading}>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={testActivity ?? []}>
-              <defs>
-                <linearGradient id="testBarGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#0D9488" stopOpacity={0.9} />
-                  <stop offset="100%" stopColor="#0D9488" stopOpacity={0.5} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 12, fill: "#64748B" }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: "#64748B" }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={chartTooltipStyle} />
-              <Bar dataKey="value" fill="url(#testBarGrad)" radius={[6, 6, 0, 0]} name="Attempts" />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
-      </div>
+      <DashboardCharts
+        userGrowth={userGrowth}
+        userGrowthLoading={userGrowthLoading}
+        testActivity={testActivity}
+        testActivityLoading={testActivityLoading}
+      />
 
       {/* Recent Activity */}
       <Card className="border-0 shadow-sm">

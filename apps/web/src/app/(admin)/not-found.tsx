@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Spin } from "antd";
 
 export default function AdminNotFound() {
   const router = useRouter();
@@ -13,7 +12,11 @@ export default function AdminNotFound() {
 
   return (
     <div className="flex h-screen items-center justify-center bg-background">
-      <Spin size="large" />
+      <div
+        className="h-10 w-10 rounded-full border-[3px] border-slate-200 border-t-slate-700 animate-spin"
+        role="status"
+        aria-label="Loading"
+      />
     </div>
   );
 }

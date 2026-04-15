@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { App, Select } from 'antd';
 import { Plus, Trash2, Save, Rocket, ArrowUp, ArrowDown } from 'lucide-react';
@@ -15,7 +16,11 @@ import {
   validateQuestionDraft,
 } from '@/lib/live-exam-types';
 import { QuestionFields } from './question-fields';
-import TiptapMiniEditor from '@/components/admin/tiptap-mini-editor';
+
+const TiptapMiniEditor = dynamic(
+  () => import('@/components/admin/tiptap-mini-editor'),
+  { ssr: false },
+);
 import { FileUpload } from '@/components/admin/file-upload';
 import type { QuestionMedia } from '@/lib/live-exam-types';
 

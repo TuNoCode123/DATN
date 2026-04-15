@@ -28,6 +28,7 @@ import { ReadingProgress } from '@/components/blog/reading-progress';
 import { TableOfContents } from '@/components/blog/table-of-contents';
 import { BlogCta } from '@/components/blog/blog-cta';
 import { CommentSection } from '@/components/comments/comment-section';
+import { AntdProvider } from '@/lib/antd-provider';
 
 export const revalidate = 300;
 
@@ -240,7 +241,7 @@ export default async function BlogPostPage({
 
             {/* Comments */}
             <div className="mt-14 pt-8 border-t-[2.5px] border-foreground/10">
-              <CommentSection blogSlug={slug} />
+              <AntdProvider><CommentSection blogSlug={slug} /></AntdProvider>
             </div>
           </div>
 
