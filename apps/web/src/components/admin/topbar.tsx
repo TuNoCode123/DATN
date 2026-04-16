@@ -33,9 +33,8 @@ export function Topbar() {
   const avatarUrl = "";
   const page = pageTitles[pathname] ?? { title: "Admin", description: "" };
 
-  const handleLogout = async () => {
-    await logout();
-    window.location.href = "/login";
+  const handleLogout = () => {
+    logout(); // Redirects to Cognito logout → /login
   };
 
   return (

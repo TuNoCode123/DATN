@@ -31,15 +31,53 @@ resource "aws_s3_bucket" "uploads" {
   tags = { Name = "${var.project_name}-uploads" }
 }
 
-# Block all public access to the uploads bucket
-# Files are accessed via presigned URLs only (not public URLs)
+# Public access controls for the uploads bucket.
+# We allow a PUBLIC-READ BUCKET POLICY on the "uploads/*" prefix so that
+# question images/audio referenced in the DB (stored as direct S3 URLs,
+# e.g. https://<bucket>.s3.<region>.amazonaws.com/uploads/images/...)
+# can be fetched by the browser and Next.js image optimizer without
+# presigning. Writes still require IAM credentials (API task role).
+#
+# - block_public_acls / ignore_public_acls = true  → ACLs are legacy;
+#   we never want a rogue ACL to change visibility.
+# - block_public_policy = false  → needed so the bucket policy below
+#   (which grants anonymous s3:GetObject on uploads/*) is NOT blocked.
+# - restrict_public_buckets = false → needed so the public policy
+#   actually takes effect; with true, AWS ignores public policies even
+#   if present.
 resource "aws_s3_bucket_public_access_block" "uploads" {
   bucket = aws_s3_bucket.uploads.id
 
   block_public_acls       = true
-  block_public_policy     = true
+  block_public_policy     = false
   ignore_public_acls      = true
-  restrict_public_buckets = true
+  restrict_public_buckets = false
+}
+
+# Bucket policy: allow anonymous GET on the "uploads/*" prefix only.
+# This lets <img>, <audio>, and the Next.js image optimizer fetch objects
+# directly by URL. Listing the bucket and reading other prefixes remains
+# denied (no s3:ListBucket, no "*" on the whole bucket).
+#
+# depends_on ensures the public access block is updated FIRST — otherwise
+# AWS rejects the policy with "blocked by BlockPublicPolicy".
+resource "aws_s3_bucket_policy" "uploads_public_read" {
+  bucket = aws_s3_bucket.uploads.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "PublicReadUploadsPrefix"
+        Effect    = "Allow"
+        Principal = "*"
+        Action    = "s3:GetObject"
+        Resource  = "${aws_s3_bucket.uploads.arn}/uploads/*"
+      }
+    ]
+  })
+
+  depends_on = [aws_s3_bucket_public_access_block.uploads]
 }
 
 # Enable versioning — keeps all versions of uploaded files

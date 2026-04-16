@@ -220,6 +220,11 @@ module "alb" {
   alb_security_group_id = module.networking.alb_security_group_id
   acm_certificate_arn   = module.acm.certificate_arn # SSL cert for HTTPS
   api_domain            = "api.${var.domain_name}"   # "api.neu-study.online"
+
+  # ALB authentication — Cognito OIDC integration
+  cognito_user_pool_arn = module.cognito.user_pool_arn
+  cognito_alb_client_id = module.cognito.alb_client_id
+  cognito_domain_prefix = var.cognito_domain_prefix
 }
 
 # -----------------------------------------------------------------------------
@@ -238,6 +243,7 @@ module "cognito" {
   environment           = var.environment
   aws_region            = var.aws_region
   frontend_url          = var.frontend_url
+  api_domain            = "api.${var.domain_name}"
   cognito_domain_prefix = var.cognito_domain_prefix
   google_client_id      = var.google_client_id
   google_client_secret  = var.google_client_secret

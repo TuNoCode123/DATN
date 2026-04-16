@@ -31,9 +31,9 @@ variable "ecs_security_group_id" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type for ECS cluster nodes (e.g., 't3.small')"
+  description = "EC2 instance type for ECS cluster nodes (e.g., 't3a.medium')"
   type        = string
-  default     = "t3.small"
+  default     = "t3a.medium"
 }
 
 variable "key_name" {

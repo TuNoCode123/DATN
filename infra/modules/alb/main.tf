@@ -143,23 +143,167 @@ resource "aws_lb_listener" "https" {
   }
 }
 
-# ── Host-based routing rule: api.neu-study.online → API ─────────────────────
-# This rule OVERRIDES the default action when the hostname matches.
-# Priority 10 means it's evaluated before the default action (priority 99999).
-resource "aws_lb_listener_rule" "api_host" {
-  listener_arn = aws_lb_listener.https.arn # Attach to the HTTPS listener
-  priority     = 10                        # Lower number = higher priority (evaluated first)
+# ── Pure public (no auth at all) ─────────────────────────────────────────────
+# Paths that never need authentication. Forwarded directly without ALB
+# processing session cookies. Health check is critical — ALB itself needs it.
+resource "aws_lb_listener_rule" "api_public" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 3
 
-  # Action: forward matching traffic to the API target group
   action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.api.arn # → NestJS containers
+    target_group_arn = aws_lb_target_group.api.arn
   }
 
-  # Condition: match when the Host header is api.neu-study.online
   condition {
     host_header {
-      values = [var.api_domain] # "api.neu-study.online"
+      values = [var.api_domain]
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = [
+        "/api/health",
+        "/api/payments/paypal/webhook",
+      ]
+    }
+  }
+}
+
+# ── Optional auth (allow unauthenticated) ────────────────────────────────────
+# Content endpoints that work for both authenticated and unauthenticated users.
+# ALB adds x-amzn-oidc-data header IF the user has a valid session cookie,
+# but passes the request through if they don't (on_unauthenticated = "allow").
+# This is needed so authenticated users get their identity on POST endpoints
+# (e.g., creating comments) while unauthenticated users can still read content.
+resource "aws_lb_listener_rule" "api_optional_auth" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 5
+
+  action {
+    type  = "authenticate-cognito"
+    order = 1
+
+    authenticate_cognito {
+      user_pool_arn       = var.cognito_user_pool_arn
+      user_pool_client_id = var.cognito_alb_client_id
+      user_pool_domain    = var.cognito_domain_prefix
+
+      session_cookie_name        = "AWSELBAuthSessionCookie"
+      session_timeout            = 604800
+      on_unauthenticated_request = "allow"
+      scope                      = "openid email profile"
+    }
+  }
+
+  action {
+    type             = "forward"
+    order            = 2
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.api_domain]
+    }
+  }
+
+  condition {
+    path_pattern {
+      # ALB limit: max 5 condition values across ALL conditions in a rule.
+      # host_header uses 1, so we have 4 slots for path patterns.
+      values = [
+        "/api/tests*",
+        "/api/tags*",
+        "/api/blog*",
+        "/api/comments/*",
+      ]
+    }
+  }
+}
+
+# ── Optional auth (overflow rule for additional paths) ───────────────────────
+# Split from api_optional_auth due to ALB's 5 condition-value limit per rule.
+resource "aws_lb_listener_rule" "api_optional_auth_extra" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 6
+
+  action {
+    type  = "authenticate-cognito"
+    order = 1
+
+    authenticate_cognito {
+      user_pool_arn       = var.cognito_user_pool_arn
+      user_pool_client_id = var.cognito_alb_client_id
+      user_pool_domain    = var.cognito_domain_prefix
+
+      session_cookie_name        = "AWSELBAuthSessionCookie"
+      session_timeout            = 604800
+      on_unauthenticated_request = "allow"
+      scope                      = "openid email profile"
+    }
+  }
+
+  action {
+    type             = "forward"
+    order            = 2
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.api_domain]
+    }
+  }
+
+  condition {
+    path_pattern {
+      values = [
+        "/api/hsk-vocabulary*",
+      ]
+    }
+  }
+}
+
+# ── Required auth (redirect unauthenticated to Cognito) ──────────────────────
+# All other API paths require authentication. ALB redirects unauthenticated
+# users to Cognito Hosted UI, handles the OIDC flow, and sets session cookies.
+resource "aws_lb_listener_rule" "api_host" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 10
+
+  # Step 1: Authenticate via Cognito OIDC
+  action {
+    type  = "authenticate-cognito"
+    order = 1
+
+    authenticate_cognito {
+      user_pool_arn       = var.cognito_user_pool_arn
+      user_pool_client_id = var.cognito_alb_client_id
+      user_pool_domain    = var.cognito_domain_prefix
+
+      session_cookie_name = "AWSELBAuthSessionCookie"
+      session_timeout     = 604800 # 7 days
+
+      # Phase 2: "authenticate" — redirect unauthenticated users to Cognito.
+      # ALB handles the full OIDC flow and sets AWSELBAuthSessionCookie.
+      on_unauthenticated_request = "authenticate"
+
+      scope = "openid email profile"
+    }
+  }
+
+  # Step 2: Forward to API target group
+  action {
+    type             = "forward"
+    order            = 2
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.api_domain]
     }
   }
 }

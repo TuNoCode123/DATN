@@ -83,7 +83,7 @@ resource "aws_launch_template" "ecs" {
   # name_prefix: Terraform adds a random suffix to avoid conflicts
 
   image_id      = data.aws_ssm_parameter.ecs_ami.value # Latest ECS-optimized AMI
-  instance_type = var.instance_type                    # "t3.medium" (2 vCPU, 4 GB)
+  instance_type = var.instance_type                    # "t3a.medium" (2 vCPU, 4 GB, AMD)
   key_name      = var.key_name                         # SSH key pair (optional)
 
   # IAM Instance Profile: gives the EC2 instance permissions to:
@@ -140,7 +140,7 @@ resource "aws_launch_template" "ecs" {
 resource "aws_autoscaling_group" "ecs" {
   name             = "${var.project_name}-ecs-asg"
   min_size         = 1 # Always at least 1 instance running
-  max_size         = 3 # Never more than 3 (cost protection)
+  max_size         = 10 # Allow up to 10 instances for scaling
   desired_capacity = 1 # Start with 1 instance
 
   # Place instances in private subnets (across 2 AZs for availability)

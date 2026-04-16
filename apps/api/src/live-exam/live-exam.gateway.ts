@@ -15,7 +15,8 @@ import {
   LiveExamSessionStatus,
   Prisma,
 } from '@prisma/client';
-import { CognitoAuthService } from '../auth/cognito-auth.service';
+import { AlbJwtService } from '../auth/alb-jwt.service';
+import { AlbUserService } from '../auth/alb-user.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { LiveExamService } from './live-exam.service';
 import { LiveExamLeaderboardService } from './live-exam-leaderboard.service';
@@ -72,7 +73,8 @@ export class LiveExamGateway
   private readonly logger = new Logger('LiveExamGateway');
 
   constructor(
-    private readonly cognitoAuth: CognitoAuthService,
+    private readonly albJwtService: AlbJwtService,
+    private readonly albUserService: AlbUserService,
     private readonly prisma: PrismaService,
     private readonly examService: LiveExamService,
     private readonly leaderboard: LiveExamLeaderboardService,
@@ -632,32 +634,11 @@ export class LiveExamGateway
   }
 
   private async authenticateSocket(socket: Socket): Promise<AuthUser> {
-    const cookieHeader = socket.handshake.headers.cookie;
-    const cookies = this.parseCookies(cookieHeader);
-    const token = cookies['access_token'];
-    if (!token) throw new Error('No authentication token');
+    const albToken = socket.handshake.headers['x-amzn-oidc-data'] as string | undefined;
+    const claims = await this.albJwtService.verify(albToken);
+    if (!claims) throw new Error('Not authenticated');
 
-    const payload = await this.cognitoAuth.verifyCognitoJwt(token);
-    const user = await this.cognitoAuth.findOrCreateFromCognito(
-      payload.sub,
-      payload.email ?? payload.username ?? '',
-      payload['cognito:groups'],
-    );
-    return {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      displayName: user.displayName,
-    };
-  }
-
-  private parseCookies(header?: string): Record<string, string> {
-    if (!header) return {};
-    return Object.fromEntries(
-      header.split(';').map((c) => {
-        const [key, ...val] = c.trim().split('=');
-        return [key, val.join('=')];
-      }),
-    );
+    const user = await this.albUserService.resolveUser(claims);
+    return { id: user.id, email: user.email, role: claims.role, displayName: user.displayName };
   }
 }

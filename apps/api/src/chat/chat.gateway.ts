@@ -10,7 +10,8 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
-import { CognitoAuthService } from '../auth/cognito-auth.service';
+import { AlbJwtService } from '../auth/alb-jwt.service';
+import { AlbUserService } from '../auth/alb-user.service';
 import { RedisService } from '../redis/redis.service';
 import { MessageType } from '@prisma/client';
 
@@ -47,7 +48,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private chatService: ChatService,
-    private cognitoAuthService: CognitoAuthService,
+    private albJwtService: AlbJwtService,
+    private albUserService: AlbUserService,
     private redis: RedisService,
   ) {}
 
@@ -543,39 +545,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   // ─── Socket Authentication ──────────────────────────────
 
   /**
-   * Authenticate a socket connection.
-   * Tries cookie-based Cognito auth first, falls back to legacy JWT auth.
+   * Authenticate a socket connection via ALB JWT header.
+   * ALB sets x-amzn-oidc-data on the WebSocket upgrade request.
    */
   private async authenticateSocket(
     socket: Socket,
   ): Promise<{ id: string; email: string; role: string }> {
-    // 1. Try cookie-based auth (Cognito) — browser sends cookies on WS upgrade
-    const cookieHeader = socket.handshake.headers.cookie;
-    const cookies = this.parseCookies(cookieHeader);
-    const cookieToken = cookies['access_token'];
+    const albToken = socket.handshake.headers['x-amzn-oidc-data'] as string | undefined;
+    const claims = await this.albJwtService.verify(albToken);
+    if (!claims) throw new Error('Not authenticated');
 
-    if (cookieToken) {
-      const payload =
-        await this.cognitoAuthService.verifyCognitoJwt(cookieToken);
-      const user = await this.cognitoAuthService.findOrCreateFromCognito(
-        payload.sub,
-        payload.email ?? payload.username ?? '',
-        payload['cognito:groups'],
-      );
-      return { id: user.id, email: user.email, role: user.role };
-    }
-
-    throw new Error('No authentication token');
-  }
-
-  private parseCookies(header?: string): Record<string, string> {
-    if (!header) return {};
-    return Object.fromEntries(
-      header.split(';').map((c) => {
-        const [key, ...val] = c.trim().split('=');
-        return [key, val.join('=')];
-      }),
-    );
+    const user = await this.albUserService.resolveUser(claims);
+    return { id: user.id, email: user.email, role: claims.role };
   }
 
   // ─── Notify all conversation members via personal rooms ──

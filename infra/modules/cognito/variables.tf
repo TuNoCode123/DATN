@@ -24,6 +24,12 @@ variable "frontend_url" {
   type        = string
 }
 
+variable "api_domain" {
+  description = "API domain for ALB callback URL (e.g., 'api.neu-study.online')"
+  type        = string
+  default     = ""
+}
+
 variable "cognito_domain_prefix" {
   description = "Cognito hosted UI domain prefix (must be globally unique)"
   type        = string

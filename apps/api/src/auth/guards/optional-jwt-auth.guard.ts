@@ -1,14 +1,46 @@
-import { Injectable, ExecutionContext } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
+import { AlbJwtService } from '../alb-jwt.service';
+import { AlbUserService } from '../alb-user.service';
 
+/**
+ * Optional ALB JWT auth guard.
+ *
+ * Same as JwtAuthGuard but allows unauthenticated access —
+ * request.user will be null if no valid token is present.
+ */
 @Injectable()
-export class OptionalJwtAuthGuard extends AuthGuard('cognito-jwt') {
-  canActivate(context: ExecutionContext) {
-    return super.canActivate(context);
-  }
+export class OptionalJwtAuthGuard implements CanActivate {
+  private readonly logger = new Logger(OptionalJwtAuthGuard.name);
 
-  handleRequest(err: any, user: any) {
-    // Don't throw on missing/invalid token — just return null
-    return user || null;
+  constructor(
+    private readonly albJwtService: AlbJwtService,
+    private readonly albUserService: AlbUserService,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest();
+    const albToken = request.headers['x-amzn-oidc-data'];
+
+    try {
+      const claims = await this.albJwtService.verify(albToken);
+      if (claims) {
+        const user = await this.albUserService.resolveUser(claims);
+        request.user = {
+          id: user.id,
+          email: user.email,
+          displayName: user.displayName,
+          role: claims.role,
+        };
+      }
+    } catch {
+      // Allow unauthenticated access — user remains null
+    }
+
+    return true;
   }
 }

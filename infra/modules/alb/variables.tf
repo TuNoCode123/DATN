@@ -29,3 +29,20 @@ variable "api_domain" {
   description = "API subdomain for host-based routing (e.g., 'api.neu-study.online')"
   type        = string
 }
+
+# ── ALB Authentication (Cognito) ────────────────────────────────────────────
+
+variable "cognito_user_pool_arn" {
+  description = "ARN of the Cognito User Pool for ALB authentication"
+  type        = string
+}
+
+variable "cognito_alb_client_id" {
+  description = "Cognito app client ID for ALB auth (must have a client secret)"
+  type        = string
+}
+
+variable "cognito_domain_prefix" {
+  description = "Cognito hosted UI domain prefix (e.g., 'ielts-ai-dev')"
+  type        = string
+}

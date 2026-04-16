@@ -232,10 +232,7 @@ export function Navbar() {
                 </span>
               </div>
               <button
-                onClick={async () => {
-                  await logout();
-                  window.location.href = '/login';
-                }}
+                onClick={() => logout()}
                 title="Log out"
                 className="p-2 rounded-xl text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
               >
@@ -354,10 +351,7 @@ export function Navbar() {
                     </span>
                   </div>
                   <button
-                    onClick={async () => {
-                      await logout();
-                      window.location.href = '/login';
-                    }}
+                    onClick={() => logout()}
                     className="flex items-center gap-2 text-sm text-red-500 text-left px-3 py-2 cursor-pointer"
                   >
                     <LogOut className="w-4 h-4" />

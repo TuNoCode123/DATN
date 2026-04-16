@@ -1,93 +1,85 @@
+/**
+ * Cognito auth helpers — ALB-based authentication (Phase 2).
+ *
+ * With ALB handling the OIDC flow, login/signup work by redirecting to
+ * an ALB-protected endpoint. ALB intercepts unauthenticated requests
+ * and redirects to the Cognito Hosted UI automatically.
+ *
+ * After authentication, ALB redirects back to the original URL with
+ * session cookies set. No PKCE, no callback page, no token exchange.
+ */
+
 const COGNITO_DOMAIN = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!;
 const CLIENT_ID = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!;
-
-function getRedirectUri() {
-  if (typeof window === 'undefined') return '';
-  return `${window.location.origin}/auth/callback`;
-}
-
-/** Generate PKCE code verifier + challenge pair */
-async function generatePKCE() {
-  const array = new Uint8Array(32);
-  crypto.getRandomValues(array);
-  const verifier = Array.from(array, (b) =>
-    b.toString(16).padStart(2, '0'),
-  ).join('');
-
-  const encoder = new TextEncoder();
-  const hash = await crypto.subtle.digest('SHA-256', encoder.encode(verifier));
-  const challenge = btoa(String.fromCharCode(...new Uint8Array(hash)))
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
-
-  sessionStorage.setItem('pkce_code_verifier', verifier);
-  return challenge;
-}
-
-/** Build Cognito authorize URL with PKCE */
-function buildAuthorizeUrl(
-  challenge: string,
-  provider?: 'Google' | 'Facebook',
-) {
-  const params = new URLSearchParams({
-    client_id: CLIENT_ID,
-    response_type: 'code',
-    scope: 'openid email profile',
-    redirect_uri: getRedirectUri(),
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-  });
-
-  if (provider) {
-    params.set('identity_provider', provider);
-  }
-
-  return `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
-}
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 /**
- * Redirect to Cognito Hosted UI for login.
- * Without a provider, shows the Cognito login form (email/password + social).
- * With a provider, goes directly to that social login.
+ * Redirect to Cognito Hosted UI for login via ALB.
+ *
+ * Hitting an ALB-protected API endpoint triggers the OIDC flow.
+ * After auth, ALB redirects back here with session cookies set.
+ *
+ * For direct provider selection (e.g., Google), we redirect to
+ * Cognito's authorize endpoint with identity_provider set — ALB
+ * will recognize the resulting session.
  */
-export async function loginWithCognito(provider?: 'Google' | 'Facebook') {
-  const challenge = await generatePKCE();
-  window.location.href = buildAuthorizeUrl(challenge, provider);
+export function loginWithCognito(provider?: 'Google' | 'Facebook') {
+  if (provider) {
+    // Direct to specific social provider via Cognito Hosted UI
+    const params = new URLSearchParams({
+      client_id: CLIENT_ID,
+      response_type: 'code',
+      scope: 'openid email profile',
+      redirect_uri: `${API_BASE_URL.replace('/api', '')}/oauth2/idpresponse`,
+      identity_provider: provider,
+    });
+    window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
+  } else {
+    // Redirect to Cognito Hosted UI (shows login form with all providers)
+    const params = new URLSearchParams({
+      client_id: CLIENT_ID,
+      response_type: 'code',
+      scope: 'openid email profile',
+      redirect_uri: `${API_BASE_URL.replace('/api', '')}/oauth2/idpresponse`,
+    });
+    window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
+  }
 }
 
 /**
  * Redirect to Cognito Hosted UI for signup.
- * Appends screen_hint=signup so Cognito shows the registration form.
  */
-export async function signupWithCognito(provider?: 'Google' | 'Facebook') {
-  const challenge = await generatePKCE();
-  const url = buildAuthorizeUrl(challenge, provider);
-  // Cognito Hosted UI supports screen_hint to show signup tab
-  window.location.href = provider ? url : `${url}&screen_hint=signup`;
-}
-
-/**
- * Redirect to Cognito Hosted UI's Forgot Password page.
- * After the user sets a new password, Cognito redirects back to the
- * callback URL with an authorization code — same flow as normal login,
- * so PKCE is generated here too.
- */
-export async function forgotPasswordWithCognito() {
-  const challenge = await generatePKCE();
+export function signupWithCognito(provider?: 'Google' | 'Facebook') {
+  if (provider) {
+    loginWithCognito(provider);
+    return;
+  }
   const params = new URLSearchParams({
     client_id: CLIENT_ID,
     response_type: 'code',
     scope: 'openid email profile',
-    redirect_uri: getRedirectUri(),
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
+    redirect_uri: `${API_BASE_URL.replace('/api', '')}/oauth2/idpresponse`,
+    screen_hint: 'signup',
+  });
+  window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
+}
+
+/**
+ * Redirect to Cognito Hosted UI's Forgot Password page.
+ */
+export function forgotPasswordWithCognito() {
+  const params = new URLSearchParams({
+    client_id: CLIENT_ID,
+    response_type: 'code',
+    scope: 'openid email profile',
+    redirect_uri: `${API_BASE_URL.replace('/api', '')}/oauth2/idpresponse`,
   });
   window.location.href = `https://${COGNITO_DOMAIN}/forgotPassword?${params}`;
 }
 
 /**
- * Redirect to Cognito for logout, then back to /login.
+ * Redirect to Cognito for logout.
+ * This clears both the ALB session cookie and the Cognito session.
  */
 export function logoutFromCognito() {
   const params = new URLSearchParams({
@@ -95,18 +87,4 @@ export function logoutFromCognito() {
     logout_uri: `${window.location.origin}/login`,
   });
   window.location.href = `https://${COGNITO_DOMAIN}/logout?${params}`;
-}
-
-/**
- * Get the stored PKCE code verifier (used by the callback page).
- */
-export function getCodeVerifier(): string | null {
-  return sessionStorage.getItem('pkce_code_verifier');
-}
-
-/**
- * Clear the stored PKCE code verifier after successful exchange.
- */
-export function clearCodeVerifier() {
-  sessionStorage.removeItem('pkce_code_verifier');
 }
