@@ -10,7 +10,8 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
-import { CognitoAuthService } from '../auth/cognito-auth.service';
+import { AlbJwtService } from '../auth/alb-jwt.service';
+import { AlbUserService } from '../auth/alb-user.service';
 import { NotificationsService } from './notifications.service';
 import { NotificationsQueueService } from './notifications-queue.service';
 
@@ -37,7 +38,8 @@ export class NotificationsGateway
   private readonly logger = new Logger('NotificationsGateway');
 
   constructor(
-    private readonly cognitoAuth: CognitoAuthService,
+    private readonly albJwtService: AlbJwtService,
+    private readonly albUserService: AlbUserService,
     private readonly service: NotificationsService,
     private readonly queueService: NotificationsQueueService,
   ) {}
@@ -100,32 +102,11 @@ export class NotificationsGateway
   // ─── auth helpers (mirror live-exam.gateway) ──────
 
   private async authenticateSocket(socket: Socket): Promise<AuthUser> {
-    const cookieHeader = socket.handshake.headers.cookie;
-    const cookies = this.parseCookies(cookieHeader);
-    const token = cookies['access_token'];
-    if (!token) throw new Error('No authentication token');
+    const albToken = socket.handshake.headers['x-amzn-oidc-data'] as string | undefined;
+    const claims = await this.albJwtService.verify(albToken);
+    if (!claims) throw new Error('Not authenticated');
 
-    const payload = await this.cognitoAuth.verifyCognitoJwt(token);
-    const user = await this.cognitoAuth.findOrCreateFromCognito(
-      payload.sub,
-      payload.email ?? payload.username ?? '',
-      payload['cognito:groups'],
-    );
-    return {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      displayName: user.displayName,
-    };
-  }
-
-  private parseCookies(header?: string): Record<string, string> {
-    if (!header) return {};
-    return Object.fromEntries(
-      header.split(';').map((c) => {
-        const [key, ...val] = c.trim().split('=');
-        return [key, val.join('=')];
-      }),
-    );
+    const user = await this.albUserService.resolveUser(claims);
+    return { id: user.id, email: user.email, role: claims.role, displayName: user.displayName };
   }
 }

@@ -1,27 +1,23 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { RefreshDto } from './dto/refresh.dto';
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { CurrentUser } from './decorators/current-user.decorator';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
-
-  @Post('register')
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
-  }
-
-  @Post('login')
-  @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
-  }
-
-  @Post('refresh')
-  @HttpCode(HttpStatus.OK)
-  refresh(@Body() dto: RefreshDto) {
-    return this.authService.refreshToken(dto.refreshToken);
+  /**
+   * Get current user from ALB JWT.
+   * Used by frontend session-restore to detect authentication state.
+   *
+   * Kept at /auth/cognito/me for backward compatibility with existing frontend.
+   */
+  @Get('cognito/me')
+  @UseGuards(JwtAuthGuard)
+  me(@CurrentUser() user: any) {
+    return {
+      id: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      role: user.role,
+    };
   }
 }

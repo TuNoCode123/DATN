@@ -1,13 +1,15 @@
-import { Module } from '@nestjs/common';
-import { CognitoJwtStrategy } from './cognito-jwt.strategy';
-import { CognitoAuthService } from './cognito-auth.service';
-import { CognitoAuthController } from './cognito-auth.controller';
+import { Global, Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { AuthController } from './auth.controller';
+import { AlbJwtService } from './alb-jwt.service';
+import { AlbUserService } from './alb-user.service';
 import { UsersModule } from '../users/users.module';
 
+@Global()
 @Module({
-  imports: [UsersModule],
-  controllers: [CognitoAuthController],
-  providers: [CognitoAuthService, CognitoJwtStrategy],
-  exports: [CognitoAuthService],
+  imports: [UsersModule, ConfigModule],
+  controllers: [AuthController],
+  providers: [AlbJwtService, AlbUserService],
+  exports: [AlbJwtService, AlbUserService],
 })
 export class AuthModule {}

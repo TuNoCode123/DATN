@@ -15,6 +15,7 @@ locals {
   name_prefix = "${var.project_name}-${var.environment}"
   callback_urls = [
     "${var.frontend_url}/auth/callback",
+    "https://${var.api_domain}/oauth2/idpresponse", # ALB callback (required by AWS)
   ]
   logout_urls = [
     "${var.frontend_url}/login",
@@ -206,7 +207,52 @@ resource "aws_cognito_user_pool_client" "frontend" {
 }
 
 # ──────────────────────────────────────────────────────────────
-#  5. App Client (Backend — Confidential)
+#  5a. App Client (ALB — Confidential, for ALB authenticate-cognito)
+# ──────────────────────────────────────────────────────────────
+# ALB authenticate-cognito REQUIRES a client with a client secret.
+# The frontend client (PKCE, no secret) cannot be used for ALB auth.
+resource "aws_cognito_user_pool_client" "alb" {
+  name         = "${local.name_prefix}-alb-client"
+  user_pool_id = aws_cognito_user_pool.main.id
+
+  generate_secret = true # Required by ALB
+
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_scopes                 = ["openid", "email", "profile"]
+  supported_identity_providers         = ["COGNITO", "Google"]
+
+  callback_urls = local.callback_urls
+  logout_urls   = local.logout_urls
+
+  access_token_validity  = 15
+  id_token_validity      = 15
+  refresh_token_validity = 7
+
+  token_validity_units {
+    access_token  = "minutes"
+    id_token      = "minutes"
+    refresh_token = "days"
+  }
+
+  explicit_auth_flows = [
+    "ALLOW_REFRESH_TOKEN_AUTH",
+    "ALLOW_USER_SRP_AUTH",
+  ]
+
+  prevent_user_existence_errors = "ENABLED"
+  enable_token_revocation       = true
+
+  read_attributes  = ["email", "name", "picture"]
+  write_attributes = ["email", "name"]
+
+  depends_on = [
+    aws_cognito_identity_provider.google,
+  ]
+}
+
+# ──────────────────────────────────────────────────────────────
+#  5b. App Client (Backend — Confidential)
 # ──────────────────────────────────────────────────────────────
 resource "aws_cognito_user_pool_client" "backend" {
   name         = "${local.name_prefix}-backend-client"

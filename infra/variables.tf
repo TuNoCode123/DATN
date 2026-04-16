@@ -123,10 +123,10 @@ variable "redis_node_type" {
 variable "ecs_instance_type" {
   description = "EC2 instance type for ECS cluster nodes"
   type        = string
-  default     = "t3.medium"
-  # t3.medium = 2 vCPU, 4 GB RAM — enough for both API + Web containers
-  # Each container uses 512 CPU + 1024 MB, so t3.medium fits 2 containers.
-  # For cost savings: t3.small (2 vCPU, 2 GB) fits 1 container at a time.
+  default     = "t3a.medium"
+  # t3a.medium = 2 vCPU, 4 GB RAM (AMD) — ~10% cheaper than t3.medium
+  # Each container uses 512 CPU + 1024 MB, so t3a.medium fits 2 containers
+  # with headroom for rolling deploys (deployment_maximum_percent = 200).
 }
 
 variable "key_name" {

@@ -17,7 +17,8 @@ import {
 } from '@aws-sdk/client-transcribe-streaming';
 import { CreditReason } from '@prisma/client';
 import { CreditsService } from '../credits/credits.service';
-import { CognitoAuthService } from '../auth/cognito-auth.service';
+import { AlbJwtService } from '../auth/alb-jwt.service';
+import { AlbUserService } from '../auth/alb-user.service';
 import { PronunciationService } from './pronunciation.service';
 import { PassThrough } from 'stream';
 import * as zlib from 'zlib';
@@ -70,7 +71,8 @@ export class PronunciationGateway
   constructor(
     private config: ConfigService,
     private credits: CreditsService,
-    private cognitoAuth: CognitoAuthService,
+    private albJwtService: AlbJwtService,
+    private albUserService: AlbUserService,
     private pronunciationService: PronunciationService,
   ) {
     const region =
@@ -400,24 +402,11 @@ export class PronunciationGateway
   private async authenticateSocket(
     socket: Socket,
   ): Promise<{ id: string; email: string; role: string }> {
-    const cookieHeader = socket.handshake.headers.cookie;
-    if (!cookieHeader) throw new Error('No cookies');
+    const albToken = socket.handshake.headers['x-amzn-oidc-data'] as string | undefined;
+    const claims = await this.albJwtService.verify(albToken);
+    if (!claims) throw new Error('Not authenticated');
 
-    const cookies: Record<string, string> = {};
-    cookieHeader.split(';').forEach((c) => {
-      const [key, ...val] = c.trim().split('=');
-      cookies[key] = val.join('=');
-    });
-
-    const token = cookies['access_token'];
-    if (!token) throw new Error('No access_token cookie');
-
-    const payload = await this.cognitoAuth.verifyCognitoJwt(token);
-    const user = await this.cognitoAuth.findOrCreateFromCognito(
-      payload.sub,
-      payload.email ?? payload.username ?? '',
-      payload['cognito:groups'],
-    );
-    return { id: user.id, email: user.email, role: user.role };
+    const user = await this.albUserService.resolveUser(claims);
+    return { id: user.id, email: user.email, role: claims.role };
   }
 }

@@ -17,6 +17,17 @@ output "frontend_client_id" {
   value       = aws_cognito_user_pool_client.frontend.id
 }
 
+output "alb_client_id" {
+  description = "App Client ID for ALB authenticate-cognito (confidential, with secret)"
+  value       = aws_cognito_user_pool_client.alb.id
+}
+
+output "alb_client_secret" {
+  description = "App Client Secret for ALB authenticate-cognito"
+  value       = aws_cognito_user_pool_client.alb.client_secret
+  sensitive   = true
+}
+
 output "backend_client_id" {
   description = "App Client ID for backend (confidential)"
   value       = aws_cognito_user_pool_client.backend.id
