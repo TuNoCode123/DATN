@@ -109,6 +109,11 @@ output "cognito_frontend_client_id" {
   value       = module.cognito.frontend_client_id
 }
 
+output "cognito_alb_client_id" {
+  description = "Cognito ALB App Client ID (confidential, for ALB authenticate-cognito)"
+  value       = module.cognito.alb_client_id
+}
+
 output "cognito_backend_client_id" {
   description = "Cognito Backend App Client ID (confidential)"
   value       = module.cognito.backend_client_id

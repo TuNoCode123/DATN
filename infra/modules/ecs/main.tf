@@ -533,7 +533,7 @@ resource "aws_ecs_task_definition" "web" {
       { name = "NEXT_PUBLIC_API_URL", value = "https://api.${var.domain_name}/api" },
       { name = "NEXT_PUBLIC_WS_URL", value = "https://api.${var.domain_name}" },
       { name = "NEXT_PUBLIC_COGNITO_DOMAIN", value = var.cognito_domain },
-      { name = "NEXT_PUBLIC_COGNITO_CLIENT_ID", value = var.cognito_frontend_client_id },
+      { name = "NEXT_PUBLIC_COGNITO_CLIENT_ID", value = var.cognito_alb_client_id },
       { name = "NEXT_PUBLIC_PAYPAL_CLIENT_ID", value = var.next_public_paypal_client_id },
     ]
 

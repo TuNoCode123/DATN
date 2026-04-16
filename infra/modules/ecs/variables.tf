@@ -118,6 +118,12 @@ variable "cognito_frontend_client_id" {
   default     = ""
 }
 
+variable "cognito_alb_client_id" {
+  description = "Cognito ALB App Client ID (confidential, used by frontend for ALB-based auth redirect)"
+  type        = string
+  default     = ""
+}
+
 variable "cognito_domain" {
   description = "Cognito Hosted UI domain (e.g., ielts-ai-prd.auth.ap-southeast-2.amazoncognito.com)"
   type        = string
