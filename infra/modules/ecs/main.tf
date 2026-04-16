@@ -140,7 +140,7 @@ resource "aws_launch_template" "ecs" {
 resource "aws_autoscaling_group" "ecs" {
   name             = "${var.project_name}-ecs-asg"
   min_size         = 1 # Always at least 1 instance running
-  max_size         = 10 # Allow up to 10 instances for scaling
+  max_size         = 3 # Cap at 3 instances (enough for 2 services + headroom)
   desired_capacity = 1 # Start with 1 instance
 
   # Place instances in private subnets (across 2 AZs for availability)
@@ -189,9 +189,10 @@ resource "aws_ecs_capacity_provider" "ec2" {
 
     managed_scaling {
       status                    = "ENABLED" # Let ECS manage ASG scaling
-      target_capacity           = 80        # Target 80% utilization
+      target_capacity           = 100       # Target 100% utilization (pack tasks tightly, scale only when full)
       minimum_scaling_step_size = 1         # Scale at least 1 instance at a time
-      maximum_scaling_step_size = 2         # Scale at most 2 instances at a time
+      maximum_scaling_step_size = 1         # Scale 1 instance at a time (prevent over-provisioning)
+      instance_warmup_period    = 300       # Wait 5 min before counting new instance capacity (prevents premature scaling)
     }
   }
 }
