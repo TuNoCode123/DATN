@@ -12,6 +12,7 @@
 const COGNITO_DOMAIN = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!;
 const CLIENT_ID = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const ALB_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 
 /**
  * Redirect to Cognito Hosted UI for login via ALB.
@@ -30,7 +31,7 @@ export function loginWithCognito(provider?: 'Google' | 'Facebook') {
       client_id: CLIENT_ID,
       response_type: 'code',
       scope: 'openid email profile',
-      redirect_uri: `${API_BASE_URL.replace('/api', '')}/oauth2/idpresponse`,
+      redirect_uri: `${ALB_ORIGIN}/oauth2/idpresponse`,
       identity_provider: provider,
     });
     window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
@@ -40,7 +41,7 @@ export function loginWithCognito(provider?: 'Google' | 'Facebook') {
       client_id: CLIENT_ID,
       response_type: 'code',
       scope: 'openid email profile',
-      redirect_uri: `${API_BASE_URL.replace('/api', '')}/oauth2/idpresponse`,
+      redirect_uri: `${ALB_ORIGIN}/oauth2/idpresponse`,
     });
     window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
   }
@@ -58,7 +59,7 @@ export function signupWithCognito(provider?: 'Google' | 'Facebook') {
     client_id: CLIENT_ID,
     response_type: 'code',
     scope: 'openid email profile',
-    redirect_uri: `${API_BASE_URL.replace('/api', '')}/oauth2/idpresponse`,
+    redirect_uri: `${ALB_ORIGIN}/oauth2/idpresponse`,
     screen_hint: 'signup',
   });
   window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
@@ -72,7 +73,7 @@ export function forgotPasswordWithCognito() {
     client_id: CLIENT_ID,
     response_type: 'code',
     scope: 'openid email profile',
-    redirect_uri: `${API_BASE_URL.replace('/api', '')}/oauth2/idpresponse`,
+    redirect_uri: `${ALB_ORIGIN}/oauth2/idpresponse`,
   });
   window.location.href = `https://${COGNITO_DOMAIN}/forgotPassword?${params}`;
 }

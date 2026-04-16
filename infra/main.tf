@@ -299,6 +299,7 @@ module "ecs" {
   cognito_user_pool_id       = module.cognito.user_pool_id
   cognito_client_id          = module.cognito.backend_client_id
   cognito_frontend_client_id = module.cognito.frontend_client_id
+  cognito_alb_client_id      = module.cognito.alb_client_id
   cognito_domain             = module.cognito.cognito_domain
 
   # S3 bucket name for presigned URLs
