@@ -1,68 +1,37 @@
 /**
  * Cognito auth helpers — ALB-based authentication (Phase 2).
  *
- * With ALB handling the OIDC flow, login/signup work by redirecting to
- * an ALB-protected endpoint. ALB intercepts unauthenticated requests
- * and redirects to the Cognito Hosted UI automatically.
+ * Login/signup work by redirecting to an ALB-protected endpoint.
+ * ALB intercepts unauthenticated requests, initiates the OIDC flow
+ * with Cognito, handles the /oauth2/idpresponse callback internally,
+ * sets session cookies, and forwards to the backend.
  *
- * After authentication, ALB redirects back to the original URL with
- * session cookies set. No PKCE, no callback page, no token exchange.
+ * The backend login endpoint then redirects the user back to the frontend.
  */
 
 const COGNITO_DOMAIN = process.env.NEXT_PUBLIC_COGNITO_DOMAIN!;
 const CLIENT_ID = process.env.NEXT_PUBLIC_COGNITO_CLIENT_ID!;
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-const ALB_ORIGIN = API_BASE_URL.replace(/\/api\/?$/, '');
 
 /**
- * Redirect to Cognito Hosted UI for login via ALB.
+ * Redirect to ALB-protected login endpoint.
  *
- * Hitting an ALB-protected API endpoint triggers the OIDC flow.
- * After auth, ALB redirects back here with session cookies set.
- *
- * For direct provider selection (e.g., Google), we redirect to
- * Cognito's authorize endpoint with identity_provider set — ALB
- * will recognize the resulting session.
+ * The ALB authenticate-cognito action will redirect unauthenticated
+ * users to the Cognito Hosted UI. After auth, ALB handles the token
+ * exchange at /oauth2/idpresponse, sets session cookies, and forwards
+ * to the backend. The backend then redirects back to the frontend.
  */
-export function loginWithCognito(provider?: 'Google' | 'Facebook') {
-  if (provider) {
-    // Direct to specific social provider via Cognito Hosted UI
-    const params = new URLSearchParams({
-      client_id: CLIENT_ID,
-      response_type: 'code',
-      scope: 'openid email profile',
-      redirect_uri: `${ALB_ORIGIN}/oauth2/idpresponse`,
-      identity_provider: provider,
-    });
-    window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
-  } else {
-    // Redirect to Cognito Hosted UI (shows login form with all providers)
-    const params = new URLSearchParams({
-      client_id: CLIENT_ID,
-      response_type: 'code',
-      scope: 'openid email profile',
-      redirect_uri: `${ALB_ORIGIN}/oauth2/idpresponse`,
-    });
-    window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
-  }
+export function loginWithCognito(_provider?: 'Google' | 'Facebook') {
+  const redirect = window.location.pathname !== '/login' ? window.location.pathname : '/dashboard';
+  window.location.href = `${API_BASE_URL}/auth/cognito/login?redirect=${encodeURIComponent(redirect)}`;
 }
 
 /**
  * Redirect to Cognito Hosted UI for signup.
+ * Uses the same ALB flow — Cognito Hosted UI has a sign-up link.
  */
-export function signupWithCognito(provider?: 'Google' | 'Facebook') {
-  if (provider) {
-    loginWithCognito(provider);
-    return;
-  }
-  const params = new URLSearchParams({
-    client_id: CLIENT_ID,
-    response_type: 'code',
-    scope: 'openid email profile',
-    redirect_uri: `${ALB_ORIGIN}/oauth2/idpresponse`,
-    screen_hint: 'signup',
-  });
-  window.location.href = `https://${COGNITO_DOMAIN}/oauth2/authorize?${params}`;
+export function signupWithCognito(_provider?: 'Google' | 'Facebook') {
+  loginWithCognito();
 }
 
 /**
@@ -73,7 +42,7 @@ export function forgotPasswordWithCognito() {
     client_id: CLIENT_ID,
     response_type: 'code',
     scope: 'openid email profile',
-    redirect_uri: `${ALB_ORIGIN}/oauth2/idpresponse`,
+    redirect_uri: `${API_BASE_URL}/auth/cognito/login`,
   });
   window.location.href = `https://${COGNITO_DOMAIN}/forgotPassword?${params}`;
 }
