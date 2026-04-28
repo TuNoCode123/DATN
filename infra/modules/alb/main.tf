@@ -144,8 +144,14 @@ resource "aws_lb_listener" "https" {
 }
 
 # ── Pure public (no auth at all) ─────────────────────────────────────────────
-# Paths that never need authentication. Forwarded directly without ALB
-# processing session cookies. Health check is critical — ALB itself needs it.
+# Paths that never need ALB-level authentication. Forwarded directly without
+# ALB processing session cookies or triggering Cognito OIDC.
+#
+# IMPORTANT: Only truly server-to-server or unauthenticated paths belong here.
+# /api/payments/paypal/webhook — called server-to-server by PayPal (no cookie).
+# Other /api/payments* paths are in optional-auth (priority 6) so CORS
+# preflight OPTIONS requests pass through while authenticated requests
+# still get the x-amzn-oidc-data header.
 resource "aws_lb_listener_rule" "api_public" {
   listener_arn = aws_lb_listener.https.arn
   priority     = 3
@@ -261,6 +267,8 @@ resource "aws_lb_listener_rule" "api_optional_auth_extra" {
     path_pattern {
       values = [
         "/api/hsk-vocabulary*",
+        "/api/credits*",
+        "/api/payments*",
       ]
     }
   }

@@ -65,7 +65,6 @@ const navLinks: NavLink[] = [
       },
     ],
   },
-  { href: '/credits', label: 'Credits', icon: 'credits', color: 'amber' },
 ];
 
 const iconMap = {

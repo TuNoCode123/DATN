@@ -9,18 +9,23 @@ import {
   Check,
   X,
   Flag,
+  CornerDownRight,
 } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuthStore } from '@/lib/auth-store';
 import { CommentInput } from './comment-input';
 import { CommentReplies } from './comment-replies';
 import { UserProfilePopover } from './user-profile-popover';
-import type { Comment } from './types';
+import type { Comment, CommentUser } from './types';
 import { timeAgo, getInitials } from './types';
 
 interface CommentItemProps {
   comment: Comment;
   testId?: string;
+  // Set on flattened nested replies so we can render a "Replying to @user" hint.
+  // The flat layout collapses all descendants to a single indent level, so the
+  // hint is the only thing that conveys who the reply is actually addressing.
+  replyTo?: CommentUser;
   onReply: (body: string, parentId: string) => void;
   onEdit: (commentId: string, body: string) => void;
   onDelete: (commentId: string) => void;
@@ -33,6 +38,7 @@ interface CommentItemProps {
 export function CommentItem({
   comment,
   testId,
+  replyTo,
   onReply,
   onEdit,
   onDelete,
@@ -62,25 +68,26 @@ export function CommentItem({
     setIsEditing(false);
   };
 
-  const indent = comment.depth > 0;
+  // Only the root comment renders its descendants block (flattened). Nested
+  // replies are rendered as siblings by CommentReplies, so they skip this.
+  const isRoot = comment.depth === 0;
 
   if (comment.isDeleted) {
     return (
-      <div className={indent ? 'ml-11' : ''}>
+      <div>
         <div className="flex gap-3 py-3">
           <Avatar size="default" className="shrink-0">
             <AvatarFallback className="bg-slate-100 text-slate-400 text-xs">
               ?
             </AvatarFallback>
           </Avatar>
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <p className="text-sm text-slate-400 italic">
               This comment has been deleted.
             </p>
           </div>
         </div>
-        {/* Still render replies for deleted parent */}
-        {comment.replyCount > 0 && (
+        {isRoot && comment.replyCount > 0 && (
           <div className="ml-11">
             <CommentReplies
               comment={comment}
@@ -100,7 +107,7 @@ export function CommentItem({
   }
 
   return (
-    <div className={indent ? 'ml-11' : ''}>
+    <div>
       <div className="flex gap-3 py-3">
         <UserProfilePopover user={comment.user}>
           <Avatar size="default" className="shrink-0">
@@ -115,7 +122,7 @@ export function CommentItem({
 
         <div className="flex-1 min-w-0">
           {/* Header */}
-          <div className="flex items-center gap-2 mb-0.5">
+          <div className="flex items-center gap-2 mb-0.5 flex-wrap">
             <span className="text-sm font-semibold text-foreground truncate">
               {comment.user.displayName || 'Anonymous'}
             </span>
@@ -132,6 +139,19 @@ export function CommentItem({
               </span>
             )}
           </div>
+
+          {/* Replying-to hint for flattened nested replies */}
+          {replyTo && !isEditing && (
+            <div className="flex items-center gap-1 mb-1 text-xs text-slate-500">
+              <CornerDownRight className="w-3 h-3 text-slate-400" />
+              <span>
+                Replying to{' '}
+                <span className="font-semibold text-primary">
+                  @{replyTo.displayName || 'Anonymous'}
+                </span>
+              </span>
+            </div>
+          )}
 
           {/* Body */}
           {isEditing ? (
@@ -176,19 +196,15 @@ export function CommentItem({
 
           {/* Actions */}
           {!isEditing && (
-            <div className="flex items-center gap-4 mt-1.5">
-              {/* Reply */}
-              {comment.depth < 2 && (
-                <button
-                  onClick={() => setShowReplyInput(!showReplyInput)}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-primary font-medium cursor-pointer transition-colors"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" />
-                  Reply
-                </button>
-              )}
+            <div className="flex items-center gap-4 mt-1.5 flex-wrap">
+              <button
+                onClick={() => setShowReplyInput(!showReplyInput)}
+                className="flex items-center gap-1 text-xs text-slate-400 hover:text-primary font-medium cursor-pointer transition-colors"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                Reply
+              </button>
 
-              {/* Like */}
               <button
                 onClick={() => user && onLike(comment.id, comment.likedByMe)}
                 className={`flex items-center gap-1 text-xs font-medium cursor-pointer transition-colors ${
@@ -204,7 +220,6 @@ export function CommentItem({
                 {comment.likeCount > 0 && comment.likeCount}
               </button>
 
-              {/* Edit / Delete for owner */}
               {isOwner ? (
                 <>
                   <button
@@ -225,14 +240,16 @@ export function CommentItem({
                     Delete
                   </button>
                 </>
-              ) : user && (
-                <button
-                  onClick={() => onReport(comment.id)}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 cursor-pointer transition-colors"
-                >
-                  <Flag className="w-3 h-3" />
-                  Report
-                </button>
+              ) : (
+                user && (
+                  <button
+                    onClick={() => onReport(comment.id)}
+                    className="flex items-center gap-1 text-xs text-slate-400 hover:text-orange-500 cursor-pointer transition-colors"
+                  >
+                    <Flag className="w-3 h-3" />
+                    Report
+                  </button>
+                )
               )}
             </div>
           )}
@@ -253,8 +270,8 @@ export function CommentItem({
         </div>
       </div>
 
-      {/* Replies section */}
-      {comment.replyCount > 0 && (
+      {/* Flat descendants block — only the root comment owns this. */}
+      {isRoot && comment.replyCount > 0 && (
         <div className="ml-11">
           <CommentReplies
             comment={comment}

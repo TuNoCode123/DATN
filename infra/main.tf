@@ -301,6 +301,8 @@ module "ecs" {
   cognito_frontend_client_id = module.cognito.frontend_client_id
   cognito_alb_client_id      = module.cognito.alb_client_id
   cognito_domain             = module.cognito.cognito_domain
+  cognito_issuer             = module.cognito.issuer
+  alb_arn                    = module.alb.arn
 
   # S3 bucket name for presigned URLs
   s3_bucket_name = module.s3.uploads_bucket_name
