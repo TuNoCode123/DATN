@@ -7,13 +7,8 @@ import {
 } from '@nestjs/common';
 import { AlbJwtService } from '../alb-jwt.service';
 import { AlbUserService } from '../alb-user.service';
+import { DEV_COOKIE_NAME } from '../dev-accounts';
 
-/**
- * ALB JWT auth guard.
- *
- * Verifies the `x-amzn-oidc-data` header set by ALB after OIDC authentication.
- * In local dev (no ALB_ARN), returns a configurable mock user.
- */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private readonly logger = new Logger(JwtAuthGuard.name);
@@ -26,9 +21,10 @@ export class JwtAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
     const albToken = request.headers['x-amzn-oidc-data'];
+    const devEmail = request.cookies?.[DEV_COOKIE_NAME];
 
     try {
-      const claims = await this.albJwtService.verify(albToken);
+      const claims = await this.albJwtService.verify(albToken, devEmail);
       if (!claims) {
         throw new UnauthorizedException('Authentication required');
       }

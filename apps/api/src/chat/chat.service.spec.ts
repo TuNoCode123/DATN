@@ -1,6 +1,7 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { ChatService } from "./chat.service";
 import { PrismaService } from "../prisma/prisma.service";
+import { ChatUploadService } from "./chat-upload.service";
 import {
   BadRequestException,
   ForbiddenException,
@@ -46,7 +47,7 @@ describe("ChatService", () => {
     prisma = mockPrismaService();
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ChatService, { provide: PrismaService, useValue: prisma }],
+      providers: [ChatService, { provide: PrismaService, useValue: prisma }, { provide: ChatUploadService, useValue: { generatePresignedUrl: jest.fn(), signUrl: jest.fn() } }],
     }).compile();
 
     service = module.get<ChatService>(ChatService);
@@ -853,6 +854,7 @@ describe("ChatService", () => {
       expect(prisma.message.findFirst).toHaveBeenCalledWith({
         where: { conversationId: "c1", clientId: "client1" },
         include: {
+          reactions: true,
           sender: { select: { id: true, displayName: true, avatarUrl: true } },
         },
       });
@@ -905,8 +907,8 @@ describe("ChatService", () => {
         userId: "u1",
       });
       const messages = [
-        { id: "msg2", content: "World" },
-        { id: "msg1", content: "Hello" },
+        { id: "msg2", content: "World", reactions: [] },
+        { id: "msg1", content: "Hello", reactions: [] },
       ];
       prisma.message.findMany.mockResolvedValue(messages);
 
@@ -925,6 +927,7 @@ describe("ChatService", () => {
       const messages = Array.from({ length: 4 }, (_, i) => ({
         id: `msg${i}`,
         content: `Msg ${i}`,
+        reactions: [],
       }));
       prisma.message.findMany.mockResolvedValue(messages);
 
@@ -945,7 +948,7 @@ describe("ChatService", () => {
 
       expect(prisma.message.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { conversationId: "c1", id: { lt: "cursor123" } },
+          where: expect.objectContaining({ conversationId: "c1", id: { lt: "cursor123" } }),
         }),
       );
     });

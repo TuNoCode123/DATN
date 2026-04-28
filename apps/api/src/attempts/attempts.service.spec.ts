@@ -2,6 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AttemptsService } from './attempts.service';
 import { ScoringService } from '../scoring/scoring.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { HskGradingService } from '../hsk-grading/hsk-grading.service';
+import { CreditsService } from '../credits/credits.service';
+import { UploadService } from '../upload/upload.service';
 import { AttemptStatus } from '@prisma/client';
 
 // Mock PrismaService with chainable methods
@@ -40,6 +43,10 @@ describe('AttemptsService', () => {
         AttemptsService,
         { provide: PrismaService, useValue: prisma },
         { provide: ScoringService, useValue: scoringService },
+        { provide: HskGradingService, useValue: { gradeSentenceReorder: jest.fn() } },
+        { provide: CreditsService, useValue: { hasSufficientCredits: jest.fn().mockResolvedValue(true), deduct: jest.fn().mockResolvedValue({}) } },
+        { provide: UploadService, useValue: { generatePresignedUrlForKey: jest.fn() } },
+        { provide: 'ToeicSwGradingService', useValue: { gradeWritingAnswers: jest.fn() } },
       ],
     }).compile();
 
@@ -245,17 +252,17 @@ describe('AttemptsService', () => {
       await expect(service.submitAttempt(attemptId, userId)).rejects.toThrow();
     });
 
-    it('should throw if attempt already submitted', async () => {
-      prisma.userAttempt.findUnique.mockResolvedValue({
+    it('should return existing attempt if already submitted (idempotent)', async () => {
+      const submittedAttempt = {
         id: attemptId,
         userId,
         status: AttemptStatus.SUBMITTED,
         answers: [],
         sections: [],
-      });
-      await expect(service.submitAttempt(attemptId, userId)).rejects.toThrow(
-        'Attempt already submitted',
-      );
+      };
+      prisma.userAttempt.findUnique.mockResolvedValue(submittedAttempt);
+      const result = await service.submitAttempt(attemptId, userId);
+      expect(result).toMatchObject({ id: attemptId, status: AttemptStatus.SUBMITTED });
     });
   });
 });
