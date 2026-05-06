@@ -81,6 +81,14 @@ function LoginContent() {
             Sign up
           </Link>
         </p>
+
+        {process.env.NODE_ENV !== 'production' && (
+          <p className="text-center text-xs text-slate-400 mt-1">
+            <Link href="/dev-login" className="hover:underline">
+              Dev login (local accounts)
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   );

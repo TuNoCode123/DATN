@@ -458,8 +458,10 @@ resource "aws_ecs_task_definition" "api" {
       # Cognito configuration (if using Cognito auth)
       { name = "AWS_REGION", value = var.aws_region },
       { name = "COGNITO_USER_POOL_ID", value = var.cognito_user_pool_id },
-      { name = "COGNITO_FRONTEND_CLIENT_ID", value = var.cognito_frontend_client_id },
+      { name = "COGNITO_FRONTEND_CLIENT_ID", value = var.cognito_alb_client_id },
       { name = "COGNITO_DOMAIN", value = var.cognito_domain },
+      { name = "COGNITO_ISSUER", value = var.cognito_issuer },
+      { name = "ALB_ARN", value = var.alb_arn },
       # S3 bucket name for file uploads (presigned URLs)
       { name = "S3_BUCKET_NAME", value = var.s3_bucket_name },
       # AI service region overrides (Bedrock/Transcribe/Polly reached via NAT GW)

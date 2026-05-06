@@ -69,12 +69,15 @@ export class CreditsService {
     metadata?: object,
   ): Promise<number> {
     return this.prisma.$transaction(async (tx) => {
-      const credit = await tx.userCredit.findUnique({
+      let credit = await tx.userCredit.findUnique({
         where: { userId },
       });
 
       if (!credit) {
-        throw new BadRequestException('User has no credit account');
+        credit = await tx.userCredit.create({
+          data: { userId, balance: 0 },
+        });
+        this.logger.log(`Auto-initialized credit account for user ${userId}`);
       }
 
       const newBalance = credit.balance + amount;

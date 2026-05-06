@@ -2,28 +2,26 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AlbJwtVerifier } from 'aws-jwt-verify';
 import type { AlbJwtPayload } from 'aws-jwt-verify/jwt-model';
+import { DEV_ACCOUNTS } from './dev-accounts';
 
 /**
  * Verifies JWTs issued by ALB (x-amzn-oidc-data header).
  *
- * ALB signs its own ES256 JWT after authenticating via Cognito OIDC.
- * This is NOT a Cognito token — it's an ALB-issued token whose signature
- * is verified using public keys from AWS's key endpoint.
- *
  * In local development (no ALB_ARN set), verification is skipped and
- * a configurable dev user is returned.
+ * a dev account from DEV_ACCOUNTS is returned. The caller may pass a
+ * devEmailOverride (read from a cookie) to pick a specific dev account.
  */
 @Injectable()
 export class AlbJwtService {
   private readonly logger = new Logger(AlbJwtService.name);
   private readonly verifier: ReturnType<typeof AlbJwtVerifier.create> | null;
-  private readonly isDev: boolean;
-  private readonly devEmail: string;
-  private readonly devRole: string;
+  readonly isDev: boolean;
+  private readonly defaultDevEmail: string;
 
   constructor(private readonly config: ConfigService) {
     const albArn = this.config.get<string>('ALB_ARN');
-    this.isDev = !albArn && this.config.get('NODE_ENV') === 'development';
+    // Dev mode = no ALB configured. Production environments always set ALB_ARN.
+    this.isDev = !albArn;
 
     if (albArn) {
       this.verifier = AlbJwtVerifier.create({
@@ -33,31 +31,30 @@ export class AlbJwtService {
       });
     } else {
       this.verifier = null;
-      if (this.isDev) {
-        this.logger.warn(
-          'ALB_ARN not set — ALB JWT verification disabled (dev mode)',
-        );
-      }
+      this.logger.warn(
+        'ALB_ARN not set — ALB JWT verification disabled (dev mode). ' +
+          'Use POST /api/auth/dev/login to pick a dev account.',
+      );
     }
 
-    this.devEmail = this.config.get('DEV_USER_EMAIL', 'dev@localhost');
-    this.devRole = this.config.get('DEV_USER_ROLE', 'ADMIN');
+    this.defaultDevEmail = this.config.get(
+      'DEV_USER_EMAIL',
+      DEV_ACCOUNTS[0]?.email ?? 'admin@example.com',
+    );
   }
 
-  /**
-   * Verify an ALB JWT and return normalized user claims.
-   * Returns null if ALB auth is not configured (production without ALB_ARN).
-   * In dev mode, returns a mock user.
-   */
   async verify(
     token: string | undefined,
+    devEmailOverride?: string,
   ): Promise<{ sub: string; email: string; role: string } | null> {
-    // Dev bypass: no ALB locally
     if (this.isDev && !token) {
+      const email = devEmailOverride || this.defaultDevEmail;
+      const account = DEV_ACCOUNTS.find((a) => a.email === email);
+      if (!account) return null;
       return {
-        sub: 'local-dev-user',
-        email: this.devEmail,
-        role: this.devRole,
+        sub: `local-dev-${account.email}`,
+        email: account.email,
+        role: account.role,
       };
     }
 

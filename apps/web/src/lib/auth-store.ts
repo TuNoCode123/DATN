@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { logoutFromCognito } from './cognito';
+import { api } from './api';
 
 interface User {
   id: string;
@@ -21,8 +22,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   setUser: (user) => set({ user, isAuthenticated: !!user }),
   logout: () => {
     set({ user: null, isAuthenticated: false });
-    // Redirect to Cognito logout — clears ALB session cookie + Cognito session,
-    // then redirects back to /login
+    if (process.env.NODE_ENV !== 'production') {
+      // Try to clear dev cookie; if endpoint is disabled (403), fall through to Cognito.
+      api
+        .post('/auth/dev/logout')
+        .then(() => {
+          window.location.href = '/login';
+        })
+        .catch(() => logoutFromCognito());
+      return;
+    }
     logoutFromCognito();
   },
 }));

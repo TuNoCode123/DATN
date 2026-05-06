@@ -177,7 +177,7 @@ export class PaymentsService {
     const credits = existing.package.baseCredits + existing.package.bonusCredits;
 
     // Persist captured order + grant credits atomically.
-    await this.prisma.$transaction(async (tx) => {
+    const newBalance = await this.prisma.$transaction(async (tx) => {
       await tx.paymentOrder.update({
         where: { id: existing.id },
         data: {
@@ -188,15 +188,38 @@ export class PaymentsService {
           rawCapture: capture as object,
         },
       });
-    });
 
-    const newBalance = await this.credits.grant(
-      userId,
-      credits,
-      CreditReason.PAYPAL_PURCHASE,
-      existing.id,
-      { providerOrderId, packageId: existing.packageId },
-    );
+      // Grant credits in the same transaction
+      let userCredit = await tx.userCredit.findUnique({
+        where: { userId },
+      });
+
+      if (!userCredit) {
+        userCredit = await tx.userCredit.create({
+          data: { userId, balance: 0 },
+        });
+      }
+
+      const balance = userCredit.balance + credits;
+
+      await tx.userCredit.update({
+        where: { userId },
+        data: { balance },
+      });
+
+      await tx.creditTransaction.create({
+        data: {
+          creditId: userCredit.id,
+          amount: credits,
+          balanceAfter: balance,
+          reason: CreditReason.PAYPAL_PURCHASE,
+          referenceId: existing.id,
+          metadata: { providerOrderId, packageId: existing.packageId },
+        },
+      });
+
+      return balance;
+    });
 
     this.logger.log(
       `Granted ${credits} credits to ${userId} for order ${existing.id} (paypal ${providerOrderId})`,

@@ -130,6 +130,17 @@ variable "cognito_domain" {
   default     = ""
 }
 
+variable "cognito_issuer" {
+  description = "Cognito issuer URL for ALB JWT verification (e.g., https://cognito-idp.region.amazonaws.com/pool-id)"
+  type        = string
+  default     = ""
+}
+
+variable "alb_arn" {
+  description = "ALB ARN — required for verifying ALB-signed JWTs in the API"
+  type        = string
+}
+
 # S3
 variable "s3_bucket_name" {
   description = "S3 uploads bucket name (passed as S3_BUCKET_NAME env var to API)"

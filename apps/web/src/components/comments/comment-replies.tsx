@@ -18,6 +18,23 @@ interface CommentRepliesProps {
   isEditPending?: boolean;
 }
 
+// Walk the reply tree depth-first into a single flat list. Each entry keeps a
+// pointer to its real parent so we can show a "Replying to @user" hint when
+// the visual indent (now flat) no longer conveys the relationship.
+function flattenReplies(
+  root: Comment,
+): Array<{ reply: Comment; parent: Comment }> {
+  const out: Array<{ reply: Comment; parent: Comment }> = [];
+  const walk = (p: Comment) => {
+    for (const r of p.replies || []) {
+      out.push({ reply: r, parent: p });
+      walk(r);
+    }
+  };
+  walk(root);
+  return out;
+}
+
 export function CommentReplies({
   comment,
   testId,
@@ -31,7 +48,6 @@ export function CommentReplies({
 }: CommentRepliesProps) {
   const [showAll, setShowAll] = useState(false);
 
-  // Use eager replies from parent if not loading more
   const {
     data: repliesData,
     fetchNextPage,
@@ -39,20 +55,25 @@ export function CommentReplies({
     isFetchingNextPage,
   } = useReplies(comment.id, showAll);
 
-  // Show eager replies initially, switch to full data when expanded
-  const eagerReplies = comment.replies || [];
-  const loadedReplies = showAll && repliesData
-    ? repliesData.pages.flatMap((p) => p.data)
-    : eagerReplies;
+  // When expanded, swap eager direct replies with the full paginated set from
+  // the server, then flatten the whole subtree.
+  const expandedRoot: Comment =
+    showAll && repliesData
+      ? { ...comment, replies: repliesData.pages.flatMap((p) => p.data) }
+      : comment;
 
-  const remainingCount = comment.replyCount - eagerReplies.length;
+  const flat = flattenReplies(expandedRoot);
+  const eagerDirectCount = (comment.replies || []).length;
+  const remainingDirectCount = comment.replyCount - eagerDirectCount;
 
   return (
-    <div>
-      {loadedReplies.map((reply) => (
+    <div className="space-y-0">
+      {flat.map(({ reply, parent }) => (
         <CommentItem
           key={reply.id}
           comment={reply}
+          // No hint when the parent IS the root — the indent already implies that.
+          replyTo={parent.id === comment.id ? undefined : parent.user}
           testId={testId}
           onReply={onReply}
           onEdit={onEdit}
@@ -64,13 +85,14 @@ export function CommentReplies({
         />
       ))}
 
-      {!showAll && remainingCount > 0 && (
+      {!showAll && remainingDirectCount > 0 && (
         <button
           onClick={() => setShowAll(true)}
-          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium mt-1 ml-11 cursor-pointer transition-colors"
+          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium mt-1 cursor-pointer transition-colors"
         >
           <ChevronDown className="w-3.5 h-3.5" />
-          View {remainingCount} more {remainingCount === 1 ? 'reply' : 'replies'}
+          View {remainingDirectCount} more{' '}
+          {remainingDirectCount === 1 ? 'reply' : 'replies'}
         </button>
       )}
 
@@ -78,7 +100,7 @@ export function CommentReplies({
         <button
           onClick={() => fetchNextPage()}
           disabled={isFetchingNextPage}
-          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium mt-1 ml-11 cursor-pointer transition-colors"
+          className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium mt-1 cursor-pointer transition-colors"
         >
           <ChevronDown className="w-3.5 h-3.5" />
           {isFetchingNextPage ? 'Loading...' : 'Load more replies'}

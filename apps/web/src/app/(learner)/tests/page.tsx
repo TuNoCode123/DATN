@@ -3,10 +3,13 @@
 import { Suspense, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "next/navigation";
-import { Search, Clock, Users, MessageSquare, ChevronLeft, ChevronRight, BarChart3, Info, User, X } from "lucide-react";
+import { Search, Clock, Users, MessageSquare, ChevronLeft, ChevronRight, BarChart3, Info, User, X, Target } from "lucide-react";
 import Link from "next/link";
+import dayjs from "dayjs";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/lib/auth-store";
+import { GoalModal, GoalDTO } from "@/components/goals/goal-modal";
+import { ExamType, EXAM_TYPE_LABELS, formatScore } from "@/lib/exam-types";
 
 const EXAM_CATEGORIES = [
   { key: "all", label: "All" },
@@ -45,8 +48,33 @@ function formatNumber(n: number): string {
   return n.toLocaleString("en-US");
 }
 
+interface GoalResponse {
+  goal: GoalDTO | null;
+  progress: {
+    currentScore: number | null;
+    currentScoreField: string;
+    attemptCount: number;
+    daysRemaining: number;
+    percentToTarget: number;
+  } | null;
+}
+
 function UserSidebar() {
   const user = useAuthStore((s) => s.user);
+  const isAuthed = Boolean(user);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const { data } = useQuery<GoalResponse>({
+    queryKey: ["goals", "me"],
+    queryFn: async () => {
+      const { data } = await api.get("/goals/me");
+      return data;
+    },
+    enabled: isAuthed,
+  });
+
+  const goal = data?.goal ?? null;
+  const progress = data?.progress ?? null;
 
   return (
     <div className="w-64 flex-shrink-0 hidden lg:block">
@@ -57,20 +85,65 @@ function UserSidebar() {
         <p className="font-bold text-base text-foreground">
           {user?.displayName || user?.email || "Guest"}
         </p>
-        <div className="flex items-start gap-1.5 text-xs text-slate-500 text-center leading-snug">
-          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-400" />
-          <span>
-            You haven&apos;t set a learning goal yet.{" "}
-            <a href="#" className="text-primary font-semibold hover:underline cursor-pointer">
-              Set one now.
-            </a>
-          </span>
-        </div>
-        <button className="w-full flex items-center justify-center gap-2 brutal-btn bg-white text-foreground py-2.5 text-sm cursor-pointer">
-          <BarChart3 className="w-4 h-4" />
-          View Statistics
-        </button>
+
+        {!goal ? (
+          <div className="flex items-start gap-1.5 text-xs text-slate-500 text-center leading-snug">
+            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-slate-400" />
+            <span>
+              You haven&apos;t set a learning goal yet.{" "}
+              <button
+                type="button"
+                onClick={() => setModalOpen(true)}
+                disabled={!isAuthed}
+                className="text-primary font-semibold hover:underline cursor-pointer disabled:opacity-50"
+              >
+                Set one now.
+              </button>
+            </span>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="w-full text-left rounded-lg border-2 border-border-strong bg-white p-3 hover:bg-slate-50 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+              <Target className="w-3.5 h-3.5" />
+              Goal
+            </div>
+            <div className="text-sm font-bold text-foreground leading-tight mb-1">
+              {EXAM_TYPE_LABELS[goal.examType as ExamType]}{" "}
+              {formatScore(goal.examType as ExamType, goal.targetScore)}
+            </div>
+            <div className="text-[11px] text-slate-500 mb-2">
+              Best so far:{" "}
+              <span className="font-semibold text-foreground">
+                {formatScore(goal.examType as ExamType, progress?.currentScore ?? null)}
+              </span>
+            </div>
+            <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden mb-1.5">
+              <div
+                className="h-full bg-primary rounded-full transition-all"
+                style={{ width: `${Math.round(progress?.percentToTarget ?? 0)}%` }}
+              />
+            </div>
+            <div className="text-[11px] text-slate-500">
+              {progress && progress.daysRemaining >= 0
+                ? `${progress.daysRemaining} day${progress.daysRemaining === 1 ? "" : "s"} left · by ${dayjs(goal.targetDate).format("MMM D")}`
+                : `Past deadline · ${dayjs(goal.targetDate).format("MMM D")}`}
+            </div>
+          </button>
+        )}
+
+        <Link href="/goals" className="w-full">
+          <button className="w-full flex items-center justify-center gap-2 brutal-btn bg-white text-foreground py-2.5 text-sm cursor-pointer">
+            <BarChart3 className="w-4 h-4" />
+            View Statistics
+          </button>
+        </Link>
       </div>
+
+      <GoalModal open={modalOpen} onClose={() => setModalOpen(false)} initial={goal} />
     </div>
   );
 }

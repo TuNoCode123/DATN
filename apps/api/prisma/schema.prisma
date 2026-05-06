@@ -29,6 +29,16 @@ enum ExamType {
   HSK_4
   HSK_5
   HSK_6
+  TOPIK_I
+  TOPIK_II
+  JLPT_N1
+  JLPT_N2
+  JLPT_N3
+  JLPT_N4
+  JLPT_N5
+  DIGITAL_SAT
+  ACT
+  THPTQG
 }
 
 enum SectionSkill {
@@ -227,8 +237,23 @@ model User {
   trustScore             Int              @default(0)
   notificationsCreated   Notification[]         @relation("NotificationAuthor")
   notificationRecipients NotificationRecipient[]
+  learningGoal           LearningGoal?
 
   @@map("users")
+}
+
+model LearningGoal {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  examType    ExamType
+  targetScore Float
+  targetDate  DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("learning_goals")
 }
 
 model Test {
