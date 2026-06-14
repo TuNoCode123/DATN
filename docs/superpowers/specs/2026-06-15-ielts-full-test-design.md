@@ -126,9 +126,9 @@ Since each `bandScore` is a multiple of 0.5, the average's fractional part is al
 
 ## Frontend
 
-The existing `/tests` library page is **unchanged** — students can continue browsing and taking individual Listening/Reading/Writing/Speaking tests exactly as today. The full-test views below are purely additive, alongside the existing per-skill flow.
+The existing `/tests` library page gains a tab switcher at the top: **"Tests"** (default, existing per-skill grid — Listening/Reading/Writing/Speaking, unchanged) and **"Full Tests"** (new grid of `FullTest` bundles). Students can freely switch between taking individual skill tests and full-test bundles; the per-skill flow is otherwise untouched.
 
-- **`/full-tests`** (new route under `(learner)`): grid of `brutal-card` items — title, examType badge, 4 skill badges, summed duration, and a "Start" / "Continue" / "View Result" button depending on `FullTestAttempt` status.
+- **`/tests` (Full Tests tab)**: grid of `brutal-card` items — title, examType badge, 4 skill badges, summed duration, and a "Start" / "Continue" / "View Result" button depending on `FullTestAttempt` status.
 - **`/full-tests/[id]`**: overview page with 4 skill cards (Listening/Reading/Writing/Speaking), each showing not-started / in-progress / done (+ band score if done). Buttons route into the existing `/tests/[testId]/attempt` flow for that skill's linked Test, carrying the `fullTestAttemptId` so submission can link back.
 - **`/full-tests/[id]/results/[attemptId]`**: combined results page — large overall band score, per-skill band breakdown cards, links to each skill's detailed `UserAttempt` result page (existing result pages, unchanged).
 - **`/admin-full-tests`** (new route under `(admin)`): CRUD list + form. Form fields: title, examType select, description, 4 test-picker dropdowns (each filtered to published Tests of the matching examType containing a section of the required skill), publish toggle.
