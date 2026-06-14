@@ -126,6 +126,8 @@ Since each `bandScore` is a multiple of 0.5, the average's fractional part is al
 
 ## Frontend
 
+The existing `/tests` library page is **unchanged** — students can continue browsing and taking individual Listening/Reading/Writing/Speaking tests exactly as today. The full-test views below are purely additive, alongside the existing per-skill flow.
+
 - **`/full-tests`** (new route under `(learner)`): grid of `brutal-card` items — title, examType badge, 4 skill badges, summed duration, and a "Start" / "Continue" / "View Result" button depending on `FullTestAttempt` status.
 - **`/full-tests/[id]`**: overview page with 4 skill cards (Listening/Reading/Writing/Speaking), each showing not-started / in-progress / done (+ band score if done). Buttons route into the existing `/tests/[testId]/attempt` flow for that skill's linked Test, carrying the `fullTestAttemptId` so submission can link back.
 - **`/full-tests/[id]/results/[attemptId]`**: combined results page — large overall band score, per-skill band breakdown cards, links to each skill's detailed `UserAttempt` result page (existing result pages, unchanged).
