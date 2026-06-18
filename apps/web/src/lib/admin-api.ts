@@ -88,6 +88,41 @@ export const adminTestsApi = {
     api.put(`/admin/tests/${id}/sync`, data).then((r) => r.data),
 };
 
+// ── Bundles ────────────────────────────────────────────
+
+export interface AdminBundleTest {
+  id: string;
+  title: string;
+  bundleOrder: number | null;
+}
+
+export interface AdminBundle {
+  id: string;
+  title: string;
+  description: string | null;
+  examType: ExamType;
+  isPublished: boolean;
+  orderIndex: number;
+  createdAt: string;
+  updatedAt: string;
+  tests: AdminBundleTest[];
+}
+
+export const adminBundlesApi = {
+  getAll: (params?: { examType?: ExamType; search?: string }) =>
+    api.get('/admin/bundles', { params }).then((r) => r.data as AdminBundle[]),
+  getById: (id: string) =>
+    api.get(`/admin/bundles/${id}`).then((r) => r.data as AdminBundle),
+  create: (data: { title: string; description?: string; examType: ExamType; testIds?: string[]; orderIndex?: number }) =>
+    api.post('/admin/bundles', data).then((r) => r.data as AdminBundle),
+  update: (id: string, data: { title?: string; description?: string; examType?: ExamType; testIds?: string[]; isPublished?: boolean; orderIndex?: number }) =>
+    api.patch(`/admin/bundles/${id}`, data).then((r) => r.data as AdminBundle),
+  togglePublish: (id: string) =>
+    api.patch(`/admin/bundles/${id}/publish`).then((r) => r.data),
+  delete: (id: string) =>
+    api.delete(`/admin/bundles/${id}`).then((r) => r.data),
+};
+
 // ── Sections ──────────────────────────────────────────
 
 export const adminSectionsApi = {

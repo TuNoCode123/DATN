@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Checkbox, Select, App } from 'antd';
 import Link from 'next/link';
@@ -102,7 +102,9 @@ export default function TestDetailPage() {
   const { message } = App.useApp();
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const testId = params.id as string;
+  const bundleId = searchParams.get('bundle');
 
   const [mode, setMode] = useState<'practice' | 'full'>('practice');
   const [selectedSections, setSelectedSections] = useState<string[]>([]);
@@ -166,7 +168,8 @@ export default function TestDetailPage() {
         sectionIds,
         timeLimitMins: timeLimit > 0 ? timeLimit : undefined,
       });
-      router.push(`/tests/${testId}/attempt?attemptId=${attempt.id}`);
+      const attemptUrl = `/tests/${testId}/attempt?attemptId=${attempt.id}${bundleId ? `&bundle=${bundleId}` : ''}`;
+      router.push(attemptUrl);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } }).response?.data?.message || 'Could not start the test';
       message.error(msg);

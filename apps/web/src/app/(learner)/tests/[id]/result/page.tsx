@@ -16,6 +16,8 @@ import {
   Minus,
   ChevronDown,
   ChevronUp,
+  ArrowRight,
+  BookOpen,
 } from "lucide-react";
 import { AudioPlayer } from "@/components/ui/audio-player";
 import { TranscriptSection } from "@/components/ui/transcript-section";
@@ -599,8 +601,18 @@ function ResultContent() {
   const searchParams = useSearchParams();
   const testId = params.id as string;
   const attemptId = searchParams.get("attemptId");
+  const bundleId = searchParams.get("bundle");
 
   const queryClient = useQueryClient();
+
+  const { data: bundleProgress } = useQuery({
+    queryKey: ["bundle-progress", bundleId],
+    queryFn: async () => {
+      const { data } = await api.get(`/bundles/${bundleId}/progress`);
+      return data as { bundle: { id: string; title: string; examType: string }; tests: { id: string; title: string; bundleOrder: number | null; latestAttempt: { id: string } | null }[] };
+    },
+    enabled: !!bundleId,
+  });
   const [selectedQuestion, setSelectedQuestion] = useState<{
     question: QuestionFromAPI;
     group: QuestionGroupFromAPI;
@@ -774,14 +786,63 @@ function ResultContent() {
         Results: {attempt.test.title}
       </h1>
 
-      {/* Back button */}
-      <button
-        onClick={() => router.push(`/tests/${testId}`)}
-        className="brutal-btn bg-white text-foreground px-5 py-2 text-sm flex items-center gap-2 mb-6 cursor-pointer"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        Back to Test
-      </button>
+      {/* Navigation row */}
+      <div className="flex items-center gap-3 mb-6 flex-wrap">
+        {bundleId ? (
+          <button
+            onClick={() => router.push(`/tests/bundles/${bundleId}`)}
+            className="brutal-btn bg-white text-foreground px-5 py-2 text-sm flex items-center gap-2 cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Bundle
+          </button>
+        ) : (
+          <button
+            onClick={() => router.push(`/tests/${testId}`)}
+            className="brutal-btn bg-white text-foreground px-5 py-2 text-sm flex items-center gap-2 cursor-pointer"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            Back to Test
+          </button>
+        )}
+
+        {/* Next test in bundle */}
+        {bundleProgress && (() => {
+          const tests = bundleProgress.tests;
+          const currentIdx = tests.findIndex((t) => t.id === testId);
+          const nextTest = currentIdx >= 0 && currentIdx < tests.length - 1 ? tests[currentIdx + 1] : null;
+          const allDone = tests.every((t) => t.latestAttempt !== null);
+
+          if (allDone) {
+            return (
+              <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 border-2 border-emerald-400 rounded-lg">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                <span className="text-sm font-semibold text-emerald-700">Bundle complete!</span>
+                <button
+                  onClick={() => router.push(`/tests/bundles/${bundleId}`)}
+                  className="ml-2 text-sm text-emerald-700 underline font-medium cursor-pointer"
+                >
+                  View results
+                </button>
+              </div>
+            );
+          }
+
+          if (nextTest) {
+            return (
+              <button
+                onClick={() => router.push(`/tests/${nextTest.id}?bundle=${bundleId}`)}
+                className="brutal-btn bg-primary text-white px-5 py-2 text-sm flex items-center gap-2 cursor-pointer"
+              >
+                <BookOpen className="w-4 h-4" />
+                Next: {nextTest.title.replace('IELTS Academic ', '').replace('Practice Test ', 'Test ')}
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            );
+          }
+          return null;
+        })()}
+      </div>
 
       {/* TOEIC_SW Score Banner */}
       {isToeicSW && attempt.sectionScores && (() => {

@@ -28,12 +28,14 @@ import {
   ShieldAlert,
   Radio,
   Bell,
+  FolderOpen,
 } from "lucide-react";
 
 const navItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/admin-dashboard" },
   { icon: Users, label: "Users", href: "/admin-users" },
   { icon: ClipboardList, label: "Tests", href: "/admin-tests" },
+  { icon: FolderOpen, label: "Bundles", href: "/admin-bundles" },
   { icon: HelpCircle, label: "Question Bank", href: "/admin-questions" },
   { icon: Radio, label: "Live Exam", href: "/admin-live-exams" },
   { icon: Mic, label: "Pronunciation", href: "/admin-pronunciation-topics" },

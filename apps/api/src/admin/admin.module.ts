@@ -33,6 +33,8 @@ import { AdminCreditsService } from './admin-credits.service';
 
 import { AdminTranslationTopicsController } from './admin-translation-topics.controller';
 import { AdminTranslationTopicsService } from './admin-translation-topics.service';
+import { AdminBundlesController } from './admin-bundles.controller';
+import { AdminBundlesService } from './admin-bundles.service';
 
 @Module({
   imports: [PrismaModule],
@@ -48,6 +50,7 @@ import { AdminTranslationTopicsService } from './admin-translation-topics.servic
     AdminPronunciationTopicsController,
     AdminCreditsController,
     AdminTranslationTopicsController,
+    AdminBundlesController,
   ],
   providers: [
     AdminUsersService,
@@ -61,6 +64,7 @@ import { AdminTranslationTopicsService } from './admin-translation-topics.servic
     AdminPronunciationTopicsService,
     AdminCreditsService,
     AdminTranslationTopicsService,
+    AdminBundlesService,
   ],
 })
 export class AdminModule {}

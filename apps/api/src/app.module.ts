@@ -26,6 +26,7 @@ import { LiveExamModule } from './live-exam/live-exam.module';
 import { PaymentsModule } from './payments/payments.module';
 import { BlogModule } from './blog/blog.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { BundlesModule } from './bundles/bundles.module';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     PaymentsModule,
     BlogModule,
     NotificationsModule,
+    BundlesModule,
   ],
 })
 export class AppModule {}

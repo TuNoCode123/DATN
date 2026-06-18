@@ -416,6 +416,11 @@ export class SpeakingGateway
   private async authenticateSocket(
     socket: Socket,
   ): Promise<{ id: string; email: string; role: string }> {
+    const bypassUser = await this.cognitoAuth.getBypassUser();
+    if (bypassUser) {
+      return { id: bypassUser.id, email: bypassUser.email, role: bypassUser.role };
+    }
+
     const cookieHeader = socket.handshake.headers.cookie;
     if (!cookieHeader) throw new Error('No cookies');
 

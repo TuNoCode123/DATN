@@ -231,6 +231,22 @@ model User {
   @@map("users")
 }
 
+model TestBundle {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  examType    ExamType
+  isPublished Boolean  @default(false)
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tests Test[]
+
+  @@index([examType, isPublished])
+  @@map("test_bundles")
+}
+
 model Test {
   id            String   @id @default(cuid())
   title         String
@@ -242,15 +258,19 @@ model Test {
   commentCount  Int      @default(0)
   sectionCount  Int      @default(0)
   questionCount Int      @default(0)
+  bundleId      String?
+  bundleOrder   Int?     @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  bundle   TestBundle?   @relation(fields: [bundleId], references: [id], onDelete: SetNull)
   sections TestSection[]
   tags     TestTag[]
   attempts UserAttempt[]
   comments Comment[]
 
   @@index([examType, isPublished])
+  @@index([bundleId])
   @@map("tests")
 }
 

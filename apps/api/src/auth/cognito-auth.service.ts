@@ -144,6 +144,16 @@ export class CognitoAuthService {
   }
 
   /**
+   * Local-only escape hatch for when Cognito is unreachable (AUTH_BYPASS=true).
+   * Returns the seeded AUTH_BYPASS_EMAIL user, or null if bypass is disabled.
+   */
+  async getBypassUser() {
+    if (process.env.AUTH_BYPASS !== 'true') return null;
+    const email = process.env.AUTH_BYPASS_EMAIL || 'admin@example.com';
+    return this.usersService.findByEmail(email);
+  }
+
+  /**
    * Verify a Cognito JWT using the JWKS endpoint (RS256).
    * Used by both REST controller and WebSocket gateway.
    */

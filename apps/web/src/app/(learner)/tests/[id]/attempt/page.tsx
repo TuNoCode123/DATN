@@ -30,6 +30,7 @@ function AttemptContent() {
   const searchParams = useSearchParams();
   const testId = params.id as string;
   const attemptId = searchParams.get("attemptId");
+  const bundleId = searchParams.get("bundle");
 
   const [activeSectionIndex, setActiveSectionIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -46,7 +47,7 @@ function AttemptContent() {
     answersRef.current = answers;
   }, [answers]);
 
-  const resultUrl = `/tests/${testId}/result?attemptId=${attemptId}`;
+  const resultUrl = `/tests/${testId}/result?attemptId=${attemptId}${bundleId ? `&bundle=${bundleId}` : ''}`;
 
   const { data: attempt, isLoading } = useQuery({
     queryKey: ["attempt", attemptId],

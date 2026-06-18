@@ -100,6 +100,16 @@ export class NotificationsGateway
   // ─── auth helpers (mirror live-exam.gateway) ──────
 
   private async authenticateSocket(socket: Socket): Promise<AuthUser> {
+    const bypassUser = await this.cognitoAuth.getBypassUser();
+    if (bypassUser) {
+      return {
+        id: bypassUser.id,
+        email: bypassUser.email,
+        role: bypassUser.role,
+        displayName: bypassUser.displayName,
+      };
+    }
+
     const cookieHeader = socket.handshake.headers.cookie;
     const cookies = this.parseCookies(cookieHeader);
     const token = cookies['access_token'];

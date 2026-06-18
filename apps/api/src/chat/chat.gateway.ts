@@ -549,6 +549,11 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private async authenticateSocket(
     socket: Socket,
   ): Promise<{ id: string; email: string; role: string }> {
+    const bypassUser = await this.cognitoAuthService.getBypassUser();
+    if (bypassUser) {
+      return { id: bypassUser.id, email: bypassUser.email, role: bypassUser.role };
+    }
+
     // 1. Try cookie-based auth (Cognito) — browser sends cookies on WS upgrade
     const cookieHeader = socket.handshake.headers.cookie;
     const cookies = this.parseCookies(cookieHeader);
