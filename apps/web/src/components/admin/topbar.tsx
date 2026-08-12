@@ -34,7 +34,7 @@ export function Topbar() {
   const page = pageTitles[pathname] ?? { title: "Admin", description: "" };
 
   const handleLogout = () => {
-    logout(); // Redirects to Cognito logout → /login
+    logout(); // Signs out of Firebase, then redirects to /login
   };
 
   return (

@@ -15,14 +15,14 @@ export class UsersService {
     return this.prisma.user.findUnique({ where: { id } });
   }
 
-  async findByCognitoSub(cognitoSub: string) {
-    return this.prisma.user.findUnique({ where: { cognitoSub } });
+  async findByFirebaseUid(firebaseUid: string) {
+    return this.prisma.user.findUnique({ where: { firebaseUid } });
   }
 
-  async linkCognitoSub(userId: string, cognitoSub: string) {
+  async linkFirebaseUid(userId: string, firebaseUid: string) {
     return this.prisma.user.update({
       where: { id: userId },
-      data: { cognitoSub },
+      data: { firebaseUid },
     });
   }
 
@@ -42,35 +42,35 @@ export class UsersService {
   }
 
   /**
-   * Atomically find-or-create a user by cognitoSub + email.
+   * Atomically find-or-create a user by firebaseUid + email.
    * Prevents duplicate DB users from concurrent logins.
    */
-  async findOrCreateByCognitoSub(
-    cognitoSub: string,
+  async findOrCreateByFirebaseUid(
+    firebaseUid: string,
     email: string,
     role: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
-      // Re-check by sub inside the transaction
-      let user = await tx.user.findUnique({ where: { cognitoSub } });
+      // Re-check by uid inside the transaction
+      let user = await tx.user.findUnique({ where: { firebaseUid } });
       if (user) return user;
 
-      // Check by email — link sub to existing user
+      // Check by email — link uid to existing user
       user = await tx.user.findUnique({ where: { email } });
       if (user) {
-        if (user.cognitoSub && user.cognitoSub !== cognitoSub) {
-          // Already linked to a different Cognito identity — safety-net log
+        if (user.firebaseUid && user.firebaseUid !== firebaseUid) {
+          // Already linked to a different Identity Platform identity — safety-net log
           this.logger.warn(
-            `User ${email} already linked to ${user.cognitoSub}, ignoring new sub ${cognitoSub}`,
+            `User ${email} already linked to ${user.firebaseUid}, ignoring new uid ${firebaseUid}`,
           );
           return user;
         }
         this.logger.log(
-          `Backend safety-net: linking Cognito sub ${cognitoSub} to ${user.id} (${email})`,
+          `Backend safety-net: linking Firebase UID ${firebaseUid} to ${user.id} (${email})`,
         );
         return tx.user.update({
           where: { id: user.id },
-          data: { cognitoSub },
+          data: { firebaseUid },
         });
       }
 
@@ -78,7 +78,7 @@ export class UsersService {
       return tx.user.create({
         data: {
           email,
-          cognitoSub,
+          firebaseUid,
           displayName: email.split('@')[0],
           role: role === 'ADMIN' ? 'ADMIN' : 'STUDENT',
         },
@@ -89,7 +89,7 @@ export class UsersService {
   async create(data: {
     email: string;
     passwordHash?: string;
-    cognitoSub?: string;
+    firebaseUid?: string;
     displayName?: string;
     role?: string;
   }) {
@@ -97,7 +97,7 @@ export class UsersService {
       data: {
         email: data.email,
         passwordHash: data.passwordHash,
-        cognitoSub: data.cognitoSub,
+        firebaseUid: data.firebaseUid,
         displayName: data.displayName,
         role: data.role === 'ADMIN' ? 'ADMIN' : 'STUDENT',
       },

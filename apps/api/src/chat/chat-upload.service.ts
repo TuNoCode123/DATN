@@ -1,7 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Storage, Bucket } from '@google-cloud/storage';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
@@ -42,30 +41,15 @@ const EXT_MAP: Record<string, string> = {
 
 @Injectable()
 export class ChatUploadService {
-  private s3: S3Client;
-  private bucket: string;
-  private region: string;
+  private storage: Storage;
+  private bucket: Bucket;
+  private bucketName: string;
 
   constructor(private config: ConfigService) {
-    this.region = this.config.get<string>('AWS_REGION', 'ap-southeast-2');
-    this.bucket = this.config.get<string>('S3_BUCKET_NAME', '');
+    this.bucketName = this.config.getOrThrow<string>('GCS_UPLOADS_BUCKET_NAME');
 
-    const accessKeyId = this.config.get<string>('AWS_ACCESS_KEY_ID', '');
-    const secretAccessKey = this.config.get<string>('AWS_SECRET_ACCESS_KEY', '');
-
-    this.s3 = new S3Client({
-      region: this.region,
-      // Only set explicit credentials if provided (local dev).
-      // In ECS, omit so the SDK uses the IAM task role automatically.
-      ...(accessKeyId && secretAccessKey
-        ? { credentials: { accessKeyId, secretAccessKey } }
-        : {}),
-      requestChecksumCalculation: 'WHEN_REQUIRED',
-    });
-  }
-
-  getBucketDomain(): string {
-    return `${this.bucket}.s3.${this.region}.amazonaws.com`;
+    this.storage = new Storage();
+    this.bucket = this.storage.bucket(this.bucketName);
   }
 
   async generatePresignedUrl(fileName: string, contentType: string) {
@@ -78,30 +62,29 @@ export class ChatUploadService {
 
     const folder = contentType.startsWith('image/') ? 'images' : 'files';
     const ext = extname(fileName) || EXT_MAP[contentType] || '';
-    const key = `uploads/chat/${folder}/${Date.now()}-${randomUUID()}${ext}`;
+    const key = `chat/${folder}/${Date.now()}-${randomUUID()}${ext}`;
 
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      ContentType: contentType,
+    const [uploadUrl] = await this.bucket.file(key).getSignedUrl({
+      version: 'v4',
+      action: 'write',
+      expires: Date.now() + 300 * 1000,
+      contentType,
     });
 
-    const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn: 300 });
-    const fileUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+    const fileUrl = `https://storage.googleapis.com/${this.bucketName}/${key}`;
 
     return { uploadUrl, fileUrl, key, maxSizeMB };
   }
 
   /**
-   * Convert a raw S3 URL to a presigned GET URL so the browser can access it.
-   * Returns the original URL if it doesn't belong to this bucket.
+   * Historically converted a raw S3 URL into a presigned GET URL. The GCS
+   * uploads bucket is public-read (infra-gcp/modules/storage — same as the
+   * AWS bucket's public policy actually already covered "uploads/chat/*"
+   * too), so stored URLs are already directly fetchable; this is now a
+   * passthrough kept for interface stability (chat.service.ts calls it on
+   * every message read).
    */
-  async signUrl(rawUrl: string, expiresIn = 3600): Promise<string> {
-    const prefix = `https://${this.bucket}.s3.${this.region}.amazonaws.com/`;
-    if (!rawUrl.startsWith(prefix)) return rawUrl;
-
-    const key = rawUrl.slice(prefix.length);
-    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
-    return getSignedUrl(this.s3, command, { expiresIn });
+  async signUrl(rawUrl: string): Promise<string> {
+    return rawUrl;
   }
 }

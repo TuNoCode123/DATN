@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma, QuestionType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { BedrockService } from '../bedrock/bedrock.service';
+import { VertexAiService } from '../vertex-ai/vertex-ai.service';
 import {
   ScoringService,
   SectionResult,
@@ -37,7 +37,7 @@ export class ToeicSwGradingService {
 
   constructor(
     private prisma: PrismaService,
-    private bedrock: BedrockService,
+    private vertexAi: VertexAiService,
     private scoringService: ScoringService,
   ) {}
 
@@ -131,7 +131,7 @@ export class ToeicSwGradingService {
       messageContent = promptResult.text;
     }
 
-    const response = await this.bedrock.messages.create({
+    const response = await this.vertexAi.messages.create({
       max_tokens: 1024,
       system: TOEIC_SW_WRITING_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: messageContent as any }],
@@ -193,7 +193,7 @@ export class ToeicSwGradingService {
       grammarErrors: parsed.grammarErrors
         ? (parsed.grammarErrors as unknown as Prisma.InputJsonValue)
         : undefined,
-      modelUsed: 'bedrock:claude-3.5-haiku',
+      modelUsed: 'vertex:claude-haiku-4-5',
     };
 
     const evaluation = await this.prisma.writingEvaluation.upsert({

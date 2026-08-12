@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { CreditReason } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { BedrockService } from '../bedrock/bedrock.service';
+import { VertexAiService } from '../vertex-ai/vertex-ai.service';
 import { CreditsService } from '../credits/credits.service';
 import { AI_CHAT_SYSTEM_PROMPT } from './ai-chat.prompts';
 
@@ -18,7 +18,7 @@ export class AiChatService {
 
   constructor(
     private prisma: PrismaService,
-    private bedrock: BedrockService,
+    private vertexAi: VertexAiService,
     private credits: CreditsService,
   ) {}
 
@@ -126,7 +126,7 @@ export class AiChatService {
       select: { role: true, content: true },
     });
 
-    // Build messages for Bedrock
+    // Build messages for the model
     const messages = contextMessages.map((m) => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
@@ -135,7 +135,7 @@ export class AiChatService {
     // Stream response
     let fullResponse = '';
     try {
-      for await (const chunk of this.bedrock.streamConverse({
+      for await (const chunk of this.vertexAi.streamConverse({
         system: AI_CHAT_SYSTEM_PROMPT,
         messages,
         max_tokens: 2048,

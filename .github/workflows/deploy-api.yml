@@ -1,138 +1,93 @@
 # =============================================================================
-# DEPLOY API — Build Docker image → Push to ECR → Deploy to ECS
+# DEPLOY API — Build Docker image → Push to Artifact Registry → Deploy to Cloud Run
 # =============================================================================
 # Triggered on push to main when API code changes.
-# Uses OIDC for AWS auth (no stored credentials).
-# Performs rolling deployment (zero downtime).
+# Uses Workload Identity Federation for GCP auth (no stored credentials).
+# Runs migrations before deploying new code (safe: prisma migrate deploy only
+# applies pending migration files, and works fine against the old code too).
 # =============================================================================
 
 name: Deploy API
 
-# Trigger: run when these files change on the main branch
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'apps/api/**'                        # API source code changed
-      - 'packages/**'                         # Shared packages changed
-      - '.github/workflows/deploy-api.yml'    # This workflow changed
+      - 'apps/api/**'
+      - 'packages/**'
+      - '.github/workflows/deploy-api.yml'
 
-# Environment variables used across all steps
 env:
-  AWS_REGION: ap-southeast-2        # Sydney (must match Terraform config)
-  ECR_REPOSITORY: ielts-ai-api      # ECR repository name (from Terraform ECR module)
-  ECS_CLUSTER: ielts-ai-cluster     # ECS cluster name (from Terraform ECS module)
-  ECS_SERVICE: ielts-ai-api         # ECS service name (from Terraform ECS module)
+  GCP_REGION: asia-southeast1
+  GCP_PROJECT_ID: ielts-ai-491816
+  ARTIFACT_REPO: ielts-ai-api      # from infra-gcp/modules/artifact-registry
+  CLOUD_RUN_SERVICE: ielts-ai-api  # from infra-gcp/modules/cloud-run
+  CLOUD_RUN_JOB: ielts-ai-migrate  # from infra-gcp/modules/cloud-run
 
-# OIDC permissions: allows GitHub to request temporary AWS credentials
+# WIF permissions: allows GitHub to request temporary GCP credentials
 permissions:
-  id-token: write    # Needed for OIDC token exchange with AWS
-  contents: read     # Needed to checkout repository code
+  id-token: write    # Needed for OIDC token exchange with Google
+  contents: read      # Needed to checkout repository code
 
 jobs:
   build-and-deploy:
-    name: Build → Push ECR → Deploy ECS
+    name: Build → Push Artifact Registry → Migrate → Deploy Cloud Run
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Clone the repository
       - uses: actions/checkout@v4
 
-      # Step 2: Authenticate to AWS using OIDC (no stored access keys!)
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      # Step 1: Authenticate to GCP using Workload Identity Federation (no
+      # stored service account keys!)
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}  # IAM role from Terraform IAM module
-          aws-region: ${{ env.AWS_REGION }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
-      # Step 3: Docker login to ECR (private Docker registry)
-      - name: Login to Amazon ECR
-        id: ecr-login
-        uses: aws-actions/amazon-ecr-login@v2
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
 
-      # Step 4: Set up Docker Buildx (enables build caching)
+      # Step 2: Docker login to Artifact Registry
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Step 5: Build and push Docker image with commit SHA tag
+      # Step 3: Build and push Docker image with commit SHA tag
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: .                    # Build context is repo root (for monorepo)
-          file: apps/api/Dockerfile     # Dockerfile path
-          push: true                    # Push to ECR after building
+          context: .
+          file: apps/api/Dockerfile
+          push: true
           tags: |
-            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-          cache-from: type=gha          # Use GitHub Actions cache for faster builds
-          cache-to: type=gha,mode=max   # Save all layers to cache
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}:${{ github.sha }}
+            ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      # Step 6: Get current task definition from ECS
-      - name: Download current task definition
-        run: |
-          aws ecs describe-task-definition \
-            --task-definition ielts-ai-api \
-            --query taskDefinition \
-            > task-definition.json
-
-      # Step 7: Update task definition JSON with new image tag
-      - name: Update task definition with new image
-        id: task-def
-        uses: aws-actions/amazon-ecs-render-task-definition@v1
-        with:
-          task-definition: task-definition.json
-          container-name: api           # Must match container name in task definition
-          image: ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
-
-      # Step 8: Run Prisma database migrations BEFORE deploying new code
-      # Prisma migrate deploy is safe to run against the old code — it only
-      # applies pending migration files and never generates new ones.
+      # Step 4: Run Prisma database migrations BEFORE deploying new code.
+      # `gcloud run jobs execute --wait` blocks until the job finishes and
+      # exits non-zero if the job failed, same guarantee the AWS side's
+      # `aws ecs wait tasks-stopped` + exit-code check provided.
       - name: Run database migrations
         run: |
-          # Update the migrate task definition to use the new image
-          aws ecs describe-task-definition \
-            --task-definition ielts-ai-api-migrate \
-            --query taskDefinition \
-            > migrate-task-def.json
+          gcloud run jobs update ${{ env.CLOUD_RUN_JOB }} \
+            --region=${{ env.GCP_REGION }} \
+            --image=${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}:${{ github.sha }}
 
-          # Register updated migrate task with new image
-          NEW_IMAGE="${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
-          UPDATED_DEF=$(jq --arg IMG "$NEW_IMAGE" \
-            '.containerDefinitions[0].image = $IMG | {family, taskRoleArn, executionRoleArn, networkMode, containerDefinitions, volumes, placementConstraints, requiresCompatibilities} | with_entries(select(.value != null))' \
-            migrate-task-def.json)
-          echo "$UPDATED_DEF" > migrate-task-def-updated.json
-          MIGRATE_TD_ARN=$(aws ecs register-task-definition \
-            --cli-input-json file://migrate-task-def-updated.json \
-            --query 'taskDefinition.taskDefinitionArn' \
-            --output text)
+          gcloud run jobs execute ${{ env.CLOUD_RUN_JOB }} \
+            --region=${{ env.GCP_REGION }} \
+            --wait
 
-          # Run migration with the new image
-          TASK_ARN=$(aws ecs run-task \
-            --cluster $ECS_CLUSTER \
-            --task-definition "$MIGRATE_TD_ARN" \
-            --launch-type EC2 \
-            --query 'tasks[0].taskArn' \
-            --output text)
-          echo "Migration task: $TASK_ARN"
-          aws ecs wait tasks-stopped --cluster $ECS_CLUSTER --tasks $TASK_ARN
-
-          # Check exit code
-          EXIT_CODE=$(aws ecs describe-tasks \
-            --cluster $ECS_CLUSTER \
-            --tasks $TASK_ARN \
-            --query 'tasks[0].containers[0].exitCode' \
-            --output text)
-          if [ "$EXIT_CODE" != "0" ]; then
-            echo "::error::Migration failed with exit code $EXIT_CODE"
-            exit 1
-          fi
-          echo "Migration completed successfully"
-
-      # Step 9: Deploy new task definition to ECS (rolling update)
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+      # Step 5: Deploy new image to Cloud Run (revision-based, automatic
+      # rolling traffic shift once the new revision passes its health check)
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
         with:
-          task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: ${{ env.ECS_SERVICE }}
-          cluster: ${{ env.ECS_CLUSTER }}
-          wait-for-service-stability: true  # Wait until new tasks pass health checks
+          service: ${{ env.CLOUD_RUN_SERVICE }}
+          region: ${{ env.GCP_REGION }}
+          image: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}:${{ github.sha }}

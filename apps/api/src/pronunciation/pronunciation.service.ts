@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { BedrockService } from '../bedrock/bedrock.service';
+import { VertexAiService } from '../vertex-ai/vertex-ai.service';
 
 import type { TranscribeItem } from './pronunciation.gateway';
 
@@ -33,7 +33,7 @@ export class PronunciationService {
 
   constructor(
     private prisma: PrismaService,
-    private bedrock: BedrockService,
+    private vertexAi: VertexAiService,
   ) {}
 
   // ─── Deterministic word alignment & scoring ────────────────
@@ -326,7 +326,7 @@ Instructions:
 Return ONLY the feedback text, no JSON, no markdown.`;
 
     try {
-      const response = await this.bedrock.messages.create({
+      const response = await this.vertexAi.messages.create({
         max_tokens: 512,
         temperature: 0.3,
         system:
@@ -407,7 +407,7 @@ Return ONLY the feedback text, no JSON, no markdown.`;
         contentScore: assessment.fluency.score,
         overallScore: assessment.overall.score,
         feedback: assessment.feedback,
-        modelUsed: 'bedrock:claude-3-haiku',
+        modelUsed: 'vertex:claude-haiku-4-5',
       },
       update: {
         grammarScore: assessment.pronunciation.score,
@@ -448,7 +448,7 @@ Rules:
 Return ONLY a JSON array of 10 strings, no other text:
 ["sentence one", "sentence two", ...]`;
 
-    const response = await this.bedrock.messages.create({
+    const response = await this.vertexAi.messages.create({
       max_tokens: 2048,
       temperature: 0.8,
       system:

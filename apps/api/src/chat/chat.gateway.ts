@@ -10,8 +10,9 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
-import { AlbJwtService } from '../auth/alb-jwt.service';
-import { AlbUserService } from '../auth/alb-user.service';
+import { FirebaseAuthService } from '../auth/firebase-auth.service';
+import { FirebaseUserService } from '../auth/firebase-user.service';
+import { extractSocketToken } from '../auth/extract-socket-token';
 import { RedisService } from '../redis/redis.service';
 import { MessageType } from '@prisma/client';
 
@@ -48,8 +49,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private chatService: ChatService,
-    private albJwtService: AlbJwtService,
-    private albUserService: AlbUserService,
+    private firebaseAuthService: FirebaseAuthService,
+    private firebaseUserService: FirebaseUserService,
     private redis: RedisService,
   ) {}
 
@@ -544,18 +545,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // ─── Socket Authentication ──────────────────────────────
 
-  /**
-   * Authenticate a socket connection via ALB JWT header.
-   * ALB sets x-amzn-oidc-data on the WebSocket upgrade request.
-   */
+  /** Authenticate a socket connection via an Identity Platform ID token. */
   private async authenticateSocket(
     socket: Socket,
   ): Promise<{ id: string; email: string; role: string }> {
-    const albToken = socket.handshake.headers['x-amzn-oidc-data'] as string | undefined;
-    const claims = await this.albJwtService.verify(albToken);
+    const idToken = extractSocketToken(socket);
+    const claims = await this.firebaseAuthService.verify(idToken);
     if (!claims) throw new Error('Not authenticated');
 
-    const user = await this.albUserService.resolveUser(claims);
+    const user = await this.firebaseUserService.resolveUser(claims);
     return { id: user.id, email: user.email, role: claims.role };
   }
 

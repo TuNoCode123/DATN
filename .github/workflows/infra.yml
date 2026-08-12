@@ -4,8 +4,9 @@ on:
   workflow_dispatch:  # Manual trigger only — Terraform runs locally, not in CI
 
 env:
-  AWS_REGION: ap-southeast-2        # Sydney (must match Terraform provider config)
+  GCP_REGION: asia-southeast1        # must match infra-gcp/variables.tf's default
   TF_VERSION: "1.10"
+  TF_VAR_project_id: ielts-ai-491816 # not a secret — GCP project IDs are just identifiers
 
 permissions:
   id-token: write
@@ -19,15 +20,15 @@ jobs:
     environment: production
     defaults:
       run:
-        working-directory: infra
+        working-directory: infra-gcp
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -42,10 +43,17 @@ jobs:
       - name: Terraform Plan
         id: plan
         env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
+          # Optional — leave the corresponding GitHub secret unset and these
+          # variables keep their "" defaults (Google Sign-In stays disabled,
+          # PayPal client secret stays a placeholder). See
+          # infra-gcp/modules/identity-platform's header comment.
           TF_VAR_google_client_id: ${{ secrets.GOOGLE_CLIENT_ID }}
           TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
-        run: terraform plan -no-color -var-file=envs/prod.tfvars -out=tfplan
+          TF_VAR_paypal_client_id: ${{ secrets.PAYPAL_CLIENT_ID }}
+          TF_VAR_paypal_client_secret: ${{ secrets.PAYPAL_CLIENT_SECRET }}
+          TF_VAR_paypal_webhook_id: ${{ secrets.PAYPAL_WEBHOOK_ID }}
+          TF_VAR_next_public_paypal_client_id: ${{ secrets.NEXT_PUBLIC_PAYPAL_CLIENT_ID }}
+        run: terraform plan -no-color -out=tfplan
 
       - name: Comment PR with Plan
         if: github.event_name == 'pull_request'
@@ -63,8 +71,4 @@ jobs:
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        env:
-          TF_VAR_db_password: ${{ secrets.DB_PASSWORD }}
-          TF_VAR_google_client_id: ${{ secrets.GOOGLE_CLIENT_ID }}
-          TF_VAR_google_client_secret: ${{ secrets.GOOGLE_CLIENT_SECRET }}
         run: terraform apply -auto-approve tfplan

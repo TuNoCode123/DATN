@@ -123,10 +123,11 @@ export function AudioRecorder({
     setLiveTranscript('');
     blobRef.current = [];
 
-    // Ensure auth token is fresh before WebSocket connect
-    // (the axios interceptor auto-refreshes expired tokens)
+    // Sanity-check the session before opening the WebSocket — the token
+    // itself is refreshed automatically by Firebase on every request/socket
+    // connection (see api.ts's interceptor and socket-auth.ts).
     try {
-      await api.get('/auth/cognito/me');
+      await api.get('/auth/me');
     } catch {
       setError('Not authenticated. Please refresh the page or log in again.');
       return;

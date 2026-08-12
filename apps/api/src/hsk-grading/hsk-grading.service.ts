@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { BedrockService } from '../bedrock/bedrock.service';
+import { VertexAiService } from '../vertex-ai/vertex-ai.service';
 import { HSK_WRITING_SYSTEM_PROMPT } from './prompts/writing-system-prompt';
 import { gradeSentenceReorder } from './sentence-reorder';
 
@@ -24,7 +24,7 @@ export class HskGradingService {
 
   constructor(
     private prisma: PrismaService,
-    private bedrock: BedrockService,
+    private vertexAi: VertexAiService,
   ) {}
 
   /** Grade a sentence reorder question deterministically */
@@ -85,7 +85,7 @@ export class HskGradingService {
       answer.answerText || '',
     );
 
-    const response = await this.bedrock.messages.create({
+    const response = await this.vertexAi.messages.create({
       max_tokens: 1024,
       system: HSK_WRITING_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: prompt }],
@@ -155,7 +155,7 @@ export class HskGradingService {
         grammarErrors: result.grammarErrors
           ? (result.grammarErrors as unknown as Prisma.InputJsonValue)
           : undefined,
-        modelUsed: 'bedrock:claude-3.5-haiku',
+        modelUsed: 'vertex:claude-haiku-4-5',
       },
     });
 

@@ -2,6 +2,7 @@
 
 import { useRef, useCallback, useEffect } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { socketAuthProvider } from '../socket-auth';
 import type { TranscribeItem, PronunciationAssessment } from './types';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:4000';
@@ -32,6 +33,7 @@ export function useTranscribeSocket({
   useEffect(() => {
     const socket = io(`${SOCKET_URL}/pronunciation`, {
       withCredentials: true,
+      auth: socketAuthProvider,
       transports: ['websocket', 'polling'],
       reconnection: false,
       autoConnect: true,

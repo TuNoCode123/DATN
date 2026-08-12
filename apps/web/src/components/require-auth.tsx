@@ -20,7 +20,7 @@ export function RequireAuth({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const res = await api.get('/auth/cognito/me');
+        const res = await api.get('/auth/me');
         setUser(res.data);
         setChecking(false);
       } catch {

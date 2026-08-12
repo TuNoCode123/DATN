@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { FlashcardQuestionType } from '@prisma/client';
-import { BedrockService } from '../bedrock/bedrock.service';
+import { VertexAiService } from '../vertex-ai/vertex-ai.service';
 
 export interface CardInput {
   word: string;
@@ -73,7 +73,7 @@ const COMMON_WORD_POOL = [
 export class AiGeneratorService {
   private readonly logger = new Logger(AiGeneratorService.name);
 
-  constructor(private bedrock: BedrockService) {}
+  constructor(private vertexAi: VertexAiService) {}
 
   async generateQuestions(
     cards: CardInput[],
@@ -85,7 +85,7 @@ export class AiGeneratorService {
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        const response = await this.bedrock.messages.create({
+        const response = await this.vertexAi.messages.create({
           max_tokens: 4000,
           temperature: 0.7,
           system: SYSTEM_PROMPT,

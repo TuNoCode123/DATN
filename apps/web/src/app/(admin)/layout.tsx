@@ -22,7 +22,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       // If no user in store, try to restore session
       if (!currentUser) {
         try {
-          const res = await api.get("/auth/cognito/me");
+          const res = await api.get("/auth/me");
           currentUser = res.data;
           setUser(currentUser);
         } catch {

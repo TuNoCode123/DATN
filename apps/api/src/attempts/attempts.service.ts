@@ -597,7 +597,7 @@ export class AttemptsService {
       throw new BadRequestException('Attempt not active');
     }
 
-    const key = `uploads/answers/${attemptId}/${questionId}.webm`;
+    const key = `answers/${attemptId}/${questionId}.webm`;
     const result = await this.uploadService.generatePresignedUrlForKey(
       key,
       'audio/webm',

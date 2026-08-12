@@ -10,8 +10,9 @@ import {
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
-import { AlbJwtService } from '../auth/alb-jwt.service';
-import { AlbUserService } from '../auth/alb-user.service';
+import { FirebaseAuthService } from '../auth/firebase-auth.service';
+import { FirebaseUserService } from '../auth/firebase-user.service';
+import { extractSocketToken } from '../auth/extract-socket-token';
 import { NotificationsService } from './notifications.service';
 import { NotificationsQueueService } from './notifications-queue.service';
 
@@ -38,8 +39,8 @@ export class NotificationsGateway
   private readonly logger = new Logger('NotificationsGateway');
 
   constructor(
-    private readonly albJwtService: AlbJwtService,
-    private readonly albUserService: AlbUserService,
+    private readonly firebaseAuthService: FirebaseAuthService,
+    private readonly firebaseUserService: FirebaseUserService,
     private readonly service: NotificationsService,
     private readonly queueService: NotificationsQueueService,
   ) {}
@@ -102,11 +103,11 @@ export class NotificationsGateway
   // ─── auth helpers (mirror live-exam.gateway) ──────
 
   private async authenticateSocket(socket: Socket): Promise<AuthUser> {
-    const albToken = socket.handshake.headers['x-amzn-oidc-data'] as string | undefined;
-    const claims = await this.albJwtService.verify(albToken);
+    const idToken = extractSocketToken(socket);
+    const claims = await this.firebaseAuthService.verify(idToken);
     if (!claims) throw new Error('Not authenticated');
 
-    const user = await this.albUserService.resolveUser(claims);
+    const user = await this.firebaseUserService.resolveUser(claims);
     return { id: user.id, email: user.email, role: claims.role, displayName: user.displayName };
   }
 }

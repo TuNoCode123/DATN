@@ -5,31 +5,32 @@ import {
   UnauthorizedException,
   Logger,
 } from '@nestjs/common';
-import { AlbJwtService } from '../alb-jwt.service';
-import { AlbUserService } from '../alb-user.service';
+import { FirebaseAuthService } from '../firebase-auth.service';
+import { FirebaseUserService } from '../firebase-user.service';
 import { DEV_COOKIE_NAME } from '../dev-accounts';
+import { extractBearerToken } from '../extract-bearer-token';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private readonly logger = new Logger(JwtAuthGuard.name);
 
   constructor(
-    private readonly albJwtService: AlbJwtService,
-    private readonly albUserService: AlbUserService,
+    private readonly firebaseAuthService: FirebaseAuthService,
+    private readonly firebaseUserService: FirebaseUserService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const albToken = request.headers['x-amzn-oidc-data'];
+    const idToken = extractBearerToken(request.headers['authorization']);
     const devEmail = request.cookies?.[DEV_COOKIE_NAME];
 
     try {
-      const claims = await this.albJwtService.verify(albToken, devEmail);
+      const claims = await this.firebaseAuthService.verify(idToken, devEmail);
       if (!claims) {
         throw new UnauthorizedException('Authentication required');
       }
 
-      const user = await this.albUserService.resolveUser(claims);
+      const user = await this.firebaseUserService.resolveUser(claims);
       request.user = {
         id: user.id,
         email: user.email,
@@ -39,7 +40,7 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
-      this.logger.warn(`ALB JWT verification failed: ${error.message}`);
+      this.logger.warn(`Identity Platform token verification failed: ${error.message}`);
       throw new UnauthorizedException('Authentication required');
     }
   }

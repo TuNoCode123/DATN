@@ -1,0 +1,10 @@
+# Copy this file to terraform.tfvars (gitignored) and fill in real values.
+# Phase 1 only needs project_id — everything else has a sensible default.
+
+project_id = "your-gcp-project-id"
+
+# Optional overrides (defaults shown):
+# project_name = "ielts-ai"
+# environment  = "prod"
+# region       = "asia-southeast1"
+# domain_name  = "neu-study.online"

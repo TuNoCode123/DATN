@@ -4,11 +4,12 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { AlbJwtService } from '../alb-jwt.service';
-import { AlbUserService } from '../alb-user.service';
+import { FirebaseAuthService } from '../firebase-auth.service';
+import { FirebaseUserService } from '../firebase-user.service';
+import { extractBearerToken } from '../extract-bearer-token';
 
 /**
- * Optional ALB JWT auth guard.
+ * Optional Identity Platform auth guard.
  *
  * Same as JwtAuthGuard but allows unauthenticated access —
  * request.user will be null if no valid token is present.
@@ -18,18 +19,18 @@ export class OptionalJwtAuthGuard implements CanActivate {
   private readonly logger = new Logger(OptionalJwtAuthGuard.name);
 
   constructor(
-    private readonly albJwtService: AlbJwtService,
-    private readonly albUserService: AlbUserService,
+    private readonly firebaseAuthService: FirebaseAuthService,
+    private readonly firebaseUserService: FirebaseUserService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest();
-    const albToken = request.headers['x-amzn-oidc-data'];
+    const idToken = extractBearerToken(request.headers['authorization']);
 
     try {
-      const claims = await this.albJwtService.verify(albToken);
+      const claims = await this.firebaseAuthService.verify(idToken);
       if (claims) {
-        const user = await this.albUserService.resolveUser(claims);
+        const user = await this.firebaseUserService.resolveUser(claims);
         request.user = {
           id: user.id,
           email: user.email,

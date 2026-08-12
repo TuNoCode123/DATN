@@ -4,6 +4,9 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:4000';
 
 let manager: Manager | null = null;
 
+// `auth` isn't a Manager-level option (it's per-Socket) — callers pass it to
+// `.socket(namespace, { auth: socketAuthProvider })` themselves, see socket.ts
+// and notifications-socket.ts.
 export function getSocketManager(): Manager {
   if (manager) return manager;
   manager = new Manager(SOCKET_URL, {

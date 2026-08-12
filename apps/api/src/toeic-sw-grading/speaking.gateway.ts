@@ -10,16 +10,14 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { ConfigService } from '@nestjs/config';
-import {
-  TranscribeStreamingClient,
-  StartStreamTranscriptionCommand,
-  type LanguageCode,
-} from '@aws-sdk/client-transcribe-streaming';
+import { SpeechClient, protos as speechProtos } from '@google-cloud/speech';
+import type { Duplex } from 'stream';
 import { CreditReason } from '@prisma/client';
 import { CreditsService } from '../credits/credits.service';
-import { AlbJwtService } from '../auth/alb-jwt.service';
-import { AlbUserService } from '../auth/alb-user.service';
-import { BedrockService } from '../bedrock/bedrock.service';
+import { FirebaseAuthService } from '../auth/firebase-auth.service';
+import { FirebaseUserService } from '../auth/firebase-user.service';
+import { extractSocketToken } from '../auth/extract-socket-token';
+import { VertexAiService } from '../vertex-ai/vertex-ai.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { StableTokenTracker } from './stable-token-tracker';
 import { alignWords, scoreWords, gradeSpeakingOpenEnded } from './scoring-engine';
@@ -41,7 +39,7 @@ interface SpeakingSession {
   startedAt: number;
   snapshotCounter: number;
   accumulatedText: string;
-  abortController: AbortController;
+  recognizeStream: Duplex | null;
   backpressureQueue: Buffer[];
   draining: boolean;
 }
@@ -63,31 +61,20 @@ export class SpeakingGateway
 
   private readonly logger = new Logger('SpeakingGateway');
   private sessions: Map<string, SpeakingSession> = new Map();
-  private transcribeClient: TranscribeStreamingClient;
+  private speechClient: SpeechClient;
 
   constructor(
     private config: ConfigService,
     private credits: CreditsService,
-    private albJwtService: AlbJwtService,
-    private albUserService: AlbUserService,
-    private bedrock: BedrockService,
+    private firebaseAuthService: FirebaseAuthService,
+    private firebaseUserService: FirebaseUserService,
+    private vertexAi: VertexAiService,
     private prisma: PrismaService,
   ) {
-    const region =
-      this.config.get<string>('AWS_TRANSCRIBE_REGION') ||
-      this.config.get<string>('AWS_REGION', 'ap-southeast-2');
-    const accessKeyId = this.config.get<string>('AWS_ACCESS_KEY_ID', '');
-    const secretAccessKey = this.config.get<string>(
-      'AWS_SECRET_ACCESS_KEY',
-      '',
-    );
-
-    this.transcribeClient = new TranscribeStreamingClient({
-      region,
-      ...(accessKeyId && secretAccessKey
-        ? { credentials: { accessKeyId, secretAccessKey } }
-        : {}),
-    });
+    // Auth via Application Default Credentials — the Cloud Run service
+    // account in production, `gcloud auth application-default login`
+    // locally. No key file involved.
+    this.speechClient = new SpeechClient();
   }
 
   async handleConnection(socket: Socket) {
@@ -128,7 +115,6 @@ export class SpeakingGateway
     this.cleanupSession(socket.id);
 
     const audioStream = new PassThrough({ highWaterMark: 32 * 1024 });
-    const abortController = new AbortController();
 
     const session: SpeakingSession = {
       audioStream,
@@ -142,7 +128,7 @@ export class SpeakingGateway
       startedAt: Date.now(),
       snapshotCounter: 0,
       accumulatedText: '',
-      abortController,
+      recognizeStream: null,
       backpressureQueue: [],
       draining: false,
     };
@@ -182,9 +168,9 @@ export class SpeakingGateway
     // Close the audio stream to finalize transcription
     session.audioStream.end();
 
-    // Wait for final transcription results to arrive from AWS Transcribe.
-    // 500ms is too short — AWS may still be processing the last audio chunk.
-    // We wait up to 3 seconds, checking every 200ms if new text has arrived.
+    // Wait for final transcription results to arrive from Speech-to-Text.
+    // 500ms is too short — the service may still be processing the last
+    // audio chunk. We wait up to 3 seconds, checking every 200ms.
     let lastText = session.accumulatedText;
     let stableCount = 0;
     for (let i = 0; i < 15; i++) {
@@ -199,7 +185,7 @@ export class SpeakingGateway
       }
     }
 
-    // Use accumulatedText (final segments from AWS Transcribe) as the primary
+    // Use accumulatedText (final segments from Speech-to-Text) as the primary
     // spoken text. The StableTokenTracker only tracks words seen in ≥3 partial
     // snapshots, so it often misses words — especially for short recordings or
     // when Transcribe sends few partial updates before finalizing.
@@ -232,13 +218,13 @@ export class SpeakingGateway
       // Override spokenSentence with the fuller transcript
       assessment.spokenSentence = spokenSentence;
     } else {
-      // Open-ended: AI grading via Bedrock
+      // Open-ended: AI grading via Vertex AI (Claude)
       try {
         assessment = await gradeSpeakingOpenEnded(
           spokenSentence,
           session.questionType,
           session.questionStem,
-          this.bedrock,
+          this.vertexAi,
         );
       } catch (err: any) {
         this.logger.error(`[AI_GRADE_FAIL] ${err.message}`);
@@ -321,58 +307,58 @@ export class SpeakingGateway
     session: SpeakingSession,
   ) {
     try {
-      const audioGenerator = this.createAsyncAudioGenerator(
-        session.audioStream,
-      );
+      const recognizeStream = this.speechClient.streamingRecognize({
+        config: {
+          encoding: 'LINEAR16',
+          sampleRateHertz: 16000,
+          languageCode: 'en-US',
+          enableWordTimeOffsets: true,
+          enableWordConfidence: true,
+          enableAutomaticPunctuation: true,
+        },
+        interimResults: true,
+      }) as unknown as Duplex;
 
-      const response = await this.transcribeClient.send(
-        new StartStreamTranscriptionCommand({
-          LanguageCode: 'en-US' as LanguageCode,
-          MediaEncoding: 'pcm',
-          MediaSampleRateHertz: 16000,
-          EnablePartialResultsStabilization: true,
-          PartialResultsStability: 'medium',
-          AudioStream: audioGenerator as any,
-        }),
-        { abortSignal: session.abortController.signal },
-      );
+      session.recognizeStream = recognizeStream;
 
-      if (response.TranscriptResultStream) {
-        for await (const event of response.TranscriptResultStream) {
-          if (!this.sessions.has(socket.id)) break;
+      recognizeStream.on(
+        'data',
+        (data: speechProtos.google.cloud.speech.v1.IStreamingRecognizeResponse) => {
+          if (!this.sessions.has(socket.id)) return;
 
-          const results = event.TranscriptEvent?.Transcript?.Results;
-          if (!results || results.length === 0) continue;
+          const results = data.results;
+          if (!results || results.length === 0) return;
 
           for (const result of results) {
-            const alt = result.Alternatives?.[0];
-            const text = alt?.Transcript || '';
+            const alt = result.alternatives?.[0];
+            const text = alt?.transcript || '';
             if (!text) continue;
 
-            // Build words array
-            const words: TranscribeWord[] = (alt?.Items || [])
-              .filter((item) => item.Content)
-              .map((item) => ({
-                content: item.Content!,
-                confidence: item.Confidence ?? 0,
-                startTime: item.StartTime ?? 0,
-                endTime: item.EndTime ?? 0,
-                type:
-                  item.Type === 'punctuation'
-                    ? ('punctuation' as const)
-                    : ('pronunciation' as const),
+            // Build words array. Unlike AWS Transcribe, Speech-to-Text
+            // doesn't return punctuation as separate word-type items — marks
+            // added by enableAutomaticPunctuation ride along attached to the
+            // adjacent word string instead. Every entry here is therefore
+            // 'pronunciation'; nothing populates 'punctuation'.
+            const words: TranscribeWord[] = (alt?.words || [])
+              .filter((w) => w.word)
+              .map((w) => ({
+                content: w.word!,
+                confidence: w.confidence ?? 0,
+                startTime: durationToSeconds(w.startTime),
+                endTime: durationToSeconds(w.endTime),
+                type: 'pronunciation' as const,
               }));
 
             const snapshot: PartialSnapshot = {
-              resultId: result.ResultId || '',
+              resultId: `${socket.id}-${session.snapshotCounter}`,
               timestamp: Date.now(),
-              isPartial: !!result.IsPartial,
+              isPartial: !result.isFinal,
               transcript: text,
               words,
               snapshotIndex: session.snapshotCounter++,
             };
 
-            if (result.IsPartial) {
+            if (!result.isFinal) {
               // Feed partial to StableTokenTracker
               session.tracker.addPartial(snapshot);
               // Emit live transcript to client
@@ -385,19 +371,18 @@ export class SpeakingGateway
                 : text;
             }
           }
-        }
-      }
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        this.logger.error(`Transcribe error: ${err.message}`);
-        socket.emit('error', { message: 'Transcription failed' });
-      }
-    }
-  }
+        },
+      );
 
-  private async *createAsyncAudioGenerator(stream: PassThrough) {
-    for await (const chunk of stream) {
-      yield { AudioEvent: { AudioChunk: chunk } };
+      recognizeStream.on('error', (err: Error) => {
+        this.logger.error(`Speech-to-Text error: ${err.message}`);
+        socket.emit('error', { message: 'Transcription failed' });
+      });
+
+      session.audioStream.pipe(recognizeStream);
+    } catch (err: any) {
+      this.logger.error(`Speech-to-Text error: ${err.message}`);
+      socket.emit('error', { message: 'Transcription failed' });
     }
   }
 
@@ -406,7 +391,7 @@ export class SpeakingGateway
     if (!session) return;
 
     session.backpressureQueue.length = 0;
-    session.abortController.abort();
+    session.recognizeStream?.destroy();
     try {
       session.audioStream.end();
     } catch {
@@ -418,11 +403,21 @@ export class SpeakingGateway
   private async authenticateSocket(
     socket: Socket,
   ): Promise<{ id: string; email: string; role: string }> {
-    const albToken = socket.handshake.headers['x-amzn-oidc-data'] as string | undefined;
-    const claims = await this.albJwtService.verify(albToken);
+    const idToken = extractSocketToken(socket);
+    const claims = await this.firebaseAuthService.verify(idToken);
     if (!claims) throw new Error('Not authenticated');
 
-    const user = await this.albUserService.resolveUser(claims);
+    const user = await this.firebaseUserService.resolveUser(claims);
     return { id: user.id, email: user.email, role: claims.role };
   }
+}
+
+/** Speech-to-Text word timings are google.protobuf.Duration objects, not
+ * plain seconds like AWS Transcribe returned — convert to a float here so
+ * TranscribeWord.startTime/endTime keep their existing (seconds) shape. */
+function durationToSeconds(
+  duration?: speechProtos.google.protobuf.IDuration | null,
+): number {
+  if (!duration) return 0;
+  return Number(duration.seconds ?? 0) + (duration.nanos ?? 0) / 1e9;
 }

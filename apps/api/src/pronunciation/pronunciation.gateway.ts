@@ -10,15 +10,13 @@ import {
 import { Logger } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { ConfigService } from '@nestjs/config';
-import {
-  TranscribeStreamingClient,
-  StartStreamTranscriptionCommand,
-  type LanguageCode,
-} from '@aws-sdk/client-transcribe-streaming';
+import { SpeechClient, protos as speechProtos } from '@google-cloud/speech';
+import type { Duplex } from 'stream';
 import { CreditReason } from '@prisma/client';
 import { CreditsService } from '../credits/credits.service';
-import { AlbJwtService } from '../auth/alb-jwt.service';
-import { AlbUserService } from '../auth/alb-user.service';
+import { FirebaseAuthService } from '../auth/firebase-auth.service';
+import { FirebaseUserService } from '../auth/firebase-user.service';
+import { extractSocketToken } from '../auth/extract-socket-token';
 import { PronunciationService } from './pronunciation.service';
 import { PassThrough } from 'stream';
 import * as zlib from 'zlib';
@@ -40,7 +38,7 @@ interface TranscribeSession {
   silenceTimer?: ReturnType<typeof setTimeout>;
   accumulatedText: string;
   accumulatedItems: TranscribeItem[];
-  abortController: AbortController;
+  recognizeStream: Duplex | null;
   /** queued compressed chunks awaiting drain */
   backpressureQueue: Buffer[];
   draining: boolean;
@@ -66,31 +64,19 @@ export class PronunciationGateway
 
   private readonly logger = new Logger('PronunciationGateway');
   private sessions: Map<string, TranscribeSession> = new Map();
-  private transcribeClient: TranscribeStreamingClient;
+  private speechClient: SpeechClient;
 
   constructor(
     private config: ConfigService,
     private credits: CreditsService,
-    private albJwtService: AlbJwtService,
-    private albUserService: AlbUserService,
+    private firebaseAuthService: FirebaseAuthService,
+    private firebaseUserService: FirebaseUserService,
     private pronunciationService: PronunciationService,
   ) {
-    const region =
-      this.config.get<string>('AWS_TRANSCRIBE_REGION') ||
-      this.config.get<string>('AWS_REGION', 'ap-southeast-2');
-    const accessKeyId = this.config.get<string>('AWS_ACCESS_KEY_ID', '');
-    const secretAccessKey = this.config.get<string>(
-      'AWS_SECRET_ACCESS_KEY',
-      '',
-    );
-
-    this.logger.log(`Transcribe client region: ${region}`);
-    this.transcribeClient = new TranscribeStreamingClient({
-      region,
-      ...(accessKeyId && secretAccessKey
-        ? { credentials: { accessKeyId, secretAccessKey } }
-        : {}),
-    });
+    // Auth via Application Default Credentials — the Cloud Run service
+    // account in production, `gcloud auth application-default login`
+    // locally. No key file involved.
+    this.speechClient = new SpeechClient();
   }
 
   async handleConnection(socket: Socket) {
@@ -140,7 +126,6 @@ export class PronunciationGateway
 
     const language = data?.language || 'en-US';
     const audioStream = new PassThrough({ highWaterMark: 32 * 1024 });
-    const abortController = new AbortController();
 
     const session: TranscribeSession = {
       audioStream,
@@ -150,7 +135,7 @@ export class PronunciationGateway
       minutesBilled: 1,
       accumulatedText: '',
       accumulatedItems: [],
-      abortController,
+      recognizeStream: null,
       backpressureQueue: [],
       draining: false,
     };
@@ -230,85 +215,78 @@ export class PronunciationGateway
     language: string,
   ) {
     try {
-      const audioGenerator = this.createAsyncAudioGenerator(
-        session.audioStream,
-      );
+      const recognizeStream = this.speechClient.streamingRecognize({
+        config: {
+          encoding: 'LINEAR16',
+          sampleRateHertz: 16000,
+          languageCode: language,
+          enableWordTimeOffsets: true,
+          enableWordConfidence: true,
+          enableAutomaticPunctuation: true,
+        },
+        interimResults: true,
+      }) as unknown as Duplex;
 
-      const response = await this.transcribeClient.send(
-        new StartStreamTranscriptionCommand({
-          LanguageCode: language as LanguageCode,
-          MediaEncoding: 'pcm',
-          MediaSampleRateHertz: 16000,
-          EnablePartialResultsStabilization: true,
-          PartialResultsStability: 'medium',
-          AudioStream: audioGenerator as any,
-        }),
-        { abortSignal: session.abortController.signal },
-      );
+      session.recognizeStream = recognizeStream;
 
-      if (response.TranscriptResultStream) {
-        for await (const event of response.TranscriptResultStream) {
-          if (!this.sessions.has(socket.id)) break;
+      recognizeStream.on(
+        'data',
+        (data: speechProtos.google.cloud.speech.v1.IStreamingRecognizeResponse) => {
+          if (!this.sessions.has(socket.id)) return;
 
-          const results = event.TranscriptEvent?.Transcript?.Results;
-          if (!results || results.length === 0) continue;
+          const results = data.results;
+          if (results && results.length > 0) {
+            for (const result of results) {
+              const alt = result.alternatives?.[0];
+              const text = alt?.transcript || '';
+              if (!text) continue;
 
-          for (const result of results) {
-            const alt = result.Alternatives?.[0];
-            const text = alt?.Transcript || '';
-            if (!text) continue;
+              if (!result.isFinal) {
+                // Skip partial results — only process final segments
+              } else {
+                // Final segment — accumulate
+                session.accumulatedText = session.accumulatedText
+                  ? session.accumulatedText + ' ' + text
+                  : text;
 
-            if (result.IsPartial) {
-              // Skip partial results — only process final segments
-            } else {
-              // Final segment — accumulate
-              session.accumulatedText = session.accumulatedText
-                ? session.accumulatedText + ' ' + text
-                : text;
-
-              if (alt?.Items) {
-                for (const item of alt.Items) {
-                  if (item.Content) {
+                // Unlike AWS Transcribe, Speech-to-Text doesn't return
+                // punctuation as separate word-type items — marks added by
+                // enableAutomaticPunctuation ride along attached to the
+                // adjacent word string. Every entry here is 'pronunciation'.
+                for (const w of alt?.words || []) {
+                  if (w.word) {
                     session.accumulatedItems.push({
-                      content: item.Content,
-                      confidence: item.Confidence ?? 1,
-                      startTime: item.StartTime ?? 0,
-                      endTime: item.EndTime ?? 0,
-                      type:
-                        item.Type === 'punctuation'
-                          ? 'punctuation'
-                          : 'pronunciation',
+                      content: w.word,
+                      confidence: w.confidence ?? 1,
+                      startTime: durationToSeconds(w.startTime),
+                      endTime: durationToSeconds(w.endTime),
+                      type: 'pronunciation',
                     });
                   }
                 }
-              }
 
-              // Reset silence timer — emit final + auto-assess after 1.5s silence
-              if (session.silenceTimer) {
-                clearTimeout(session.silenceTimer);
-              }
-              session.silenceTimer = setTimeout(() => {
-                if (this.sessions.has(socket.id)) {
-                  const finalText = session.accumulatedText.trim();
-                  const finalItems = [...session.accumulatedItems];
-
-                  // Emit the transcript immediately
-                  socket.emit('final', {
-                    text: finalText,
-                    items: finalItems,
-                  });
-
-                  // Auto-assess if targetSentence was provided
-                  if (session.targetSentence) {
-                    this.autoAssess(
-                      socket,
-                      session,
-                      finalText,
-                      finalItems,
-                    );
-                  }
+                // Reset silence timer — emit final + auto-assess after 1.5s silence
+                if (session.silenceTimer) {
+                  clearTimeout(session.silenceTimer);
                 }
-              }, 1500);
+                session.silenceTimer = setTimeout(() => {
+                  if (this.sessions.has(socket.id)) {
+                    const finalText = session.accumulatedText.trim();
+                    const finalItems = [...session.accumulatedItems];
+
+                    // Emit the transcript immediately
+                    socket.emit('final', {
+                      text: finalText,
+                      items: finalItems,
+                    });
+
+                    // Auto-assess if targetSentence was provided
+                    if (session.targetSentence) {
+                      this.autoAssess(socket, session, finalText, finalItems);
+                    }
+                  }
+                }, 1500);
+              }
             }
           }
 
@@ -317,26 +295,31 @@ export class PronunciationGateway
             (Date.now() - session.startedAt) / 60000,
           );
           if (elapsedMin > session.minutesBilled) {
-            try {
-              await this.credits.deduct(
+            this.credits
+              .deduct(
                 session.userId,
                 3,
                 CreditReason.PRONUNCIATION_SESSION,
                 undefined,
                 { minute: elapsedMin },
-              );
-              session.minutesBilled = elapsedMin;
-            } catch {
-              // Ignore billing errors during stream
-            }
+              )
+              .catch(() => {
+                // Ignore billing errors during stream
+              });
+            session.minutesBilled = elapsedMin;
           }
-        }
-      }
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        this.logger.error(`Transcribe error: ${err.message}`);
+        },
+      );
+
+      recognizeStream.on('error', (err: Error) => {
+        this.logger.error(`Speech-to-Text error: ${err.message}`);
         socket.emit('error', { message: 'Transcription failed' });
-      }
+      });
+
+      session.audioStream.pipe(recognizeStream);
+    } catch (err: any) {
+      this.logger.error(`Speech-to-Text error: ${err.message}`);
+      socket.emit('error', { message: 'Transcription failed' });
     }
   }
 
@@ -382,19 +365,13 @@ export class PronunciationGateway
     }
   }
 
-  private async *createAsyncAudioGenerator(stream: PassThrough) {
-    for await (const chunk of stream) {
-      yield { AudioEvent: { AudioChunk: chunk } };
-    }
-  }
-
   private cleanupSession(socketId: string) {
     const session = this.sessions.get(socketId);
     if (!session) return;
 
     if (session.silenceTimer) clearTimeout(session.silenceTimer);
     session.backpressureQueue.length = 0;
-    session.abortController.abort();
+    session.recognizeStream?.destroy();
     session.audioStream.end();
     this.sessions.delete(socketId);
   }
@@ -402,11 +379,21 @@ export class PronunciationGateway
   private async authenticateSocket(
     socket: Socket,
   ): Promise<{ id: string; email: string; role: string }> {
-    const albToken = socket.handshake.headers['x-amzn-oidc-data'] as string | undefined;
-    const claims = await this.albJwtService.verify(albToken);
+    const idToken = extractSocketToken(socket);
+    const claims = await this.firebaseAuthService.verify(idToken);
     if (!claims) throw new Error('Not authenticated');
 
-    const user = await this.albUserService.resolveUser(claims);
+    const user = await this.firebaseUserService.resolveUser(claims);
     return { id: user.id, email: user.email, role: claims.role };
   }
+}
+
+/** Speech-to-Text word timings are google.protobuf.Duration objects, not
+ * plain seconds like AWS Transcribe returned — convert to a float here so
+ * TranscribeItem.startTime/endTime keep their existing (seconds) shape. */
+function durationToSeconds(
+  duration?: speechProtos.google.protobuf.IDuration | null,
+): number {
+  if (!duration) return 0;
+  return Number(duration.seconds ?? 0) + (duration.nanos ?? 0) / 1e9;
 }

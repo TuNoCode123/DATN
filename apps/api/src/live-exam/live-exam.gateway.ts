@@ -15,8 +15,9 @@ import {
   LiveExamSessionStatus,
   Prisma,
 } from '@prisma/client';
-import { AlbJwtService } from '../auth/alb-jwt.service';
-import { AlbUserService } from '../auth/alb-user.service';
+import { FirebaseAuthService } from '../auth/firebase-auth.service';
+import { FirebaseUserService } from '../auth/firebase-user.service';
+import { extractSocketToken } from '../auth/extract-socket-token';
 import { PrismaService } from '../prisma/prisma.service';
 import { LiveExamService } from './live-exam.service';
 import { LiveExamLeaderboardService } from './live-exam-leaderboard.service';
@@ -73,8 +74,8 @@ export class LiveExamGateway
   private readonly logger = new Logger('LiveExamGateway');
 
   constructor(
-    private readonly albJwtService: AlbJwtService,
-    private readonly albUserService: AlbUserService,
+    private readonly firebaseAuthService: FirebaseAuthService,
+    private readonly firebaseUserService: FirebaseUserService,
     private readonly prisma: PrismaService,
     private readonly examService: LiveExamService,
     private readonly leaderboard: LiveExamLeaderboardService,
@@ -634,11 +635,11 @@ export class LiveExamGateway
   }
 
   private async authenticateSocket(socket: Socket): Promise<AuthUser> {
-    const albToken = socket.handshake.headers['x-amzn-oidc-data'] as string | undefined;
-    const claims = await this.albJwtService.verify(albToken);
+    const idToken = extractSocketToken(socket);
+    const claims = await this.firebaseAuthService.verify(idToken);
     if (!claims) throw new Error('Not authenticated');
 
-    const user = await this.albUserService.resolveUser(claims);
+    const user = await this.firebaseUserService.resolveUser(claims);
     return { id: user.id, email: user.email, role: claims.role, displayName: user.displayName };
   }
 }

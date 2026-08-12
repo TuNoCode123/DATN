@@ -14,7 +14,7 @@ import { UploadModule } from './upload/upload.module';
 import { ChatModule } from './chat/chat.module';
 import { FlashcardsModule } from './flashcards/flashcards.module';
 import { HealthModule } from './health/health.module';
-import { BedrockModule } from './bedrock/bedrock.module';
+import { VertexAiModule } from './vertex-ai/vertex-ai.module';
 import { HskGradingModule } from './hsk-grading/hsk-grading.module';
 import { HskVocabularyModule } from './hsk-vocabulary/hsk-vocabulary.module';
 import { CreditsModule } from './credits/credits.module';
@@ -35,7 +35,7 @@ import { GoalsModule } from './goals/goals.module';
     PrismaModule,
     HealthModule,
     RedisModule,
-    BedrockModule,
+    VertexAiModule,
     AuthModule,
     UsersModule,
     TestsModule,

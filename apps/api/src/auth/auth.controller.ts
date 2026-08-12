@@ -5,24 +5,27 @@ import {
   Get,
   HttpCode,
   Post,
-  Query,
   Res,
   UseGuards,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { AlbJwtService } from './alb-jwt.service';
+import { FirebaseAuthService } from './firebase-auth.service';
 import { DEV_ACCOUNTS, DEV_COOKIE_NAME } from './dev-accounts';
 
 @Controller('auth')
 export class AuthController {
-  private readonly frontendUrl =
-    process.env.FRONTEND_URL || 'http://localhost:3000';
+  constructor(private readonly firebaseAuthService: FirebaseAuthService) {}
 
-  constructor(private readonly albJwtService: AlbJwtService) {}
-
-  @Get('cognito/me')
+  /**
+   * The frontend (Firebase Auth SDK, client-side) signs the user in directly
+   * against Identity Platform and sends the resulting ID token as a Bearer
+   * header on every request — there's no backend-redirect login endpoint to
+   * serve here the way ALB's Cognito-intercepted flow needed. This endpoint
+   * just resolves "who does this token belong to."
+   */
+  @Get('me')
   @UseGuards(JwtAuthGuard)
   me(@CurrentUser() user: any) {
     return {
@@ -33,26 +36,8 @@ export class AuthController {
     };
   }
 
-  /**
-   * ALB-protected login endpoint.
-   *
-   * The ALB authenticate-cognito action intercepts this request and redirects
-   * unauthenticated users to Cognito Hosted UI. After authentication, ALB
-   * sets session cookies and forwards the request here. We then redirect
-   * the user back to the frontend.
-   */
-  @Get('cognito/login')
-  @UseGuards(JwtAuthGuard)
-  login(
-    @Query('redirect') redirect: string | undefined,
-    @Res() res: Response,
-  ) {
-    const target = redirect?.startsWith('/') ? redirect : '/dashboard';
-    res.redirect(`${this.frontendUrl}${target}`);
-  }
-
   // ─── Dev-only auth bypass ────────────────────────────────────────────────
-  // Active only when ALB_ARN is unset (local dev). In production these
+  // Active only when GCP_PROJECT_ID is unset (local dev). In production these
   // endpoints return 403.
 
   @Get('dev/accounts')
@@ -88,7 +73,7 @@ export class AuthController {
   }
 
   private assertDev() {
-    if (!this.albJwtService.isDev) {
+    if (!this.firebaseAuthService.isDev) {
       throw new ForbiddenException('Dev auth disabled');
     }
   }

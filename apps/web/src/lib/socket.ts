@@ -1,34 +1,14 @@
 import { Socket } from 'socket.io-client';
-import axios from 'axios';
 import { useChatStore } from './chat-store';
 import { getSocketManager } from './socket-manager';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+import { socketAuthProvider } from './socket-auth';
 
 let socket: Socket | null = null;
-let isRefreshing = false;
-
-async function refreshTokens(): Promise<boolean> {
-  if (isRefreshing) return false;
-  isRefreshing = true;
-  try {
-    await axios.post(`${API_BASE_URL}/auth/cognito/refresh`, {}, {
-      withCredentials: true,
-    });
-    console.log('[WS] Cognito token refreshed successfully');
-    return true;
-  } catch {
-    console.error('[WS] Token refresh failed');
-    return false;
-  } finally {
-    isRefreshing = false;
-  }
-}
 
 export function connectSocket(): Socket {
   if (socket && !socket.disconnected) return socket;
 
-  socket = getSocketManager().socket('/chat');
+  socket = getSocketManager().socket('/chat', { auth: socketAuthProvider });
   socket.connect();
 
   socket.on('connect', () => {
@@ -46,29 +26,18 @@ export function connectSocket(): Socket {
     useChatStore.getState().setSocketConnected(true);
   });
 
-  socket.on('connect_error', async (err) => {
+  // The manager's `auth` option (socketAuthProvider) fetches a fresh ID
+  // token on every connection attempt automatically, so a connect_error or
+  // auth_error just needs a retry — no manual token-refresh call needed.
+  socket.on('connect_error', (err) => {
     console.error('[WS] Connection error:', err.message);
-    if (err.message?.includes('Unauthorized') || err.message?.includes('jwt') || err.message?.includes('token')) {
-      const refreshed = await refreshTokens();
-      if (refreshed) {
-        console.log('[WS] Token refreshed, reconnecting...');
-        socket?.connect();
-      }
-    }
   });
 
-  socket.on('auth_error', async () => {
-    console.error('[WS] Auth error — attempting token refresh');
-    const refreshed = await refreshTokens();
-    if (refreshed) {
-      console.log('[WS] Token refreshed, reconnecting...');
-      socket?.connect();
-    } else {
-      console.error('[WS] Token refresh failed — disconnecting');
-      socket?.disconnect();
-      socket = null;
-      useChatStore.getState().setSocketConnected(false);
-    }
+  socket.on('auth_error', () => {
+    console.error('[WS] Auth error — disconnecting');
+    socket?.disconnect();
+    socket = null;
+    useChatStore.getState().setSocketConnected(false);
   });
 
   return socket;

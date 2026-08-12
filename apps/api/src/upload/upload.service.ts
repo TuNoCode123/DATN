@@ -1,11 +1,6 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Storage, Bucket } from '@google-cloud/storage';
 import { randomUUID } from 'crypto';
 import { extname } from 'path';
 
@@ -28,26 +23,18 @@ const ALLOWED_TYPES: Record<string, number> = {
 
 @Injectable()
 export class UploadService {
-  private s3: S3Client;
-  private bucket: string;
-  private region: string;
+  private storage: Storage;
+  private bucket: Bucket;
+  private bucketName: string;
 
   constructor(private config: ConfigService) {
-    this.region = this.config.get<string>('AWS_REGION', 'ap-southeast-2');
-    this.bucket = this.config.get<string>('S3_BUCKET_NAME', '');
+    this.bucketName = this.config.getOrThrow<string>('GCS_UPLOADS_BUCKET_NAME');
 
-    const accessKeyId = this.config.get<string>('AWS_ACCESS_KEY_ID', '');
-    const secretAccessKey = this.config.get<string>('AWS_SECRET_ACCESS_KEY', '');
-
-    this.s3 = new S3Client({
-      region: this.region,
-      // Only set explicit credentials if provided (local dev).
-      // In ECS, omit so the SDK uses the IAM task role automatically.
-      ...(accessKeyId && secretAccessKey
-        ? { credentials: { accessKeyId, secretAccessKey } }
-        : {}),
-      requestChecksumCalculation: 'WHEN_REQUIRED',
-    });
+    // Auth via Application Default Credentials — the Cloud Run service
+    // account in production, `gcloud auth application-default login`
+    // locally. No key file involved.
+    this.storage = new Storage();
+    this.bucket = this.storage.bucket(this.bucketName);
   }
 
   async generatePresignedUrl(fileName: string, contentType: string) {
@@ -60,44 +47,46 @@ export class UploadService {
 
     const folder = this.getFolderForType(contentType);
     const ext = extname(fileName) || this.getExtForType(contentType);
-    const key = `uploads/${folder}/${Date.now()}-${randomUUID()}${ext}`;
+    // No "uploads/" prefix — this bucket is dedicated solely to uploads
+    // (unlike the AWS side's shared bucket, which needed the prefix to scope
+    // its public-read policy — see infra-gcp/modules/storage's note).
+    const key = `${folder}/${Date.now()}-${randomUUID()}${ext}`;
 
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      ContentType: contentType,
-    });
-
-    const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn: 300 });
-    const fileUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
-
-    return { uploadUrl, fileUrl, key, maxSizeMB };
+    return this.buildPresignedResponse(key, contentType, maxSizeMB);
   }
 
   async generatePresignedUrlForKey(key: string, contentType: string) {
-    const command = new PutObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-      ContentType: contentType,
+    return this.buildPresignedResponse(key, contentType);
+  }
+
+  private async buildPresignedResponse(
+    key: string,
+    contentType: string,
+    maxSizeMB?: number,
+  ) {
+    const [uploadUrl] = await this.bucket.file(key).getSignedUrl({
+      version: 'v4',
+      action: 'write',
+      expires: Date.now() + 300 * 1000,
+      contentType,
     });
 
-    const uploadUrl = await getSignedUrl(this.s3, command, { expiresIn: 300 });
-    const fileUrl = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${key}`;
+    // Bucket is public-read (infra-gcp/modules/storage) — the object is
+    // reachable at this fixed URL as soon as the upload completes, no
+    // signing needed for reads.
+    const fileUrl = `https://storage.googleapis.com/${this.bucketName}/${key}`;
 
-    return { uploadUrl, fileUrl, key };
+    return maxSizeMB
+      ? { uploadUrl, fileUrl, key, maxSizeMB }
+      : { uploadUrl, fileUrl, key };
   }
 
   async deleteFile(key: string) {
-    if (!key.startsWith('uploads/')) {
+    if (key.includes('..') || key.startsWith('/')) {
       throw new BadRequestException('Invalid file key');
     }
 
-    await this.s3.send(
-      new DeleteObjectCommand({
-        Bucket: this.bucket,
-        Key: key,
-      }),
-    );
+    await this.bucket.file(key).delete();
 
     return { success: true };
   }

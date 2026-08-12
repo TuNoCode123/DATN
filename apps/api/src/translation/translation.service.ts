@@ -5,7 +5,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { BedrockService } from '../bedrock/bedrock.service';
+import { VertexAiService } from '../vertex-ai/vertex-ai.service';
 import { CreditsService } from '../credits/credits.service';
 import { CreditReason } from '@prisma/client';
 import type { DifficultyLevel } from '@prisma/client';
@@ -50,7 +50,7 @@ export class TranslationService {
 
   constructor(
     private prisma: PrismaService,
-    private bedrock: BedrockService,
+    private vertexAi: VertexAiService,
     private credits: CreditsService,
   ) {}
 
@@ -90,7 +90,7 @@ Rules:
 Return ONLY a JSON array of 10 objects:
 [{"vietnamese": "Câu tiếng Việt", "english": "English sentence"}, ...]`;
 
-    const response = await this.bedrock.messages.create({
+    const response = await this.vertexAi.messages.create({
       max_tokens: 4096,
       temperature: 0.8,
       system:
@@ -216,7 +216,7 @@ Return ONLY this JSON:
 }`;
 
     try {
-      const response = await this.bedrock.messages.create({
+      const response = await this.vertexAi.messages.create({
         max_tokens: 2048,
         temperature: 0.1,
         system: SYSTEM_PROMPT,

@@ -1,35 +1,16 @@
 import { io, Socket } from 'socket.io-client';
-import axios from 'axios';
+import { socketAuthProvider } from './socket-auth';
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_WS_URL || 'http://localhost:4000';
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
 let socket: Socket | null = null;
-let isRefreshing = false;
-
-async function refreshTokens(): Promise<boolean> {
-  if (isRefreshing) return false;
-  isRefreshing = true;
-  try {
-    await axios.post(
-      `${API_BASE_URL}/auth/cognito/refresh`,
-      {},
-      { withCredentials: true },
-    );
-    return true;
-  } catch {
-    return false;
-  } finally {
-    isRefreshing = false;
-  }
-}
 
 export function connectLiveExamSocket(): Socket {
   if (socket && !socket.disconnected) return socket;
 
   socket = io(`${SOCKET_URL}/live-exam`, {
     withCredentials: true,
+    auth: socketAuthProvider,
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionDelay: 1000,
@@ -46,14 +27,9 @@ export function connectLiveExamSocket(): Socket {
     console.log('[LiveExamWS] Disconnected:', reason);
   });
 
-  socket.on('connect_error', async (err) => {
-    if (
-      err.message?.includes('Unauthorized') ||
-      err.message?.includes('token')
-    ) {
-      const refreshed = await refreshTokens();
-      if (refreshed) socket?.connect();
-    }
+  socket.on('connect_error', (err) => {
+    // eslint-disable-next-line no-console
+    console.error('[LiveExamWS] Connection error:', err.message);
   });
 
   // Expose for E2E testing in non-production builds

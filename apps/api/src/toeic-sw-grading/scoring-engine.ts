@@ -4,7 +4,7 @@ import {
   WordScore,
   SpeakingAssessment,
 } from './types';
-import { BedrockService } from '../bedrock/bedrock.service';
+import { VertexAiService } from '../vertex-ai/vertex-ai.service';
 import { TOEIC_SW_SPEAKING_SYSTEM_PROMPT } from './prompts/speaking-system-prompt';
 
 function normalizeWord(word: string): string {
@@ -183,12 +183,12 @@ export function scoreWords(
   };
 }
 
-/** Grade open-ended speaking questions via Bedrock AI */
+/** Grade open-ended speaking questions via Vertex AI (Claude) */
 export async function gradeSpeakingOpenEnded(
   transcript: string,
   questionType: string,
   questionStem: string | null,
-  bedrock: BedrockService,
+  vertexAi: VertexAiService,
 ): Promise<SpeakingAssessment> {
   const prompt = `## Question Type: ${questionType}
 ## Prompt: ${questionStem || '(no prompt)'}
@@ -197,7 +197,7 @@ ${transcript || '(empty)'}
 
 Grade this spoken response. Return a JSON object.`;
 
-  const response = await bedrock.messages.create({
+  const response = await vertexAi.messages.create({
     max_tokens: 1024,
     system: TOEIC_SW_SPEAKING_SYSTEM_PROMPT,
     messages: [{ role: 'user', content: prompt }],

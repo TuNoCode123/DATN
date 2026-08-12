@@ -1,13 +1,13 @@
 import { Test } from '@nestjs/testing';
 import { PronunciationService } from './pronunciation.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { BedrockService } from '../bedrock/bedrock.service';
+import { VertexAiService } from '../vertex-ai/vertex-ai.service';
 import type { TranscribeItem } from './pronunciation.gateway';
 
 /**
  * Unit tests for deterministic word alignment & scoring.
  * We access private methods via bracket notation to test core logic
- * without needing Prisma/Bedrock dependencies for pure functions.
+ * without needing Prisma/Vertex AI dependencies for pure functions.
  */
 describe('PronunciationService – alignment & scoring', () => {
   let service: PronunciationService;
@@ -17,7 +17,7 @@ describe('PronunciationService – alignment & scoring', () => {
       providers: [
         PronunciationService,
         { provide: PrismaService, useValue: {} },
-        { provide: BedrockService, useValue: {} },
+        { provide: VertexAiService, useValue: {} },
       ],
     }).compile();
     service = mod.get(PronunciationService);
