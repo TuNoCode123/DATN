@@ -267,3 +267,18 @@ module "iam" {
 
   depends_on = [google_project_service.apis, module.storage]
 }
+
+# -----------------------------------------------------------------------------
+# 14. DNS Records — A records for api.<domain>/web.<domain> -> the LB IP
+# -----------------------------------------------------------------------------
+# Doesn't move traffic by itself — see modules/dns-records' header comment.
+# The registrar NS delegation step (spec §7) is separate and manual.
+module "dns_records" {
+  source        = "./modules/dns-records"
+  project_id    = var.project_id
+  zone_name     = module.dns.zone_name
+  domain_name   = var.domain_name
+  lb_ip_address = module.load_balancer.lb_ip_address
+
+  depends_on = [module.load_balancer]
+}

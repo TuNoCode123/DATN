@@ -134,6 +134,9 @@ resource "google_cloud_run_v2_service" "api" {
   lifecycle {
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].labels, # CI's deploy-cloudrun action stamps commit-sha/managed-by labels Terraform doesn't know about
+      client,             # set by whichever tool last deployed (gcloud/deploy-cloudrun) — not something we manage
+      client_version,
       scaling, # phantom top-level block (distinct from template.scaling, which we do manage) — the API always returns it with computed defaults even though nothing here sets it, causing perpetual no-op drift otherwise
     ]
   }
@@ -200,6 +203,9 @@ resource "google_cloud_run_v2_service" "web" {
   lifecycle {
     ignore_changes = [
       template[0].containers[0].image,
+      template[0].labels, # CI's deploy-cloudrun action stamps commit-sha/managed-by labels Terraform doesn't know about
+      client,             # set by whichever tool last deployed (gcloud/deploy-cloudrun) — not something we manage
+      client_version,
       scaling, # phantom top-level block (distinct from template.scaling, which we do manage) — the API always returns it with computed defaults even though nothing here sets it, causing perpetual no-op drift otherwise
     ]
   }
@@ -250,7 +256,11 @@ resource "google_cloud_run_v2_job" "migrate" {
   }
 
   lifecycle {
-    ignore_changes = [template[0].template[0].containers[0].image]
+    ignore_changes = [
+      template[0].template[0].containers[0].image,
+      client, # set by whichever tool last executed the job (gcloud run jobs update/execute)
+      client_version,
+    ]
   }
 }
 
