@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
@@ -11,8 +11,7 @@ interface DevAccount {
   label: string;
 }
 
-export default function DevLoginPage() {
-  const router = useRouter();
+function DevLoginContent() {
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get('returnUrl') || '/dashboard';
 
@@ -92,5 +91,13 @@ export default function DevLoginPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function DevLoginPage() {
+  return (
+    <Suspense>
+      <DevLoginContent />
+    </Suspense>
   );
 }

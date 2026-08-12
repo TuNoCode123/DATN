@@ -70,6 +70,9 @@ jobs:
             NEXT_PUBLIC_PAYPAL_CLIENT_ID=${{ secrets.NEXT_PUBLIC_PAYPAL_CLIENT_ID }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # See deploy-api.yml's note — Buildx's default provenance manifest
+          # triggers a 400 on Artifact Registry's push-time HEAD check.
+          provenance: false
 
       - name: Deploy to Cloud Run
         uses: google-github-actions/deploy-cloudrun@v2

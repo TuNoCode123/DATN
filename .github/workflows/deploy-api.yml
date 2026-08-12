@@ -68,6 +68,10 @@ jobs:
             ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Buildx's default provenance/SBOM attestation manifest triggers a
+          # "400 Bad Request" on the HEAD check Artifact Registry does during
+          # push — a known incompatibility, not specific to this image.
+          provenance: false
 
       # Step 4: Run Prisma database migrations BEFORE deploying new code.
       # `gcloud run jobs execute --wait` blocks until the job finishes and
