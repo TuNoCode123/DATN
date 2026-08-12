@@ -62,16 +62,18 @@ jobs:
         with:
           context: .
           file: apps/api/Dockerfile
-          push: true
           tags: |
             ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}:${{ github.sha }}
             ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPO }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Buildx's default provenance/SBOM attestation manifest triggers a
-          # "400 Bad Request" on the HEAD check Artifact Registry does during
-          # push — a known incompatibility, not specific to this image.
           provenance: false
+          # Root cause of the 400 Bad Request: BuildKit defaults to OCI-format
+          # manifests, and Artifact Registry's Docker v2 endpoint 400s on the
+          # HEAD existence-check for OCI media types — a known BuildKit/GAR
+          # incompatibility. Forcing legacy Docker v2 schema2 manifests fixes
+          # it. `outputs` replaces the `push: true` shorthand entirely.
+          outputs: type=image,push=true,oci-mediatypes=false
 
       # Step 4: Run Prisma database migrations BEFORE deploying new code.
       # `gcloud run jobs execute --wait` blocks until the job finishes and
