@@ -98,11 +98,36 @@ const QUESTION_TYPES: { value: QuestionType; label: string }[] = [
   { value: 'WRITE_SENTENCES', label: 'Write Sentences' },
   { value: 'RESPOND_WRITTEN_REQUEST', label: 'Respond to a Written Request' },
   { value: 'WRITE_OPINION_ESSAY', label: 'Write an Opinion Essay' },
-  // HSK Writing
-  { value: 'SENTENCE_REORDER', label: 'Sentence Reorder (排列顺序)' },
-  { value: 'KEYWORD_COMPOSITION', label: 'Keyword Composition (看词写作)' },
-  { value: 'PICTURE_COMPOSITION', label: 'Picture Composition (看图写作)' },
 ];
+
+// Per-exam-type subsets, so the "Add Question Group" dropdown only shows
+// types relevant to the test being edited instead of all 22 mixed together.
+const IELTS_QUESTION_TYPES = new Set<QuestionType>([
+  'MULTIPLE_CHOICE',
+  'TRUE_FALSE_NOT_GIVEN', 'YES_NO_NOT_GIVEN', 'MATCHING_HEADINGS', 'MATCHING_INFORMATION',
+  'MATCHING_FEATURES', 'MATCHING_SENTENCE_ENDINGS', 'SENTENCE_COMPLETION', 'SUMMARY_COMPLETION',
+  'NOTE_COMPLETION', 'TABLE_COMPLETION', 'FORM_COMPLETION', 'SHORT_ANSWER', 'LABELLING',
+]);
+
+const TOEIC_SW_QUESTION_TYPES = new Set<QuestionType>([
+  'MULTIPLE_CHOICE',
+  'READ_ALOUD', 'DESCRIBE_PICTURE', 'RESPOND_TO_QUESTIONS', 'PROPOSE_SOLUTION', 'EXPRESS_OPINION',
+  'WRITE_SENTENCES', 'RESPOND_WRITTEN_REQUEST', 'WRITE_OPINION_ESSAY',
+]);
+
+function getQuestionTypesForExam(examType: ExamType) {
+  if (examType === 'IELTS_ACADEMIC' || examType === 'IELTS_GENERAL') {
+    return QUESTION_TYPES.filter((qt) => IELTS_QUESTION_TYPES.has(qt.value));
+  }
+  if (examType === 'TOEIC_LR') {
+    return QUESTION_TYPES.filter((qt) => qt.value === 'MULTIPLE_CHOICE');
+  }
+  if (examType === 'TOEIC_SW' || examType === 'TOEIC_SPEAKING' || examType === 'TOEIC_WRITING') {
+    return QUESTION_TYPES.filter((qt) => TOEIC_SW_QUESTION_TYPES.has(qt.value));
+  }
+  // Legacy/other exam types (e.g. an existing HSK test) — fall back to the full list.
+  return QUESTION_TYPES;
+}
 
 // ── Main Editor Page ─────────────────────────────────
 
@@ -1346,7 +1371,7 @@ function SectionEditor({
               <SelectValue placeholder="+ Add Question Group" />
             </SelectTrigger>
             <SelectContent>
-              {QUESTION_TYPES.map((qt) => (
+              {getQuestionTypesForExam(examType).map((qt) => (
                 <SelectItem key={qt.value} value={qt.value} className="text-sm">
                   {qt.label}
                 </SelectItem>
