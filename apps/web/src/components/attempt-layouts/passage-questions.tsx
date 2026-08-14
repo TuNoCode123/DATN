@@ -219,11 +219,6 @@ function hasPassageVisualContent(passage: PassageFromAPI): boolean {
   return hasImage || hasInlineImage || hasTable || hasText;
 }
 
-/** Check if a passage has any content at all (including audio) */
-function hasPassageContent(passage: PassageFromAPI): boolean {
-  return !!passage.audioUrl || hasPassageVisualContent(passage);
-}
-
 /**
  * Groups passages with their linked question groups (via passageId).
  * Falls back to legacy layout (all passages left, all questions right)
@@ -294,31 +289,23 @@ export function PassageQuestionsLayout({
         answers={answers}
         onAnswer={onAnswer}
         highlightEnabled={highlightEnabled}
-        isSplit={sortedGroups.some((g) => g.layoutMode === 'horizontal')}
       />
     );
   }
 
-  // Build passage → groups mapping. A group linked to a passage that has no
-  // actual content (no audio, no text/image — e.g. a placeholder passage
-  // created just to test linking) is treated as unlinked: otherwise it'd
-  // get a blank 70% reading pane and all its content crammed into the
-  // narrow 30% column, which looks broken.
-  const passageById = new Map(sortedPassages.map((p) => [p.id, p]));
+  // Build passage → groups mapping.
   const groupsByPassage = new Map<string, QuestionGroupFromAPI[]>();
   const unlinkedGroups: QuestionGroupFromAPI[] = [];
 
   for (const group of sortedGroups) {
-    const linkedPassage = group.passageId ? passageById.get(group.passageId) : undefined;
-    if (linkedPassage && hasPassageContent(linkedPassage)) {
-      const existing = groupsByPassage.get(group.passageId!) || [];
+    if (group.passageId) {
+      const existing = groupsByPassage.get(group.passageId) || [];
       existing.push(group);
-      groupsByPassage.set(group.passageId!, existing);
+      groupsByPassage.set(group.passageId, existing);
     } else {
       unlinkedGroups.push(group);
     }
   }
-  const passagesToRender = sortedPassages.filter((p) => hasPassageContent(p));
 
   const passageStyle = {
     fontFamily: "Georgia, 'Times New Roman', serif",
@@ -334,14 +321,18 @@ export function PassageQuestionsLayout({
           </div>
         </div>
       )}
-      {passagesToRender.map((passage) => {
+      {sortedPassages.map((passage) => {
         const linkedGroups = groupsByPassage.get(passage.id) || [];
         const hasAudio = !!passage.audioUrl;
-        // Any linked group opting into side-by-side puts the whole passage panel in split mode.
-        const isSplit = linkedGroups.some((g) => g.layoutMode === 'horizontal');
+        // The big reading-passage frame only makes sense when there's
+        // actually something to read — an audio-only passage (e.g. just
+        // used to carry the section's listening audio) has nothing to put
+        // in a 70% pane, so it always renders full-width instead. Whether
+        // *this group's own content* splits (instructions | inputs) is a
+        // per-group choice (group.layoutMode), not a passage-level one.
+        const hasVisual = hasPassageVisualContent(passage);
 
-        // Vertical mode → render audio (if any) on top, passage content (if any), questions full-width below
-        if (!isSplit) {
+        if (!hasVisual) {
           const rawText = passage.contentHtml.replace(/<[^>]*>/g, '').trim();
           const showContent = rawText.length > 0 && !rawText.startsWith('Enter passage text here');
           return (
@@ -359,7 +350,7 @@ export function PassageQuestionsLayout({
                   <RichContent html={passage.contentHtml} className="text-foreground text-sm leading-[1.75]" />
                 </div>
               )}
-              <div className="max-w-3xl">
+              <div className={linkedGroups.some((g) => g.layoutMode === 'horizontal') ? '' : 'max-w-3xl'}>
                 {linkedGroups.map((group, gi) => (
                   <div key={group.id}>
                     {gi > 0 && <hr className="border-slate-200" />}
@@ -370,6 +361,7 @@ export function PassageQuestionsLayout({
                       onQuestionFocus={handleQuestionFocus}
                       onQuestionBlur={handleQuestionBlur}
                       focusedBlank={focusedBlank}
+                      splitLayout={group.layoutMode === 'horizontal'}
                     />
                   </div>
                 ))}
@@ -457,7 +449,6 @@ function LegacyLayout({
   onAnswer,
   highlightEnabled,
   sectionInstructions,
-  isSplit,
 }: {
   passages: PassageFromAPI[];
   groups: QuestionGroupFromAPI[];
@@ -465,8 +456,11 @@ function LegacyLayout({
   onAnswer: (questionId: string, answer: string) => void;
   highlightEnabled?: boolean;
   sectionInstructions?: string | null;
-  isSplit: boolean;
 }) {
+  // Same rule as the linked case: only give the passage a dedicated
+  // reading pane if it actually has something visual to show.
+  const anyPassageHasVisualContent = passages.some(hasPassageVisualContent);
+
   return (
     <div className="flex flex-col md:flex-1 md:overflow-hidden">
       {sectionInstructions && (
@@ -477,7 +471,7 @@ function LegacyLayout({
         </div>
       )}
 
-      {isSplit ? (
+      {anyPassageHasVisualContent ? (
         /* Split layout: passage left, questions right */
         <div className="flex flex-col md:flex-row md:flex-1 md:overflow-hidden">
           <div
@@ -532,7 +526,7 @@ function LegacyLayout({
               </div>
             );
           })}
-          <div className="max-w-3xl">
+          <div className={groups.some((g) => g.layoutMode === 'horizontal') ? '' : 'max-w-3xl'}>
             {groups.map((group, gi) => (
               <div key={group.id}>
                 {gi > 0 && <hr className="border-slate-200" />}
