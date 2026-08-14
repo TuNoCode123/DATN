@@ -16,6 +16,13 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
+      // GCS — where uploads (chat attachments, passage/question images, etc.)
+      // live since the AWS -> GCP migration.
+      {
+        protocol: "https",
+        hostname: "storage.googleapis.com",
+      },
+      // Legacy S3 — kept so pre-migration records with old URLs still render.
       {
         protocol: "https",
         hostname: "*.s3.*.amazonaws.com",
