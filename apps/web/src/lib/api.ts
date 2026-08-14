@@ -26,7 +26,8 @@ api.interceptors.request.use(async (config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    const requestPath = error.config?.url ?? '';
+    const config = error.config as (typeof error.config & { _retriedWithFreshToken?: boolean }) | undefined;
+    const requestPath = config?.url ?? '';
 
     // Don't redirect on auth-related endpoints to avoid loops
     if (requestPath.includes('/auth/')) {
@@ -34,6 +35,21 @@ api.interceptors.response.use(
     }
 
     if (error.response?.status === 401) {
+      // The cached ID token can be presented stale (near expiry, clock
+      // skew, a request that was in flight when it rolled over) even
+      // though the Firebase session itself is still perfectly valid — a
+      // forced refresh almost always fixes it. Only treat this as a real
+      // "logged out" state if a freshly-refreshed token still gets 401'd.
+      if (config && !config._retriedWithFreshToken) {
+        config._retriedWithFreshToken = true;
+        const freshToken = await getIdToken(true).catch(() => null);
+        if (freshToken) {
+          config.headers = config.headers ?? {};
+          config.headers.Authorization = `Bearer ${freshToken}`;
+          return api.request(config);
+        }
+      }
+
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/unauthorized')) {
         window.location.href = '/unauthorized?reason=session_expired';
       }
