@@ -24,6 +24,7 @@ import { CreateLiveExamSessionDto } from './dto/create-live-exam-session.dto';
 import { HistoryQueryDto } from './dto/history.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { Public } from '../auth/decorators/public.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { LiveExamSessionStatus } from '@prisma/client';
@@ -201,6 +202,9 @@ export class LiveExamController {
     return this.service.getHostView(id, user.id);
   }
 
+  // A plain <img src> can't send an Authorization header, and the PNG only
+  // encodes the (already-public) join URL, so this route skips JwtAuthGuard.
+  @Public()
   @Get('sessions/:id/qr')
   async qr(@Param('id') id: string, @Res() res: Response) {
     const session = await this.service.findById(id);
