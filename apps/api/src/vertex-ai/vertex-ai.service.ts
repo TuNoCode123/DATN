@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AnthropicVertex } from '@anthropic-ai/vertex-sdk';
+import { VertexAI, type Content, type Part } from '@google-cloud/vertexai';
 
 interface ImageContentBlock {
   type: 'image';
@@ -41,88 +41,108 @@ interface CreateResponse {
   content: ContentBlock[];
 }
 
-// Vertex AI Model Garden's Claude model IDs use an `@<release-date>` suffix
-// rather than Bedrock's `us.anthropic.<id>-v1:0` format — see
-// https://platform.claude.com/docs/en/api/claude-on-vertex-ai for the full
-// model ID table.
-const DEFAULT_MODEL = 'claude-haiku-4-5@20251001';
+// Claude on Vertex AI Model Garden requires per-model quota that Google
+// only grants after the model is explicitly enabled (EULA accepted) in the
+// project's Model Garden console — a manual, per-project step with no API.
+// Gemini is Google's own first-party model family: any project with the
+// Vertex AI API enabled already has default quota for it, no extra
+// enablement step. Swapping the backend here (instead of at every call
+// site) means every consumer — pronunciation, writing grading, chat,
+// flashcards, translation — keeps working unchanged.
+const DEFAULT_MODEL = 'gemini-2.5-flash';
 
 @Injectable()
 export class VertexAiService {
-  private client: AnthropicVertex;
+  private client: VertexAI;
   private readonly logger = new Logger(VertexAiService.name);
 
   constructor(private config: ConfigService) {
     const projectId = this.config.getOrThrow<string>('GCP_PROJECT_ID');
-    // "global" is Anthropic's own recommendation on Vertex: dynamically
-    // routed for maximum availability, no regional pricing premium, and
-    // sidesteps having to verify Claude's available in whichever region the
-    // rest of the stack (Cloud Run, Cloud SQL, ...) happens to run in.
-    const region = this.config.get<string>('VERTEX_AI_REGION') || 'global';
+    const region = this.config.get<string>('GEMINI_VERTEX_REGION') || 'us-central1';
 
     // Auth via Application Default Credentials — the Cloud Run service
     // account in production, `gcloud auth application-default login`
     // locally. No API key or exported key file involved.
-    this.client = new AnthropicVertex({ projectId, region });
-    this.logger.log(`Vertex AI (Claude) client initialised (project: ${projectId}, region: ${region})`);
+    this.client = new VertexAI({ project: projectId, location: region });
+    this.logger.log(`Vertex AI (Gemini) client initialised (project: ${projectId}, region: ${region})`);
   }
 
   /** Drop-in compatible messages API so callers keep working unchanged */
   get messages() {
     return {
       create: async (params: CreateParams): Promise<CreateResponse> => {
-        const messages = this.toVertexMessages(params.messages);
-
-        const response = await this.client.messages.create({
+        const model = this.client.getGenerativeModel({
           model: params.model || DEFAULT_MODEL,
-          max_tokens: params.max_tokens ?? 1024,
-          temperature: params.temperature,
-          system: params.system,
-          messages,
+          ...(params.system
+            ? { systemInstruction: { role: 'system', parts: [{ text: params.system }] } }
+            : {}),
         });
 
-        const textBlock = response.content.find((block) => block.type === 'text');
+        const result = await model.generateContent({
+          contents: this.toGeminiContents(params.messages),
+          generationConfig: {
+            maxOutputTokens: params.max_tokens ?? 1024,
+            ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
+          },
+        });
+
+        const text = this.extractText(result.response.candidates?.[0]?.content?.parts);
 
         return {
-          id: response.id,
-          content: [{ type: 'text', text: textBlock?.text ?? '' }],
+          id: `gemini-${Date.now()}`,
+          content: [{ type: 'text', text }],
         };
       },
     };
   }
 
-  private toVertexMessages(messages: Message[]) {
-    // Anthropic's native content-block shape (used by both the direct API
-    // and Vertex) is exactly what MessageContent/ImageContentBlock already
-    // model here — unlike the Bedrock ConverseCommand shape this replaced,
-    // no per-block translation is needed.
+  /** Stream a conversation response, yielding text chunks as they arrive */
+  async *streamConverse(params: CreateParams): AsyncGenerator<string> {
+    const model = this.client.getGenerativeModel({
+      model: params.model || DEFAULT_MODEL,
+      ...(params.system
+        ? { systemInstruction: { role: 'system', parts: [{ text: params.system }] } }
+        : {}),
+    });
+
+    const streamResult = await model.generateContentStream({
+      contents: this.toGeminiContents(params.messages),
+      generationConfig: {
+        maxOutputTokens: params.max_tokens ?? 1024,
+        ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
+      },
+    });
+
+    for await (const chunk of streamResult.stream) {
+      const text = this.extractText(chunk.candidates?.[0]?.content?.parts);
+      if (text) yield text;
+    }
+  }
+
+  private extractText(parts: Part[] | undefined): string {
+    if (!parts) return '';
+    return parts.map((p) => p.text ?? '').join('');
+  }
+
+  private toGeminiContents(messages: Message[]): Content[] {
+    // Gemini has no "system" role in `contents` (handled via
+    // systemInstruction above) and calls the assistant turn "model".
     return messages
       .filter((m) => m.role !== 'system')
       .map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: this.toGeminiParts(m.content),
       }));
   }
 
-  /** Stream a conversation response, yielding text chunks as they arrive */
-  async *streamConverse(params: CreateParams): AsyncGenerator<string> {
-    const messages = this.toVertexMessages(params.messages);
-
-    const stream = this.client.messages.stream({
-      model: params.model || DEFAULT_MODEL,
-      max_tokens: params.max_tokens ?? 1024,
-      temperature: params.temperature,
-      system: params.system,
-      messages,
-    });
-
-    // MessageStream is an AsyncIterable of raw SSE events, not text chunks —
-    // pick out the text_delta payloads, same idea as the Bedrock version's
-    // `event.contentBlockDelta?.delta?.text` check.
-    for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        yield event.delta.text;
-      }
+  private toGeminiParts(content: MessageContent): Part[] {
+    if (typeof content === 'string') {
+      return [{ text: content }];
     }
+    return content.map((block): Part =>
+      block.type === 'image'
+        ? { inlineData: { mimeType: block.source.media_type, data: block.source.data } }
+        : { text: block.text },
+    );
   }
 }
