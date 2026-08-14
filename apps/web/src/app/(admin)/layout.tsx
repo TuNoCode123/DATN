@@ -1,50 +1,36 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
 import { useAuthStore } from "@/lib/auth-store";
-import { api } from "@/lib/api";
 import { Toaster } from "sonner";
 import { Spin } from "antd";
 import { AntdProvider } from "@/lib/antd-provider";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const { user, setUser } = useAuthStore();
-  const [checking, setChecking] = useState(true);
+  const { user, isReady } = useAuthStore();
 
   useEffect(() => {
-    async function checkAdmin() {
-      let currentUser = user;
+    // Wait for the global session restore (SessionRestore) to resolve —
+    // Firebase's session restore is async, so checking `user` before
+    // `isReady` flips true would redirect logged-in admins to /login on
+    // every hard refresh / direct navigation (race condition).
+    if (!isReady) return;
 
-      // If no user in store, try to restore session
-      if (!currentUser) {
-        try {
-          const res = await api.get("/auth/me");
-          currentUser = res.data;
-          setUser(currentUser);
-        } catch {
-          // Not authenticated — redirect to login
-          router.replace("/login");
-          return;
-        }
-      }
-
-      // Check admin role
-      if (currentUser?.role !== "ADMIN") {
-        router.replace("/");
-        return;
-      }
-
-      setChecking(false);
+    if (!user) {
+      router.replace("/login");
+      return;
     }
 
-    checkAdmin();
-  }, [user, router, setUser]);
+    if (user.role !== "ADMIN") {
+      router.replace("/");
+    }
+  }, [isReady, user, router]);
 
-  if (checking) {
+  if (!isReady || !user || user.role !== "ADMIN") {
     return (
       <AntdProvider>
         <div className="flex h-screen items-center justify-center bg-background">

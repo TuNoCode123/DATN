@@ -7,6 +7,7 @@ import { onAuthChange } from './firebase';
 
 export function SessionRestore() {
   const setUser = useAuthStore((s) => s.setUser);
+  const setReady = useAuthStore((s) => s.setReady);
 
   useEffect(() => {
     // Firebase restores its cached session (IndexedDB) before this fires,
@@ -33,11 +34,12 @@ export function SessionRestore() {
         .then((res) => setUser(res.data))
         .catch(() => {
           // Not logged in — stay as guest
+          setReady();
         });
     }
 
     return unsubscribe;
-  }, [setUser]);
+  }, [setUser, setReady]);
 
   return null;
 }
