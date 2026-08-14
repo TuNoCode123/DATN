@@ -40,6 +40,26 @@ if (isFirebaseConfigured) {
   auth = getAuth(app);
 }
 
+/**
+ * Resolves once Firebase has restored (or confirmed there's no) cached
+ * session — this is async (reads IndexedDB) and takes a beat after page
+ * load. Every API call must await this before reading `auth.currentUser`;
+ * otherwise a request fired on the very first render (e.g. a hard refresh
+ * mid-test) goes out with no token, gets a false 401, and the user is
+ * bounced to the login screen even though their session is fine. Capped
+ * at 5s so a genuinely broken Firebase init can't hang requests forever.
+ */
+export const authReady: Promise<void> = isFirebaseConfigured && auth
+  ? new Promise<void>((resolve) => {
+      const timeout = setTimeout(resolve, 5000);
+      const unsubscribe = onAuthStateChanged(auth!, () => {
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve();
+      });
+    })
+  : Promise.resolve();
+
 function requireAuth(): Auth {
   if (!auth) {
     throw new Error(

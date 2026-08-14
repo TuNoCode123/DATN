@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getIdToken } from './firebase';
+import { authReady, getIdToken } from './firebase';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
 
@@ -13,8 +13,13 @@ export const api = axios.create({
   withCredentials: true,
 });
 
-// Attach a fresh Identity Platform ID token to every request.
+// Attach a fresh Identity Platform ID token to every request. Waits for
+// Firebase's async session restore first — otherwise a request fired on
+// the very first render (e.g. a hard refresh mid-test) reads a not-yet-
+// restored `auth.currentUser`, goes out with no token, and gets a false
+// 401 that bounces an actually-logged-in user to /login.
 api.interceptors.request.use(async (config) => {
+  await authReady;
   const token = await getIdToken();
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
