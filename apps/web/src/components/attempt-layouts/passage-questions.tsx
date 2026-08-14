@@ -299,19 +299,26 @@ export function PassageQuestionsLayout({
     );
   }
 
-  // Build passage → groups mapping
+  // Build passage → groups mapping. A group linked to a passage that has no
+  // actual content (no audio, no text/image — e.g. a placeholder passage
+  // created just to test linking) is treated as unlinked: otherwise it'd
+  // get a blank 70% reading pane and all its content crammed into the
+  // narrow 30% column, which looks broken.
+  const passageById = new Map(sortedPassages.map((p) => [p.id, p]));
   const groupsByPassage = new Map<string, QuestionGroupFromAPI[]>();
   const unlinkedGroups: QuestionGroupFromAPI[] = [];
 
   for (const group of sortedGroups) {
-    if (group.passageId) {
-      const existing = groupsByPassage.get(group.passageId) || [];
+    const linkedPassage = group.passageId ? passageById.get(group.passageId) : undefined;
+    if (linkedPassage && hasPassageContent(linkedPassage)) {
+      const existing = groupsByPassage.get(group.passageId!) || [];
       existing.push(group);
-      groupsByPassage.set(group.passageId, existing);
+      groupsByPassage.set(group.passageId!, existing);
     } else {
       unlinkedGroups.push(group);
     }
   }
+  const passagesToRender = sortedPassages.filter((p) => hasPassageContent(p));
 
   const passageStyle = {
     fontFamily: "Georgia, 'Times New Roman', serif",
@@ -327,7 +334,7 @@ export function PassageQuestionsLayout({
           </div>
         </div>
       )}
-      {sortedPassages.map((passage) => {
+      {passagesToRender.map((passage) => {
         const linkedGroups = groupsByPassage.get(passage.id) || [];
         const hasAudio = !!passage.audioUrl;
         // Any linked group opting into side-by-side puts the whole passage panel in split mode.
