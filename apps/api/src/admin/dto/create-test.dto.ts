@@ -75,6 +75,11 @@ export class CreateQuestionGroupDto {
   @IsString()
   instructions?: string;
 
+  // 'horizontal' | 'vertical' — see QuestionGroup.layoutMode in schema.prisma
+  @IsOptional()
+  @IsString()
+  layoutMode?: string;
+
   @IsOptional()
   matchingOptions?: any; // JSON array
 
@@ -152,11 +157,6 @@ export class CreateSectionDto {
   @IsInt()
   @Min(0)
   durationMins?: number;
-
-  // 'horizontal' | 'vertical' — see TestSection.layoutMode in schema.prisma
-  @IsOptional()
-  @IsString()
-  layoutMode?: string;
 
   @IsOptional()
   @IsArray()

@@ -311,9 +311,6 @@ model TestSection {
   audioUrl      String?
   durationMins  Int?
   questionCount Int          @default(0)
-  // 'horizontal' | 'vertical' — admin-controlled, applies to every attempt
-  // layout (Passage/Audio/QuestionsOnly). See LayoutRouter on the frontend.
-  layoutMode    String       @default("vertical")
 
   test            Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
   passages        Passage[]
@@ -355,6 +352,10 @@ model QuestionGroup {
   audioUrl        String?
   imageUrl        String?
   imageSize       String?
+  // 'horizontal' | 'vertical' — admin-controlled per group; drives whether
+  // the attempt page renders this group's content side by side with its
+  // answers or stacked. See LayoutRouter/QuestionGroupRenderer on the frontend.
+  layoutMode      String      @default("vertical")
 
   section   TestSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
   passage   Passage?    @relation(fields: [passageId], references: [id], onDelete: SetNull)

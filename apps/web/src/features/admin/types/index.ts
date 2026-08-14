@@ -116,6 +116,9 @@ export interface AdminQuestionGroup {
   audioUrl: string | null;
   imageUrl: string | null;
   imageSize: string | null;
+  // 'horizontal' | 'vertical' — admin-controlled, drives whether this
+  // group's content renders side by side with its answers or stacked.
+  layoutMode: string;
   questions: AdminQuestion[];
 }
 
@@ -129,8 +132,6 @@ export interface AdminTestSection {
   audioUrl: string | null;
   durationMins: number | null;
   questionCount: number;
-  // 'horizontal' | 'vertical' — admin-controlled, applies to every attempt layout.
-  layoutMode: string;
   passages: AdminPassage[];
   questionGroups: AdminQuestionGroup[];
 }

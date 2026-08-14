@@ -211,7 +211,6 @@ export default function TestEditorPage() {
         instructions: section.instructions,
         audioUrl: section.audioUrl,
         durationMins: section.durationMins,
-        layoutMode: section.layoutMode,
         passages: (section.passages || []).map((passage, pIdx) => ({
           ...(passage.id && !passage.id.startsWith('_new_') ? { id: passage.id } : {}),
           _tempId: passage.id?.startsWith('_new_') ? passage.id : undefined,
@@ -240,6 +239,7 @@ export default function TestEditorPage() {
           audioUrl: group.audioUrl,
           imageUrl: group.imageUrl,
           imageSize: group.imageSize,
+          layoutMode: group.layoutMode,
           questions: (group.questions || []).map((q, qIdx) => ({
             ...(q.id && !q.id.startsWith('_new_') ? { id: q.id } : {}),
             questionNumber: q.questionNumber,
@@ -282,7 +282,6 @@ export default function TestEditorPage() {
         instructions: null,
         audioUrl: null,
         durationMins: null,
-        layoutMode: 'vertical',
         questionCount: 0,
         passages: [],
         questionGroups: [],
@@ -1215,6 +1214,7 @@ function SectionEditor({
       audioUrl: null,
       imageUrl: null,
       imageSize: null,
+      layoutMode: 'vertical',
       questions: [],
     };
     updateField({ questionGroups: [...section.questionGroups, newGroup] });
@@ -1320,24 +1320,6 @@ function SectionEditor({
                   label="Section Audio"
                   maxSizeMB={50}
                 />
-              </div>
-              <div>
-                <Label className="text-sm font-medium">Answer Layout</Label>
-                <Select
-                  value={section.layoutMode || 'vertical'}
-                  onValueChange={(val) => updateField({ layoutMode: val })}
-                >
-                  <SelectTrigger className="mt-1.5 h-9 text-sm bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="horizontal" className="text-sm">Side by side</SelectItem>
-                    <SelectItem value="vertical" className="text-sm">Stacked</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  Side by side: passage/notes on the left, answers on the right. Stacked: full-width, answers below.
-                </p>
               </div>
             </div>
           </CardContent>
@@ -2041,6 +2023,18 @@ function QuestionGroupEditor({
               </SelectContent>
             </Select>
           )}
+          <Select
+            value={group.layoutMode || 'vertical'}
+            onValueChange={(val) => onChange({ ...group, layoutMode: val })}
+          >
+            <SelectTrigger className="w-32 h-8 text-xs bg-white" title="Answer layout">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="vertical" className="text-xs">Stacked</SelectItem>
+              <SelectItem value="horizontal" className="text-xs">Side by side</SelectItem>
+            </SelectContent>
+          </Select>
           {!isNoteCompletion && !showInstructions && !group.instructions && (
             <Button
               variant="ghost"

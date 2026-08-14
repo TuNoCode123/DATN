@@ -91,6 +91,11 @@ export class SyncGroupDto {
   @IsString()
   instructions?: string;
 
+  // 'horizontal' | 'vertical' — see QuestionGroup.layoutMode in schema.prisma
+  @IsOptional()
+  @IsString()
+  layoutMode?: string;
+
   @IsOptional()
   matchingOptions?: any;
 
@@ -185,11 +190,6 @@ export class SyncSectionDto {
   @IsInt()
   @Min(0)
   durationMins?: number;
-
-  // 'horizontal' | 'vertical' — see TestSection.layoutMode in schema.prisma
-  @IsOptional()
-  @IsString()
-  layoutMode?: string;
 
   @IsOptional()
   @IsArray()

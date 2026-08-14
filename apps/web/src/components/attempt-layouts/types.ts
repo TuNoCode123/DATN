@@ -22,6 +22,8 @@ export interface QuestionGroupFromAPI {
   audioUrl?: string | null;
   imageUrl?: string | null;
   imageSize?: string | null;
+  // 'horizontal' | 'vertical' — admin-controlled per group.
+  layoutMode: string;
   questions: QuestionFromAPI[];
 }
 
@@ -46,8 +48,6 @@ export interface SectionFromAPI {
   questionCount: number;
   instructions?: string | null;
   audioUrl?: string | null;
-  // 'horizontal' | 'vertical' — admin-controlled, applies to every layout.
-  layoutMode: string;
   passages?: PassageFromAPI[];
   questionGroups: QuestionGroupFromAPI[];
 }

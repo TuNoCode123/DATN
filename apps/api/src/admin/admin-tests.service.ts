@@ -113,7 +113,6 @@ export class AdminTestsService {
             instructions: sectionDto.instructions,
             audioUrl: sectionDto.audioUrl,
             durationMins: sectionDto.durationMins,
-            layoutMode: sectionDto.layoutMode,
           },
         });
 
@@ -145,6 +144,7 @@ export class AdminTestsService {
               audioUrl: groupDto.audioUrl,
               imageUrl: groupDto.imageUrl,
               imageSize: groupDto.imageSize,
+              layoutMode: groupDto.layoutMode,
             },
           });
 
@@ -234,7 +234,6 @@ export class AdminTestsService {
             instructions: sectionDto.instructions,
             audioUrl: sectionDto.audioUrl,
             durationMins: sectionDto.durationMins,
-            layoutMode: sectionDto.layoutMode,
           },
         });
 
@@ -265,6 +264,7 @@ export class AdminTestsService {
               matchingOptions: groupDto.matchingOptions ?? Prisma.DbNull,
               audioUrl: groupDto.audioUrl,
               imageUrl: groupDto.imageUrl,
+              layoutMode: groupDto.layoutMode,
               imageSize: groupDto.imageSize,
             },
           });
@@ -372,7 +372,6 @@ export class AdminTestsService {
             audioUrl: section.audioUrl,
             durationMins: section.durationMins,
             questionCount: section.questionCount,
-            layoutMode: section.layoutMode,
           },
         });
 
@@ -405,6 +404,7 @@ export class AdminTestsService {
               audioUrl: group.audioUrl,
               imageUrl: group.imageUrl,
               imageSize: group.imageSize,
+              layoutMode: group.layoutMode,
             },
           });
 
@@ -793,7 +793,6 @@ export class AdminTestsService {
               instructions: sectionDto.instructions ?? null,
               audioUrl: sectionDto.audioUrl ?? null,
               durationMins: sectionDto.durationMins ?? null,
-              layoutMode: sectionDto.layoutMode ?? 'vertical',
             },
           });
         } else {
@@ -807,7 +806,6 @@ export class AdminTestsService {
               instructions: sectionDto.instructions,
               audioUrl: sectionDto.audioUrl,
               durationMins: sectionDto.durationMins,
-              layoutMode: sectionDto.layoutMode,
             },
           });
           sectionId = created.id;
@@ -939,6 +937,7 @@ export class AdminTestsService {
                 audioUrl: groupDto.audioUrl ?? null,
                 imageUrl: groupDto.imageUrl ?? null,
                 imageSize: groupDto.imageSize ?? null,
+                layoutMode: groupDto.layoutMode ?? 'vertical',
               },
             });
           } else {
@@ -953,6 +952,7 @@ export class AdminTestsService {
                 matchingOptions: groupDto.matchingOptions ?? Prisma.DbNull,
                 audioUrl: groupDto.audioUrl,
                 imageUrl: groupDto.imageUrl,
+                layoutMode: groupDto.layoutMode,
               },
             });
             groupId = created.id;

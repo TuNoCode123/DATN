@@ -21,7 +21,8 @@ export function AudioQuestionsLayout({
   const sortedGroups = [...section.questionGroups].sort(
     (a, b) => a.orderIndex - b.orderIndex
   );
-  const isSplit = section.layoutMode === 'horizontal';
+  // A group in split mode needs the full width, not the narrow reading column.
+  const anySplit = sortedGroups.some((g) => g.layoutMode === 'horizontal');
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -144,7 +145,7 @@ export function AudioQuestionsLayout({
 
       {/* Questions */}
       <div className="md:flex-1 md:overflow-y-auto">
-        <div className={isSplit ? '' : 'max-w-3xl'}>
+        <div className={anySplit ? '' : 'max-w-3xl'}>
           {sortedGroups.map((group, gi) => (
             <div key={group.id}>
               {gi > 0 && <hr className="border-slate-200" />}
@@ -152,7 +153,7 @@ export function AudioQuestionsLayout({
                 group={group}
                 answers={answers}
                 onAnswer={onAnswer}
-                splitLayout={isSplit}
+                splitLayout={group.layoutMode === 'horizontal'}
               />
             </div>
           ))}

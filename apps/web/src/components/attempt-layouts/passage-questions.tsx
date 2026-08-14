@@ -245,7 +245,6 @@ export function PassageQuestionsLayout({
   );
 
   const hasAnyLinks = sortedGroups.some((g) => g.passageId);
-  const isSplit = section.layoutMode === 'horizontal';
 
   // Check if any group is a completion type (needs blank processing)
   const hasCompletionGroups = sortedGroups.some((g) =>
@@ -295,7 +294,7 @@ export function PassageQuestionsLayout({
         answers={answers}
         onAnswer={onAnswer}
         highlightEnabled={highlightEnabled}
-        isSplit={isSplit}
+        isSplit={sortedGroups.some((g) => g.layoutMode === 'horizontal')}
       />
     );
   }
@@ -331,6 +330,8 @@ export function PassageQuestionsLayout({
       {sortedPassages.map((passage) => {
         const linkedGroups = groupsByPassage.get(passage.id) || [];
         const hasAudio = !!passage.audioUrl;
+        // Any linked group opting into side-by-side puts the whole passage panel in split mode.
+        const isSplit = linkedGroups.some((g) => g.layoutMode === 'horizontal');
 
         // Vertical mode → render audio (if any) on top, passage content (if any), questions full-width below
         if (!isSplit) {
@@ -431,6 +432,7 @@ export function PassageQuestionsLayout({
                 group={group}
                 answers={answers}
                 onAnswer={onAnswer}
+                splitLayout={group.layoutMode === 'horizontal'}
               />
             </div>
           ))}
@@ -531,6 +533,7 @@ function LegacyLayout({
                   group={group}
                   answers={answers}
                   onAnswer={onAnswer}
+                  splitLayout={group.layoutMode === 'horizontal'}
                 />
               </div>
             ))}
