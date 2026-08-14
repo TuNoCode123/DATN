@@ -15,8 +15,8 @@ importers:
   apps/api:
     dependencies:
       '@anthropic-ai/vertex-sdk':
-        specifier: ^0.11.4
-        version: 0.11.5(zod@4.3.6)
+        specifier: ^0.19.4
+        version: 0.19.4(zod@4.3.6)
       '@google-cloud/speech':
         specifier: ^7.0.0
         version: 7.5.0
@@ -425,8 +425,8 @@ packages:
       zod:
         optional: true
 
-  '@anthropic-ai/vertex-sdk@0.11.5':
-    resolution: {integrity: sha512-V7sB5nY80unEQu8lSQaEzh1WhYwpIdpC3iXNRHUskghkuQDhS6dQu2ASZBgA5MNuJ1Yv5PhY61NM15dLaQhPQw==}
+  '@anthropic-ai/vertex-sdk@0.19.4':
+    resolution: {integrity: sha512-du5/eNdCTT7OgloGTCrrfUJ076qLtsuChr9ps1RsfXElvAAJ5in0dAH39ovMoO5CnA9QjiABbsAZ814HjBbx+A==}
 
   '@babel/code-frame@7.29.0':
     resolution: {integrity: sha512-9NhCeYjq9+3uxgdtp20LSiJXJvN0FeCtNGpJxuMFZ1Kv3cWUNb6DOhJwUvcVCzKGR66cw4njwM6hrJLqgOwbcw==}
@@ -6905,12 +6905,11 @@ snapshots:
     optionalDependencies:
       zod: 4.3.6
 
-  '@anthropic-ai/vertex-sdk@0.11.5(zod@4.3.6)':
+  '@anthropic-ai/vertex-sdk@0.19.4(zod@4.3.6)':
     dependencies:
       '@anthropic-ai/sdk': 0.116.0(zod@4.3.6)
-      google-auth-library: 9.15.1
+      google-auth-library: 10.9.1
     transitivePeerDependencies:
-      - encoding
       - supports-color
       - zod
 
