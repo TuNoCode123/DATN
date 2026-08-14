@@ -113,6 +113,7 @@ export class AdminTestsService {
             instructions: sectionDto.instructions,
             audioUrl: sectionDto.audioUrl,
             durationMins: sectionDto.durationMins,
+            layoutMode: sectionDto.layoutMode,
           },
         });
 
@@ -233,6 +234,7 @@ export class AdminTestsService {
             instructions: sectionDto.instructions,
             audioUrl: sectionDto.audioUrl,
             durationMins: sectionDto.durationMins,
+            layoutMode: sectionDto.layoutMode,
           },
         });
 
@@ -370,6 +372,7 @@ export class AdminTestsService {
             audioUrl: section.audioUrl,
             durationMins: section.durationMins,
             questionCount: section.questionCount,
+            layoutMode: section.layoutMode,
           },
         });
 
@@ -790,6 +793,7 @@ export class AdminTestsService {
               instructions: sectionDto.instructions ?? null,
               audioUrl: sectionDto.audioUrl ?? null,
               durationMins: sectionDto.durationMins ?? null,
+              layoutMode: sectionDto.layoutMode ?? 'vertical',
             },
           });
         } else {
@@ -803,6 +807,7 @@ export class AdminTestsService {
               instructions: sectionDto.instructions,
               audioUrl: sectionDto.audioUrl,
               durationMins: sectionDto.durationMins,
+              layoutMode: sectionDto.layoutMode,
             },
           });
           sectionId = created.id;

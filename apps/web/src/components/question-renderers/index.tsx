@@ -47,6 +47,10 @@ interface QuestionGroupRendererProps {
   onQuestionFocus?: (questionNumber: number) => void;
   onQuestionBlur?: () => void;
   focusedBlank?: number | null;
+  // When true, render the completion-type fallback (Note/Table/Sentence/
+  // Summary Completion, etc.) as instructions | inputs side by side
+  // instead of stacked. Only consumed by that fallback branch.
+  splitLayout?: boolean;
 }
 
 function GroupMedia({ group }: { group: QuestionGroupFromAPI }) {
@@ -85,6 +89,7 @@ export function QuestionGroupRenderer({
   onQuestionFocus,
   onQuestionBlur,
   focusedBlank,
+  splitLayout,
 }: QuestionGroupRendererProps) {
   const sortedQuestions = [...group.questions].sort(
     (a, b) => a.orderIndex - b.orderIndex,
@@ -200,19 +205,18 @@ export function QuestionGroupRenderer({
   }
 
   // Completion types + matching: content + text inputs
-  return (
-    <div className="px-5 py-4">
-      <GroupMedia group={group} />
-      {group.instructions && (
-        <div className="mb-4 text-slate-600 italic text-sm leading-relaxed">
-          <RichContent
-            html={group.instructions}
-            className="text-foreground text-sm leading-relaxed [&_table]:not-italic [&_table]:text-slate-900"
-          />
-        </div>
-      )}
-      <div className="flex flex-col gap-3">
-        {sortedQuestions.map((q) => {
+  const instructionsBlock = group.instructions && (
+    <div className="mb-4 text-slate-600 italic text-sm leading-relaxed">
+      <RichContent
+        html={group.instructions}
+        className="text-foreground text-sm leading-relaxed [&_table]:not-italic [&_table]:text-slate-900"
+      />
+    </div>
+  );
+
+  const inputsList = (
+    <div className="flex flex-col gap-3">
+      {sortedQuestions.map((q) => {
           const hasStem = !!q.stem;
           return hasStem ? (
             <div
@@ -273,7 +277,28 @@ export function QuestionGroupRenderer({
             </div>
           );
         })}
+    </div>
+  );
+
+  if (splitLayout) {
+    return (
+      <div className="flex flex-col md:flex-row">
+        <div className="w-full md:w-[70%] px-5 py-4 md:border-r border-slate-200">
+          <GroupMedia group={group} />
+          {instructionsBlock}
+        </div>
+        <div className="w-full md:w-[30%] px-5 py-4">
+          {inputsList}
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="px-5 py-4">
+      <GroupMedia group={group} />
+      {instructionsBlock}
+      {inputsList}
     </div>
   );
 }

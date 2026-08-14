@@ -245,6 +245,7 @@ export function PassageQuestionsLayout({
   );
 
   const hasAnyLinks = sortedGroups.some((g) => g.passageId);
+  const isSplit = section.layoutMode === 'horizontal';
 
   // Check if any group is a completion type (needs blank processing)
   const hasCompletionGroups = sortedGroups.some((g) =>
@@ -294,6 +295,7 @@ export function PassageQuestionsLayout({
         answers={answers}
         onAnswer={onAnswer}
         highlightEnabled={highlightEnabled}
+        isSplit={isSplit}
       />
     );
   }
@@ -328,11 +330,10 @@ export function PassageQuestionsLayout({
       )}
       {sortedPassages.map((passage) => {
         const linkedGroups = groupsByPassage.get(passage.id) || [];
-        const hasVisual = hasPassageVisualContent(passage);
         const hasAudio = !!passage.audioUrl;
 
-        // No visual content → render audio (if any) on top, passage content (if any), questions full-width below
-        if (!hasVisual) {
+        // Vertical mode → render audio (if any) on top, passage content (if any), questions full-width below
+        if (!isSplit) {
           const rawText = passage.contentHtml.replace(/<[^>]*>/g, '').trim();
           const showContent = rawText.length > 0 && !rawText.startsWith('Enter passage text here');
           return (
@@ -447,6 +448,7 @@ function LegacyLayout({
   onAnswer,
   highlightEnabled,
   sectionInstructions,
+  isSplit,
 }: {
   passages: PassageFromAPI[];
   groups: QuestionGroupFromAPI[];
@@ -454,10 +456,8 @@ function LegacyLayout({
   onAnswer: (questionId: string, answer: string) => void;
   highlightEnabled?: boolean;
   sectionInstructions?: string | null;
+  isSplit: boolean;
 }) {
-  const anyPassageHasVisualContent = passages.some(hasPassageVisualContent);
-  const audioOnlyPassages = passages.filter(p => !!p.audioUrl && !hasPassageVisualContent(p));
-
   return (
     <div className="flex flex-col md:flex-1 md:overflow-hidden">
       {sectionInstructions && (
@@ -468,7 +468,7 @@ function LegacyLayout({
         </div>
       )}
 
-      {anyPassageHasVisualContent ? (
+      {isSplit ? (
         /* Split layout: passage left, questions right */
         <div className="flex flex-col md:flex-row md:flex-1 md:overflow-hidden">
           <div
@@ -504,14 +504,14 @@ function LegacyLayout({
           </div>
         </div>
       ) : (
-        /* No visual passage content: audio on top (if any), questions full-width */
+        /* Vertical mode: audio on top (if any), passage text, questions full-width */
         <div className="flex-1 overflow-y-auto">
-          {audioOnlyPassages.map((passage) => {
+          {passages.map((passage) => {
             const rawText = passage.contentHtml.replace(/<[^>]*>/g, '').trim();
             const showContent = rawText.length > 0 && !rawText.startsWith('Enter passage text here');
             return (
               <div key={passage.id} className="px-6 pt-5 pb-2 min-w-0">
-                <AudioPlayer src={passage.audioUrl!} />
+                {passage.audioUrl && <AudioPlayer src={passage.audioUrl} />}
                 {passage.transcript && (
                   <TranscriptSection html={passage.transcript} className="mt-2" />
                 )}

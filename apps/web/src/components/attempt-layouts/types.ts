@@ -46,6 +46,8 @@ export interface SectionFromAPI {
   questionCount: number;
   instructions?: string | null;
   audioUrl?: string | null;
+  // 'horizontal' | 'vertical' — admin-controlled, applies to every layout.
+  layoutMode: string;
   passages?: PassageFromAPI[];
   questionGroups: QuestionGroupFromAPI[];
 }

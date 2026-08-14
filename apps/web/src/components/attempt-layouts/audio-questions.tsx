@@ -21,6 +21,7 @@ export function AudioQuestionsLayout({
   const sortedGroups = [...section.questionGroups].sort(
     (a, b) => a.orderIndex - b.orderIndex
   );
+  const isSplit = section.layoutMode === 'horizontal';
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -143,7 +144,7 @@ export function AudioQuestionsLayout({
 
       {/* Questions */}
       <div className="md:flex-1 md:overflow-y-auto">
-        <div className="max-w-3xl">
+        <div className={isSplit ? '' : 'max-w-3xl'}>
           {sortedGroups.map((group, gi) => (
             <div key={group.id}>
               {gi > 0 && <hr className="border-slate-200" />}
@@ -151,6 +152,7 @@ export function AudioQuestionsLayout({
                 group={group}
                 answers={answers}
                 onAnswer={onAnswer}
+                splitLayout={isSplit}
               />
             </div>
           ))}

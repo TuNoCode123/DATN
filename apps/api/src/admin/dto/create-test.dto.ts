@@ -153,6 +153,11 @@ export class CreateSectionDto {
   @Min(0)
   durationMins?: number;
 
+  // 'horizontal' | 'vertical' — see TestSection.layoutMode in schema.prisma
+  @IsOptional()
+  @IsString()
+  layoutMode?: string;
+
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

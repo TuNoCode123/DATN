@@ -129,6 +129,8 @@ export interface AdminTestSection {
   audioUrl: string | null;
   durationMins: number | null;
   questionCount: number;
+  // 'horizontal' | 'vertical' — admin-controlled, applies to every attempt layout.
+  layoutMode: string;
   passages: AdminPassage[];
   questionGroups: AdminQuestionGroup[];
 }

@@ -311,6 +311,9 @@ model TestSection {
   audioUrl      String?
   durationMins  Int?
   questionCount Int          @default(0)
+  // 'horizontal' | 'vertical' — admin-controlled, applies to every attempt
+  // layout (Passage/Audio/QuestionsOnly). See LayoutRouter on the frontend.
+  layoutMode    String       @default("vertical")
 
   test            Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
   passages        Passage[]

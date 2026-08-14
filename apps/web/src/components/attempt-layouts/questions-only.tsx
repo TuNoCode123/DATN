@@ -12,6 +12,7 @@ export function QuestionsOnlyLayout({
   const sortedGroups = [...section.questionGroups].sort(
     (a, b) => a.orderIndex - b.orderIndex
   );
+  const isSplit = section.layoutMode === 'horizontal';
 
   return (
     <div className="md:flex-1 md:overflow-y-auto">
@@ -22,7 +23,7 @@ export function QuestionsOnlyLayout({
           </div>
         </div>
       )}
-      <div className="max-w-3xl">
+      <div className={isSplit ? '' : 'max-w-3xl'}>
         {sortedGroups.map((group, gi) => (
           <div key={group.id} className="overflow-x-auto">
             {gi > 0 && <hr className="border-slate-200" />}
@@ -30,6 +31,7 @@ export function QuestionsOnlyLayout({
               group={group}
               answers={answers}
               onAnswer={onAnswer}
+              splitLayout={isSplit}
             />
           </div>
         ))}
