@@ -132,7 +132,7 @@ export class ToeicSwGradingService {
     }
 
     const response = await this.vertexAi.messages.create({
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: TOEIC_SW_WRITING_SYSTEM_PROMPT,
       messages: [{ role: 'user', content: messageContent as any }],
     });
@@ -140,6 +140,7 @@ export class ToeicSwGradingService {
     const rawText =
       response.content[0].type === 'text' ? response.content[0].text : '';
     const text = rawText.trim();
+    const truncated = response.finishReason === 'MAX_TOKENS';
 
     // Extract JSON from possible markdown code fences
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -147,24 +148,31 @@ export class ToeicSwGradingService {
 
     let parsed: Record<string, unknown>;
     try {
+      if (truncated) throw new Error('response truncated (MAX_TOKENS)');
       parsed = JSON.parse(jsonStr);
     } catch {
       this.logger.warn(
-        `AI returned non-JSON for answer ${answerId}, using fallback score. Response: ${text.slice(0, 300)}`,
+        `AI returned ${truncated ? 'a truncated' : 'non-JSON'} response for answer ${answerId}, marking ungraded for retry. Response: ${text.slice(0, 300)}`,
       );
-      // Fallback: AI refused to return JSON (e.g. gibberish input) — assign minimum scores
+      // Truncated output or a non-JSON response (e.g. gibberish input) — mark
+      // as ungraded (-1) rather than a false 0 score. getWritingEvaluations()
+      // already re-queues any evaluation with overallScore === -1.
       parsed = {
         grammarScore: 0,
         vocabScore: 0,
         contentScore: 0,
-        overallScore: 0,
-        feedback: text.slice(0, 500) || 'The response could not be graded. Please provide a valid answer.',
+        overallScore: -1,
+        feedback: truncated
+          ? 'AI grading response was truncated. It will be retried automatically.'
+          : (text.slice(0, 500) || 'The response could not be graded. Please provide a valid answer.'),
         grammarErrors: null,
         vocabAnalysis: null,
       };
     }
 
-    // Validate required fields — fill missing with 0
+    // Validate required fields — fill missing with 0 (but never fabricate a
+    // 0 for overallScore specifically; -1 from the catch block above must
+    // survive this pass so it's recognized as "ungraded, needs retry").
     const requiredScores = [
       'grammarScore',
       'vocabScore',

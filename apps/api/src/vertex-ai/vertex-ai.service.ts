@@ -39,7 +39,19 @@ interface ContentBlock {
 interface CreateResponse {
   id: string;
   content: ContentBlock[];
+  /** 'MAX_TOKENS' means the response was cut off before completion — callers
+   *  that expect structured output (e.g. JSON) should treat this as a failure
+   *  rather than trying to parse a truncated response. */
+  finishReason?: string;
 }
+
+// Gemini 2.5 models spend part of maxOutputTokens on hidden "thinking" tokens
+// before writing the visible response. None of the callers here (grading,
+// translation, flashcard generation, chat) were designed with that budget in
+// mind — their max_tokens values were sized for the old Claude-on-Vertex
+// backend, which had no such internal-reasoning tax. Disabling thinking
+// restores the old behavior: the full token budget goes to visible output.
+const DISABLE_THINKING = { thinkingConfig: { thinkingBudget: 0 } };
 
 // Claude on Vertex AI Model Garden requires per-model quota that Google
 // only grants after the model is explicitly enabled (EULA accepted) in the
@@ -83,14 +95,23 @@ export class VertexAiService {
           generationConfig: {
             maxOutputTokens: params.max_tokens ?? 1024,
             ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
-          },
+            ...DISABLE_THINKING,
+          } as never,
         });
 
-        const text = this.extractText(result.response.candidates?.[0]?.content?.parts);
+        const candidate = result.response.candidates?.[0];
+        const text = this.extractText(candidate?.content?.parts);
+
+        if (candidate?.finishReason === 'MAX_TOKENS') {
+          this.logger.warn(
+            `Gemini response truncated (finishReason=MAX_TOKENS) — consider raising max_tokens for this call`,
+          );
+        }
 
         return {
           id: `gemini-${Date.now()}`,
           content: [{ type: 'text', text }],
+          finishReason: candidate?.finishReason,
         };
       },
     };
@@ -110,7 +131,8 @@ export class VertexAiService {
       generationConfig: {
         maxOutputTokens: params.max_tokens ?? 1024,
         ...(params.temperature !== undefined ? { temperature: params.temperature } : {}),
-      },
+        ...DISABLE_THINKING,
+      } as never,
     });
 
     for await (const chunk of streamResult.stream) {
