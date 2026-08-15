@@ -110,13 +110,21 @@ const IELTS_QUESTION_TYPES = new Set<QuestionType>([
   'WRITE_OPINION_ESSAY',
 ]);
 
-const TOEIC_SW_QUESTION_TYPES = new Set<QuestionType>([
-  'MULTIPLE_CHOICE',
+const TOEIC_SPEAKING_QUESTION_TYPES = new Set<QuestionType>([
   'READ_ALOUD', 'DESCRIBE_PICTURE', 'RESPOND_TO_QUESTIONS', 'PROPOSE_SOLUTION', 'EXPRESS_OPINION',
+]);
+
+const TOEIC_WRITING_QUESTION_TYPES = new Set<QuestionType>([
   'WRITE_SENTENCES', 'RESPOND_WRITTEN_REQUEST', 'WRITE_OPINION_ESSAY',
 ]);
 
-function getQuestionTypesForExam(examType: ExamType) {
+const TOEIC_SW_QUESTION_TYPES = new Set<QuestionType>([
+  'MULTIPLE_CHOICE',
+  ...TOEIC_SPEAKING_QUESTION_TYPES,
+  ...TOEIC_WRITING_QUESTION_TYPES,
+]);
+
+function getQuestionTypesForExam(examType: ExamType, sectionSkill?: SectionSkill) {
   if (examType === 'IELTS_ACADEMIC' || examType === 'IELTS_GENERAL') {
     return QUESTION_TYPES.filter((qt) => IELTS_QUESTION_TYPES.has(qt.value));
   }
@@ -124,6 +132,14 @@ function getQuestionTypesForExam(examType: ExamType) {
     return QUESTION_TYPES.filter((qt) => qt.value === 'MULTIPLE_CHOICE');
   }
   if (examType === 'TOEIC_SW' || examType === 'TOEIC_SPEAKING' || examType === 'TOEIC_WRITING') {
+    // Within a TOEIC_SW test, don't let a WRITING section offer Speaking question
+    // types (or vice versa) — mixing them silently breaks grading (see toeic-sw-grading).
+    if (sectionSkill === 'SPEAKING') {
+      return QUESTION_TYPES.filter((qt) => TOEIC_SPEAKING_QUESTION_TYPES.has(qt.value));
+    }
+    if (sectionSkill === 'WRITING') {
+      return QUESTION_TYPES.filter((qt) => TOEIC_WRITING_QUESTION_TYPES.has(qt.value));
+    }
     return QUESTION_TYPES.filter((qt) => TOEIC_SW_QUESTION_TYPES.has(qt.value));
   }
   // Legacy/other exam types (e.g. an existing HSK test) — fall back to the full list.
@@ -1374,7 +1390,7 @@ function SectionEditor({
               <SelectValue placeholder="+ Add Question Group" />
             </SelectTrigger>
             <SelectContent>
-              {getQuestionTypesForExam(examType).map((qt) => (
+              {getQuestionTypesForExam(examType, section.skill).map((qt) => (
                 <SelectItem key={qt.value} value={qt.value} className="text-sm">
                   {qt.label}
                 </SelectItem>
