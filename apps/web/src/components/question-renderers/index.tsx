@@ -221,7 +221,7 @@ export function QuestionGroupRenderer({
           return hasStem ? (
             <div
               key={q.id}
-              className="flex gap-3 py-2"
+              className="flex gap-3"
               id={`question-${q.id}`}
               data-question-number={q.questionNumber}
             >
@@ -232,8 +232,8 @@ export function QuestionGroupRenderer({
               }`}>
                 {q.questionNumber}
               </span>
-              <div className="flex flex-col gap-2 flex-1 min-w-0">
-                <p className="text-sm text-slate-800 leading-relaxed">{q.stem}</p>
+              <div className="flex flex-col gap-1 flex-1 min-w-0">
+                <p className="text-sm text-slate-800 leading-snug">{q.stem}</p>
                 <input
                   type="text"
                   value={answers[q.id] || ''}
